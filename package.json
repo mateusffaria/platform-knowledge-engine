@@ -1,0 +1,45 @@
+{
+  "name": "professional-knowledge-engine",
+  "version": "0.1.0",
+  "description": "Local-first CLI for verified professional knowledge ingestion and retrieval foundations.",
+  "type": "module",
+  "bin": {
+    "pke": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "dev": "tsx src/cli/index.ts",
+    "pke": "tsx src/cli/index.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "npm run build && node dist/db/migrate.js",
+    "db:studio": "drizzle-kit studio"
+  },
+  "keywords": [
+    "career",
+    "knowledge",
+    "cli",
+    "postgres",
+    "pgvector"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "commander": "^14.0.0",
+    "dotenv": "^17.2.0",
+    "drizzle-orm": "^0.44.0",
+    "pino": "^9.7.0",
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "drizzle-kit": "^0.31.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
