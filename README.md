@@ -70,6 +70,43 @@ Environment variables:
 - `OTEL_ENABLED`: enables OpenTelemetry span creation when set to `true`.
 - `LANGFUSE_ENABLED`: reserved for future real Langfuse integration. The current implementation remains no-op without credentials.
 
+## Architecture
+
+The project is a modular monolith with hexagonal boundaries inside each business capability. Source code is organized into shared foundations and capability modules:
+
+```text
+src/
+  shared/
+    config/
+    database/
+    logging/
+    observability/
+  modules/
+    ingestion/
+    knowledge/
+    retrieval/
+    jobs/
+    documents/
+```
+
+`shared/` contains technical foundations that can be used by multiple modules, such as configuration, database setup, logging, and observability. `modules/` contains business capabilities. A module can contain:
+
+- `domain`: pure business types and invariants.
+- `application/use-cases`: orchestration of business workflows.
+- `application/ports`: contracts for persistence, parsing, rendering, providers, or other external effects.
+- `infrastructure`: adapters that implement ports with Drizzle, the filesystem, parsers, providers, or SDKs.
+- `interfaces/cli`: command adapters that translate CLI input into application calls.
+
+Dependency rules:
+
+- Domain code must not depend on application, infrastructure, CLI, database clients, LLMs, telemetry, or external SDKs.
+- Application code may depend on domain code and ports.
+- Infrastructure implements application ports.
+- CLI command handlers call application-facing contracts only; they do not call repositories, database clients, parsers, telemetry clients, or providers directly.
+- Cross-module collaboration happens through explicit application services or ports, not infrastructure imports.
+
+The top-level `src/cli/index.ts` remains the executable command registry. The ingest command is registered through the ingestion module, and production infrastructure is wired behind the module boundary so `pke ingest ./examples/profile.md` keeps the same user-facing behavior while the ingestion use case remains testable through ports.
+
 ## Why Postgres + pgvector
 
 Postgres is the career knowledge store and source of truth. It holds raw sources, canonical career records, evidence claims, and source references in relational tables where integrity and traceability can be enforced.

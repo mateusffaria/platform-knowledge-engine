@@ -1,17 +1,18 @@
-import { KnowledgePersistence } from "../db/persistence.js";
-import { CanonicalCareerDocument } from "../domain/model.js";
-import { ingestMarkdownFile } from "./markdown.js";
-
-export interface IngestionPipelineResult {
-  document: CanonicalCareerDocument;
-}
+import { KnowledgePersistence } from "../modules/knowledge/application/ports/knowledge-persistence.js";
+import { MarkdownCareerDocumentParser } from "../modules/ingestion/infrastructure/parsers/markdown.js";
+import {
+  createIngestCareerSourceUseCase,
+  IngestionPipelineResult
+} from "../modules/ingestion/application/use-cases/ingest-career-source.js";
 
 export async function ingestMarkdownSource(
   filePath: string,
   persistence: KnowledgePersistence
 ): Promise<IngestionPipelineResult> {
-  const { document } = await ingestMarkdownFile(filePath);
-  await persistence.saveCanonicalCareerDocument(document);
+  const useCase = createIngestCareerSourceUseCase({
+    parser: new MarkdownCareerDocumentParser(),
+    persistence
+  });
 
-  return { document };
+  return useCase.execute({ sourcePath: filePath });
 }

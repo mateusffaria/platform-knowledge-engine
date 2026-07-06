@@ -2,10 +2,18 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { assertCanonicalCareerDocument, CanonicalCareerDocument } from "../src/domain/model.js";
-import { parseMarkdownCareerDocument, readMarkdownSource, validateMarkdownPath } from "../src/ingestion/markdown.js";
-import { ingestMarkdownSource } from "../src/ingestion/pipeline.js";
-import { KnowledgePersistence } from "../src/db/persistence.js";
+import {
+  assertCanonicalCareerDocument,
+  CanonicalCareerDocument
+} from "../src/modules/knowledge/domain/model.js";
+import { KnowledgePersistence } from "../src/modules/knowledge/application/ports/knowledge-persistence.js";
+import {
+  MarkdownCareerDocumentParser,
+  parseMarkdownCareerDocument,
+  readMarkdownSource,
+  validateMarkdownPath
+} from "../src/modules/ingestion/infrastructure/parsers/markdown.js";
+import { createIngestCareerSourceUseCase } from "../src/modules/ingestion/application/use-cases/ingest-career-source.js";
 
 class RecordingPersistence implements KnowledgePersistence {
   public saved: CanonicalCareerDocument[] = [];
@@ -46,8 +54,12 @@ describe("Markdown ingestion", () => {
 
   it("persists only evidence-backed canonical career records through the ingestion pipeline", async () => {
     const persistence = new RecordingPersistence();
+    const useCase = createIngestCareerSourceUseCase({
+      parser: new MarkdownCareerDocumentParser(),
+      persistence
+    });
 
-    const result = await ingestMarkdownSource("examples/profile.md", persistence);
+    const result = await useCase.execute({ sourcePath: "examples/profile.md" });
 
     expect(persistence.saved).toHaveLength(1);
     expect(persistence.saved[0]).toBe(result.document);

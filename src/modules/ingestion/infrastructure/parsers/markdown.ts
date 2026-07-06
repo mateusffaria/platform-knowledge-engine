@@ -7,7 +7,8 @@ import {
   EvidenceClaim,
   SourceReference,
   assertCanonicalCareerDocument
-} from "../domain/model.js";
+} from "../../../knowledge/domain/model.js";
+import { CareerDocumentSourceParser } from "../../application/ports/career-document-source-parser.js";
 
 export interface MarkdownIngestionResult {
   document: CanonicalCareerDocument;
@@ -60,6 +61,12 @@ export async function ingestMarkdownFile(filePath: string): Promise<MarkdownInge
   return {
     document: parseMarkdownCareerDocument(source.path, source.rawContent)
   };
+}
+
+export class MarkdownCareerDocumentParser implements CareerDocumentSourceParser {
+  async parse(filePath: string): Promise<MarkdownIngestionResult> {
+    return ingestMarkdownFile(filePath);
+  }
 }
 
 export function parseMarkdownCareerDocument(filePath: string, rawContent: string): CanonicalCareerDocument {

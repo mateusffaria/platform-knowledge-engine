@@ -13,7 +13,7 @@
     "dev": "tsx src/cli/index.ts",
     "pke": "tsx src/cli/index.ts",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "npm run build && node dist/db/migrate.js",
+    "db:migrate": "npm run build && node dist/shared/database/migrate.js",
     "db:studio": "drizzle-kit studio"
   },
   "keywords": [

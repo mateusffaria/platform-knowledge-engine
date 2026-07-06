@@ -1,4 +1,5 @@
-import { assertCanonicalCareerDocument, CanonicalCareerDocument } from "../domain/model.js";
+import { KnowledgePersistence } from "../../application/ports/knowledge-persistence.js";
+import { assertCanonicalCareerDocument, CanonicalCareerDocument } from "../../domain/model.js";
 import {
   achievements,
   evidenceClaims,
@@ -8,11 +9,7 @@ import {
   skills,
   sourceDocuments,
   sourceReferences
-} from "./schema.js";
-
-export interface KnowledgePersistence {
-  saveCanonicalCareerDocument(document: CanonicalCareerDocument): Promise<void>;
-}
+} from "../../../../shared/database/schema.js";
 
 export class DrizzleKnowledgePersistence implements KnowledgePersistence {
   constructor(private readonly db: { transaction: <T>(handler: (tx: any) => Promise<T>) => Promise<T> }) {}
