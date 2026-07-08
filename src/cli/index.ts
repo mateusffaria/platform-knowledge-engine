@@ -3,6 +3,7 @@ import { Command } from "commander";
 
 import { createProductionIngestMarkdownRunner } from "../modules/ingestion/infrastructure/ingest-markdown-runner.js";
 import { registerIngestCommand } from "../modules/ingestion/interfaces/cli/ingest-command.js";
+import { registerRetrievalCommands } from "../modules/retrieval/interfaces/cli/retrieval-commands.js";
 
 export function buildProgram(): Command {
   const program = new Command();
@@ -13,6 +14,7 @@ export function buildProgram(): Command {
     .version("0.1.0");
 
   registerIngestCommand(program, createProductionIngestMarkdownRunner());
+  registerRetrievalCommands(program);
 
   return program;
 }
