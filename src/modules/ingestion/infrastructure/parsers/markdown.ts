@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -82,6 +82,7 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
     id: sourceDocumentId,
     sourceType: "markdown" as const,
     path: filePath,
+    contentHash: contentHash(rawContent),
     metadata,
     rawContent,
     ingestedAt: now
@@ -199,6 +200,10 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
   assertCanonicalCareerDocument(document);
 
   return document;
+}
+
+export function contentHash(rawContent: string): string {
+  return createHash("sha256").update(rawContent, "utf8").digest("hex");
 }
 
 function parseFrontmatter(rawContent: string): {

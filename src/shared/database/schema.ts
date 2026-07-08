@@ -1,9 +1,11 @@
 import {
   jsonb,
+  index,
   pgEnum,
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid
 } from "drizzle-orm/pg-core";
 
@@ -20,10 +22,14 @@ export const sourceDocuments = pgTable("source_documents", {
   id: uuid("id").primaryKey(),
   sourceType: sourceDocumentType("source_type").notNull(),
   path: text("path").notNull(),
+  contentHash: text("content_hash").notNull(),
   metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
   rawContent: text("raw_content").notNull(),
   ingestedAt: timestamp("ingested_at", { withTimezone: true }).notNull()
-});
+}, (table) => [
+  index("source_documents_path_idx").on(table.path),
+  uniqueIndex("source_documents_path_content_hash_unique").on(table.path, table.contentHash)
+]);
 
 export const knowledgeAssets = pgTable("knowledge_assets", {
   id: uuid("id").primaryKey(),
@@ -34,7 +40,9 @@ export const knowledgeAssets = pgTable("knowledge_assets", {
   title: text("title").notNull(),
   summary: text("summary"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull()
-});
+}, (table) => [
+  index("knowledge_assets_source_document_id_idx").on(table.sourceDocumentId)
+]);
 
 export const sourceReferences = pgTable("source_references", {
   id: uuid("id").primaryKey(),
@@ -44,7 +52,9 @@ export const sourceReferences = pgTable("source_references", {
   section: text("section").notNull(),
   locator: text("locator").notNull(),
   excerpt: text("excerpt").notNull()
-});
+}, (table) => [
+  index("source_references_source_document_id_idx").on(table.sourceDocumentId)
+]);
 
 export const evidenceClaims = pgTable("evidence_claims", {
   id: uuid("id").primaryKey(),
@@ -56,7 +66,9 @@ export const evidenceClaims = pgTable("evidence_claims", {
     .references(() => sourceReferences.id, { onDelete: "restrict" }),
   claimType: evidenceClaimType("claim_type").notNull(),
   claimText: text("claim_text").notNull()
-});
+}, (table) => [
+  index("evidence_claims_knowledge_asset_id_idx").on(table.knowledgeAssetId)
+]);
 
 export const skills = pgTable("skills", {
   id: uuid("id").primaryKey(),

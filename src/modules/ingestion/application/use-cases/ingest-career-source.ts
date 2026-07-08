@@ -4,6 +4,7 @@ import { CareerDocumentSourceParser } from "../ports/career-document-source-pars
 
 export interface IngestionPipelineResult {
   document: CanonicalCareerDocument;
+  created: boolean;
 }
 
 export interface IngestCareerSourceCommand {
@@ -19,9 +20,18 @@ export function createIngestCareerSourceUseCase(dependencies: IngestCareerSource
   return {
     async execute(command: IngestCareerSourceCommand): Promise<IngestionPipelineResult> {
       const { document } = await dependencies.parser.parse(command.sourcePath);
+      const alreadyIngested = await dependencies.persistence.hasSourceDocumentVersion({
+        path: document.source.path,
+        contentHash: document.source.contentHash
+      });
+
+      if (alreadyIngested) {
+        return { document, created: false };
+      }
+
       await dependencies.persistence.saveCanonicalCareerDocument(document);
 
-      return { document };
+      return { document, created: true };
     }
   };
 }

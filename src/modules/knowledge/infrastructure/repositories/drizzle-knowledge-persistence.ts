@@ -1,3 +1,5 @@
+import { and, eq } from "drizzle-orm";
+
 import { KnowledgePersistence } from "../../application/ports/knowledge-persistence.js";
 import { assertCanonicalCareerDocument, CanonicalCareerDocument } from "../../domain/model.js";
 import {
@@ -11,14 +13,40 @@ import {
   sourceReferences
 } from "../../../../shared/database/schema.js";
 
+interface KnowledgeDatabase {
+  select: (...args: any[]) => any;
+  transaction: <T>(handler: (tx: any) => Promise<T>) => Promise<T>;
+}
+
 export class DrizzleKnowledgePersistence implements KnowledgePersistence {
-  constructor(private readonly db: { transaction: <T>(handler: (tx: any) => Promise<T>) => Promise<T> }) {}
+  constructor(private readonly db: KnowledgeDatabase) {}
+
+  async hasSourceDocumentVersion(identity: { path: string; contentHash: string }): Promise<boolean> {
+    const existing = await this.db
+      .select({ id: sourceDocuments.id })
+      .from(sourceDocuments)
+      .where(and(eq(sourceDocuments.path, identity.path), eq(sourceDocuments.contentHash, identity.contentHash)))
+      .limit(1);
+
+    return existing.length > 0;
+  }
 
   async saveCanonicalCareerDocument(document: CanonicalCareerDocument): Promise<void> {
     assertCanonicalCareerDocument(document);
 
     await this.db.transaction(async (tx) => {
-      await tx.insert(sourceDocuments).values(document.source);
+      const insertedSourceDocuments = await tx
+        .insert(sourceDocuments)
+        .values(document.source)
+        .onConflictDoNothing({
+          target: [sourceDocuments.path, sourceDocuments.contentHash]
+        })
+        .returning({ id: sourceDocuments.id });
+
+      if (insertedSourceDocuments.length === 0) {
+        return;
+      }
+
       await tx.insert(knowledgeAssets).values(document.asset);
 
       if (document.references.length > 0) {

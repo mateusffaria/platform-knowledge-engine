@@ -4,6 +4,7 @@ export interface SourceDocument {
   id: string;
   sourceType: SourceDocumentType;
   path: string;
+  contentHash: string;
   metadata: Record<string, unknown>;
   rawContent: string;
   ingestedAt: Date;

@@ -43,7 +43,7 @@ export function createProductionIngestMarkdownRunner(): IngestCommandRunner {
             sourceDocumentId: result.document.source.id,
             evidenceClaims: result.document.evidenceClaims.length
           });
-          console.log(`Ingested ${sourcePath}`);
+          console.log(result.created ? `Ingested ${sourcePath}` : `Already ingested ${sourcePath}`);
         } finally {
           await database.close();
           await trace.flush();
