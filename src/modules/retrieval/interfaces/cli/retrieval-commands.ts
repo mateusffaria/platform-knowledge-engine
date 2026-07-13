@@ -1,8 +1,19 @@
 import { Command } from "commander";
 
+import { MissingEmbeddingProviderError } from "../../infrastructure/embedding-providers/missing-embedding-provider-error.js";
 import { createProductionRetrievalServices } from "../../infrastructure/retrieval-runner.js";
 
 type RetrievalServicesFactory = typeof createProductionRetrievalServices;
+
+function reportMissingEmbeddingProvider(error: unknown): boolean {
+  if (!(error instanceof MissingEmbeddingProviderError)) {
+    return false;
+  }
+
+  console.error(error.message);
+  process.exitCode = 1;
+  return true;
+}
 
 export function registerRetrievalCommands(
   program: Command,
@@ -12,12 +23,17 @@ export function registerRetrievalCommands(
     .command("index")
     .description("Index persisted professional knowledge for semantic retrieval")
     .action(async () => {
-      const services = createServices();
+      let services: ReturnType<RetrievalServicesFactory> | undefined;
       try {
+        services = createServices();
         const result = await services.indexKnowledge.execute();
         console.log(`Indexed ${result.indexed} embeddings; skipped ${result.skipped} unchanged embeddings.`);
+      } catch (error) {
+        if (!reportMissingEmbeddingProvider(error)) {
+          throw error;
+        }
       } finally {
-        await services.close();
+        await services?.close();
       }
     });
 
@@ -32,8 +48,9 @@ export function registerRetrievalCommands(
         throw new Error("Search limit must be a positive integer.");
       }
 
-      const services = createServices();
+      let services: ReturnType<RetrievalServicesFactory> | undefined;
       try {
+        services = createServices();
         const results = await services.searchKnowledge.execute({ query, limit });
         if (results.length === 0) {
           console.log("No semantic search results found.");
@@ -51,8 +68,12 @@ export function registerRetrievalCommands(
           }
           console.log(`   ${result.text.split("\n").join(" | ")}`);
         }
+      } catch (error) {
+        if (!reportMissingEmbeddingProvider(error)) {
+          throw error;
+        }
       } finally {
-        await services.close();
+        await services?.close();
       }
     });
 }

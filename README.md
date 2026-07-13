@@ -35,11 +35,14 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
    cp .env.example .env
    ```
 
-3. Start Postgres with pgvector:
+3. Start Postgres with pgvector and Ollama:
 
    ```bash
-   docker compose up -d postgres
+   docker compose up -d postgres ollama
+   docker compose run --rm ollama-pull
    ```
+
+   `ollama-pull` downloads `nomic-embed-text` into the `pke-ollama-data` Docker volume. You only need to rerun it after changing models or recreating that volume.
 
 4. Apply migrations:
 
@@ -55,7 +58,42 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
    npm run pke -- ingest ./examples/profile.md
    ```
 
-6. Run tests:
+6. Optional: enable semantic retrieval with Ollama.
+
+   Install and start Ollama, then pull the local embedding model:
+
+   ```bash
+   ollama pull nomic-embed-text
+   ```
+
+   Configure these values in `.env`:
+
+   ```bash
+   EMBEDDING_PROVIDER=ollama
+   EMBEDDING_MODEL=nomic-embed-text
+   OLLAMA_BASE_URL=http://localhost:11434
+   ```
+
+   The current embedding table is configured for 768-dimensional vectors, which matches `nomic-embed-text`. Models that return a different vector size will be rejected before indexing or search because pgvector columns cannot mix embedding dimensions.
+
+   Ingestion and indexing are separate steps. Run `npm run pke -- index` after ingesting a new or updated profile so semantic search can see the latest persisted knowledge. Indexing is idempotent: unchanged embeddings are skipped.
+
+   Then index and search verified knowledge:
+
+   ```bash
+   npm run pke -- index
+   npm run pke -- search "retrieval systems"
+   ```
+
+   You can also run the built CLI image through Docker Compose:
+
+   ```bash
+   docker compose run --rm pke-migrate
+   docker compose run --rm pke index
+   docker compose run --rm pke search "retrieval systems"
+   ```
+
+7. Run tests:
 
    ```bash
    npm test
@@ -69,6 +107,9 @@ Environment variables:
 - `LOG_LEVEL`: structured log level. Defaults to `info`.
 - `OTEL_ENABLED`: enables OpenTelemetry span creation when set to `true`.
 - `LANGFUSE_ENABLED`: reserved for future real Langfuse integration. The current implementation remains no-op without credentials.
+- `EMBEDDING_PROVIDER`: embedding provider for semantic retrieval. Use `ollama`.
+- `EMBEDDING_MODEL`: embedding model name. Use `nomic-embed-text` for the local Ollama setup; the current vector schema expects 768-dimensional embeddings.
+- `OLLAMA_BASE_URL`: Ollama API base URL. Defaults to `http://localhost:11434`.
 
 ## Architecture
 

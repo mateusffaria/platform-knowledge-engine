@@ -15,5 +15,60 @@ services:
       timeout: 5s
       retries: 10
 
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - pke-ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  ollama-pull:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["ollama"]
+    command: ["pull", "nomic-embed-text"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  pke:
+    build: .
+    profiles:
+      - cli
+    environment:
+      DATABASE_URL: postgres://pke:pke@postgres:5432/pke
+      LOG_LEVEL: info
+      OTEL_ENABLED: "false"
+      LANGFUSE_ENABLED: "false"
+      EMBEDDING_PROVIDER: ollama
+      EMBEDDING_MODEL: nomic-embed-text
+      OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama-pull:
+        condition: service_completed_successfully
+
+  pke-migrate:
+    build: .
+    profiles:
+      - cli
+    entrypoint: ["node", "dist/shared/database/migrate.js"]
+    environment:
+      DATABASE_URL: postgres://pke:pke@postgres:5432/pke
+      LOG_LEVEL: info
+      OTEL_ENABLED: "false"
+      LANGFUSE_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   pke-postgres-data:
+  pke-ollama-data:

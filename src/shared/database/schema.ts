@@ -24,7 +24,7 @@ export const embeddingSubjectType = pgEnum("embedding_subject_type", [
   "evidence_claim"
 ]);
 
-export const embeddingDimensions = 1536;
+export const embeddingDimensions = 768;
 
 export const sourceDocuments = pgTable("source_documents", {
   id: uuid("id").primaryKey(),

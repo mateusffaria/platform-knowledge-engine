@@ -15,7 +15,7 @@ CREATE TABLE "knowledge_embeddings" (
 	"provider" text NOT NULL,
 	"model" text NOT NULL,
 	"dimensions" integer NOT NULL,
-	"embedding" vector(1536) NOT NULL,
+	"embedding" vector(768) NOT NULL,
 	"created_at" timestamp with time zone NOT NULL,
 	"updated_at" timestamp with time zone NOT NULL
 );
