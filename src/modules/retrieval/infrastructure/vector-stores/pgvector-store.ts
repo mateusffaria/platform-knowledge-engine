@@ -103,7 +103,7 @@ export class PgvectorStore implements VectorStore {
         evidence_claim_id AS "evidenceClaimId",
         source_document_id AS "sourceDocumentId",
         source_reference_id AS "sourceReferenceId",
-        1 - (embedding <=> ${vectorLiteral}::vector) AS score,
+        1 - (embedding <=> ${vectorLiteral}::vector) AS "similarityScore",
         embedding_text AS text
       FROM knowledge_embeddings
       WHERE provider = ${input.embedding.provider}
@@ -119,7 +119,7 @@ export class PgvectorStore implements VectorStore {
       evidenceClaimId: row.evidenceClaimId ?? undefined,
       sourceDocumentId: row.sourceDocumentId,
       sourceReferenceId: row.sourceReferenceId ?? undefined,
-      score: Number(row.score),
+      similarityScore: Number(row.similarityScore),
       text: row.text
     }));
   }

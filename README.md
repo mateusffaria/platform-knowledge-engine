@@ -83,6 +83,7 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
    ```bash
    npm run pke -- index
    npm run pke -- search "retrieval systems"
+   npm run pke -- search "retrieval systems" --min-score 0.7 --limit 5
    ```
 
    You can also run the built CLI image through Docker Compose:
@@ -110,6 +111,24 @@ Environment variables:
 - `EMBEDDING_PROVIDER`: embedding provider for semantic retrieval. Use `ollama`.
 - `EMBEDDING_MODEL`: embedding model name. Use `nomic-embed-text` for the local Ollama setup; the current vector schema expects 768-dimensional embeddings.
 - `OLLAMA_BASE_URL`: Ollama API base URL. Defaults to `http://localhost:11434`.
+- `SEMANTIC_SEARCH_MIN_SCORE`: optional minimum similarity score for relevant semantic search evidence. Leave unset to preserve unfiltered ranked search behavior.
+
+## Semantic Search Relevance
+
+Semantic search uses pgvector cosine distance through the `<=>` operator. The CLI reports `similarityScore`, calculated as:
+
+```text
+similarityScore = 1 - cosineDistance
+```
+
+The vector store returns ranked similarity matches only; it does not decide whether a match is relevant. Relevance filtering is handled by the search use case with either `--min-score <number>` or `SEMANTIC_SEARCH_MIN_SCORE`. When no threshold is configured, search returns the same ranked results as before.
+
+Default output is compact. Use `--verbose` for identifiers and full embedding text, or `--json` for machine-readable output:
+
+```bash
+npm run pke -- search "retrieval systems" --verbose
+npm run pke -- search "retrieval systems" --json
+```
 
 ## Architecture
 

@@ -33,6 +33,7 @@ export interface IndexSummary {
 export interface SearchQuery {
   query: string;
   limit?: number;
+  minScore?: number;
 }
 
 export interface SearchResult {
@@ -42,6 +43,25 @@ export interface SearchResult {
   evidenceClaimId?: string;
   sourceDocumentId: string;
   sourceReferenceId?: string;
-  score: number;
+  similarityScore: number;
   text: string;
 }
+
+export interface SearchResultsFound {
+  status: "results";
+  query: string;
+  limit: number;
+  minScore?: number;
+  results: SearchResult[];
+}
+
+export interface NoRelevantEvidence {
+  status: "no_relevant_evidence";
+  query: string;
+  limit: number;
+  minScore: number;
+  bestSimilarityScore?: number;
+  results: [];
+}
+
+export type SearchKnowledgeResult = SearchResultsFound | NoRelevantEvidence;

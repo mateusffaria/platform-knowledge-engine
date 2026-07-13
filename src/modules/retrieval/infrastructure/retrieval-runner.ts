@@ -21,7 +21,8 @@ export function createProductionRetrievalServices() {
     }),
     searchKnowledge: createSearchKnowledgeUseCase({
       embeddingProvider,
-      vectorStore
+      vectorStore,
+      defaultMinScore: config.semanticSearchMinScore
     }),
     close: database.close
   };

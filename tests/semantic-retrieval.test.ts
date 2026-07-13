@@ -104,6 +104,8 @@ class InMemoryVectorStore implements VectorStore {
   public searches: VectorSearchInput[] = [];
   private readonly rows = new Map<string, VectorUpsertInput>();
 
+  constructor(private readonly searchResults?: SearchResult[]) {}
+
   async upsertEmbeddings(inputs: VectorUpsertInput[]): Promise<{ inserted: number; updated: number; unchanged: number }> {
     this.upserts.push(inputs);
     let inserted = 0;
@@ -133,7 +135,7 @@ class InMemoryVectorStore implements VectorStore {
 
   async search(input: VectorSearchInput): Promise<SearchResult[]> {
     this.searches.push(input);
-    return [
+    return this.searchResults ?? [
       {
         subjectType: "evidence_claim",
         subjectId: "claim-1",
@@ -141,7 +143,7 @@ class InMemoryVectorStore implements VectorStore {
         evidenceClaimId: "claim-1",
         sourceDocumentId: "source-1",
         sourceReferenceId: "reference-1",
-        score: 0.99,
+        similarityScore: 0.99,
         text: "claim_text: Built a pgvector retrieval service."
       }
     ];
@@ -190,16 +192,146 @@ describe("Semantic retrieval", () => {
     const vectorStore = new InMemoryVectorStore();
     const useCase = createSearchKnowledgeUseCase({ embeddingProvider, vectorStore });
 
-    const results = await useCase.execute({ query: "pgvector retrieval", limit: 5 });
+    const result = await useCase.execute({ query: "pgvector retrieval", limit: 5 });
 
     expect(embeddingProvider.queryTexts).toEqual(["pgvector retrieval"]);
     expect(vectorStore.searches).toHaveLength(1);
     expect(vectorStore.searches[0].limit).toBe(5);
-    expect(results[0]).toMatchObject({
+    expect(result.status).toBe("results");
+    expect(result.results[0]).toMatchObject({
       subjectType: "evidence_claim",
       evidenceClaimId: "claim-1",
-      sourceReferenceId: "reference-1"
+      sourceReferenceId: "reference-1",
+      similarityScore: 0.99
     });
+  });
+
+  it("returns relevant query results above the configured threshold", async () => {
+    const embeddingProvider = new RecordingEmbeddingProvider();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        subjectType: "evidence_claim",
+        subjectId: "claim-1",
+        knowledgeAssetId: "asset-1",
+        evidenceClaimId: "claim-1",
+        sourceDocumentId: "source-1",
+        sourceReferenceId: "reference-1",
+        similarityScore: 0.82,
+        text: "claim_text: Built a pgvector retrieval service."
+      },
+      {
+        subjectType: "evidence_claim",
+        subjectId: "claim-2",
+        knowledgeAssetId: "asset-1",
+        evidenceClaimId: "claim-2",
+        sourceDocumentId: "source-1",
+        similarityScore: 0.41,
+        text: "claim_text: Unrelated detail."
+      }
+    ]);
+    const useCase = createSearchKnowledgeUseCase({
+      embeddingProvider,
+      vectorStore,
+      defaultMinScore: 0.7
+    });
+
+    const result = await useCase.execute({ query: "pgvector retrieval" });
+
+    expect(result).toMatchObject({
+      status: "results",
+      minScore: 0.7,
+      results: [
+        {
+          subjectId: "claim-1",
+          similarityScore: 0.82
+        }
+      ]
+    });
+  });
+
+  it("returns no relevant evidence when all matches are below threshold", async () => {
+    const embeddingProvider = new RecordingEmbeddingProvider();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        subjectType: "evidence_claim",
+        subjectId: "claim-1",
+        knowledgeAssetId: "asset-1",
+        evidenceClaimId: "claim-1",
+        sourceDocumentId: "source-1",
+        similarityScore: 0.31,
+        text: "claim_text: Unrelated detail."
+      }
+    ]);
+    const useCase = createSearchKnowledgeUseCase({
+      embeddingProvider,
+      vectorStore,
+      defaultMinScore: 0.7
+    });
+
+    const result = await useCase.execute({ query: "unrelated query" });
+
+    expect(result).toEqual({
+      status: "no_relevant_evidence",
+      query: "unrelated query",
+      limit: 10,
+      minScore: 0.7,
+      bestSimilarityScore: 0.31,
+      results: []
+    });
+  });
+
+  it("uses explicit minScore over the configured threshold", async () => {
+    const embeddingProvider = new RecordingEmbeddingProvider();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        subjectType: "evidence_claim",
+        subjectId: "claim-1",
+        knowledgeAssetId: "asset-1",
+        evidenceClaimId: "claim-1",
+        sourceDocumentId: "source-1",
+        similarityScore: 0.6,
+        text: "claim_text: Relevant enough for override."
+      }
+    ]);
+    const useCase = createSearchKnowledgeUseCase({
+      embeddingProvider,
+      vectorStore,
+      defaultMinScore: 0.9
+    });
+
+    const result = await useCase.execute({ query: "override", minScore: 0.5 });
+
+    expect(result.status).toBe("results");
+    expect(result.minScore).toBe(0.5);
+    expect(result.results).toHaveLength(1);
+  });
+
+  it("preserves vector-store ordering by descending similarity", async () => {
+    const embeddingProvider = new RecordingEmbeddingProvider();
+    const vectorStore = new InMemoryVectorStore([
+      {
+        subjectType: "evidence_claim",
+        subjectId: "high",
+        knowledgeAssetId: "asset-1",
+        sourceDocumentId: "source-1",
+        similarityScore: 0.91,
+        text: "claim_text: High score."
+      },
+      {
+        subjectType: "evidence_claim",
+        subjectId: "middle",
+        knowledgeAssetId: "asset-1",
+        sourceDocumentId: "source-1",
+        similarityScore: 0.72,
+        text: "claim_text: Middle score."
+      }
+    ]);
+    const useCase = createSearchKnowledgeUseCase({ embeddingProvider, vectorStore });
+
+    const result = await useCase.execute({ query: "ordered" });
+
+    expect(result.status).toBe("results");
+    expect(result.results.map((searchResult) => searchResult.subjectId)).toEqual(["high", "middle"]);
   });
 
   it("excludes unverified claims from confirmed indexing", async () => {
