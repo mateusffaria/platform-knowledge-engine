@@ -1,9 +1,12 @@
+import { randomUUID } from "node:crypto";
+
 import { and, eq } from "drizzle-orm";
 
 import { KnowledgePersistence } from "../../application/ports/knowledge-persistence.js";
 import { assertCanonicalCareerDocument, CanonicalCareerDocument } from "../../domain/model.js";
 import {
   achievements,
+  claimStatusEvents,
   evidenceClaims,
   experiences,
   knowledgeAssets,
@@ -55,6 +58,17 @@ export class DrizzleKnowledgePersistence implements KnowledgePersistence {
 
       if (document.evidenceClaims.length > 0) {
         await tx.insert(evidenceClaims).values(document.evidenceClaims);
+        await tx.insert(claimStatusEvents).values(
+          document.evidenceClaims.map((claim) => ({
+            id: randomUUID(),
+            evidenceClaimId: claim.id,
+            previousStatus: null,
+            nextStatus: claim.status,
+            reason: claim.reviewReason ?? "Initial claim status assigned during ingestion.",
+            transitionSource: "system" as const,
+            createdAt: document.source.ingestedAt
+          }))
+        );
       }
 
       if (document.skills.length > 0) {

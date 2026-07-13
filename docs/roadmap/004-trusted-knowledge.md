@@ -31,7 +31,13 @@ The system must distinguish between absence of evidence and contradiction.
 - single_source
 - needs_review
 - rejected
-- deprecated
+- superseded
+
+## Default Eligibility Policy
+
+Confirmed and single-source claims are searchable by default. Claims marked `needs_review`, `rejected` or `superseded` are excluded from trusted semantic indexing and generated outputs.
+
+Absence of evidence is not contradiction. A missing mention in one source should not create a conflict with a claim from another source.
 
 ## Out of Scope
 
@@ -59,6 +65,7 @@ Every claim should preserve references to its source documents.
 - The system can mark claims as needing review.
 - Generated outputs cannot use rejected claims.
 - Claim status is persisted.
+- Claim status transitions are auditable.
 
 ## Risks
 

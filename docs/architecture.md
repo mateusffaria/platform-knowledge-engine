@@ -168,6 +168,8 @@ Key concepts:
 - Project
 - Achievement
 
+The knowledge module also owns trusted-knowledge validation: deterministic claim assessment, conflict detection, review status, and audit events. Retrieval consumes claim eligibility through explicit application ports instead of deciding trust policy itself.
+
 ### Retrieval
 
 Responsible for retrieving evidence.

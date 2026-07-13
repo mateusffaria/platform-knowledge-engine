@@ -55,6 +55,8 @@ export function buildEvidenceClaimEmbeddingDocument(claim: IndexableEvidenceClai
     ["source_section", claim.reference.section],
     ["source_locator", claim.reference.locator],
     ["claim_type", claim.claimType],
+    ["claim_status", claim.status],
+    ["confidence_score", String(claim.confidenceScore)],
     ["claim_text", claim.claimText],
     ["source_excerpt", claim.reference.excerpt],
     ["asset_title", claim.asset.title],

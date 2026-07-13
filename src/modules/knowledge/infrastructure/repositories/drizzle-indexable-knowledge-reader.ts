@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 
 import {
   IndexableEvidenceClaim,
@@ -60,6 +60,11 @@ export class DrizzleIndexableKnowledgeReader implements IndexableKnowledgeReader
         sourceReferenceId: evidenceClaims.sourceReferenceId,
         claimType: evidenceClaims.claimType,
         claimText: evidenceClaims.claimText,
+        status: evidenceClaims.status,
+        confidenceScore: evidenceClaims.confidenceScore,
+        conflictSeverity: evidenceClaims.conflictSeverity,
+        reviewedAt: evidenceClaims.reviewedAt,
+        reviewReason: evidenceClaims.reviewReason,
         assetTitle: knowledgeAssets.title,
         assetSummary: knowledgeAssets.summary,
         assetType: knowledgeAssets.assetType,
@@ -77,7 +82,8 @@ export class DrizzleIndexableKnowledgeReader implements IndexableKnowledgeReader
       .from(evidenceClaims)
       .innerJoin(knowledgeAssets, eq(evidenceClaims.knowledgeAssetId, knowledgeAssets.id))
       .innerJoin(sourceDocuments, eq(knowledgeAssets.sourceDocumentId, sourceDocuments.id))
-      .innerJoin(sourceReferences, eq(evidenceClaims.sourceReferenceId, sourceReferences.id));
+      .innerJoin(sourceReferences, eq(evidenceClaims.sourceReferenceId, sourceReferences.id))
+      .where(or(eq(evidenceClaims.status, "confirmed"), eq(evidenceClaims.status, "single_source")));
 
     return rows.map((row: any) => ({
       id: row.id,
@@ -85,6 +91,11 @@ export class DrizzleIndexableKnowledgeReader implements IndexableKnowledgeReader
       sourceReferenceId: row.sourceReferenceId,
       claimType: row.claimType,
       claimText: row.claimText,
+      status: row.status,
+      confidenceScore: row.confidenceScore,
+      conflictSeverity: row.conflictSeverity,
+      reviewedAt: row.reviewedAt ?? undefined,
+      reviewReason: row.reviewReason ?? undefined,
       asset: {
         id: row.knowledgeAssetId,
         title: row.assetTitle,
@@ -105,7 +116,7 @@ export class DrizzleIndexableKnowledgeReader implements IndexableKnowledgeReader
         locator: row.referenceLocator,
         excerpt: row.referenceExcerpt
       },
-      verified: true
+      verified: row.status === "confirmed"
     }));
   }
 }

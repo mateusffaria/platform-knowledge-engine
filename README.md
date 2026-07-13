@@ -8,6 +8,7 @@ The core problem is not resume generation. The core problem is transforming hete
 
 - TypeScript/Node.js CLI with a `pke` executable.
 - Markdown ingestion through `pke ingest ./examples/profile.md`.
+- Trusted-knowledge review through `pke claims review`, `pke claims confirm`, and `pke claims reject`.
 - Postgres plus pgvector local infrastructure with Docker Compose.
 - Drizzle ORM schema and initial SQL migration.
 - Canonical career model covering source documents, knowledge assets, evidence claims, source references, skills, experiences, projects, and achievements.
@@ -129,6 +130,8 @@ Default output is compact. Use `--verbose` for identifiers and full embedding te
 npm run pke -- search "retrieval systems" --verbose
 npm run pke -- search "retrieval systems" --json
 ```
+
+Claim status controls semantic indexing eligibility. `confirmed` and `single_source` claims are searchable by default; `needs_review`, `rejected`, and `superseded` claims are excluded. See [Trusted Knowledge](docs/trusted-knowledge.md) for the full policy.
 
 ## Architecture
 

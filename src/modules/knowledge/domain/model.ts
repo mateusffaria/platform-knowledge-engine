@@ -5,6 +5,7 @@ export interface SourceDocument {
   sourceType: SourceDocumentType;
   path: string;
   contentHash: string;
+  sourceReliability: number;
   metadata: Record<string, unknown>;
   rawContent: string;
   ingestedAt: Date;
@@ -29,12 +30,31 @@ export interface SourceReference {
   excerpt: string;
 }
 
+export type EvidenceClaimStatus = "confirmed" | "single_source" | "needs_review" | "rejected" | "superseded";
+export type ConflictSeverity = "none" | "low" | "medium" | "high";
+export type ClaimStatusTransitionSource = "system" | "user";
+
 export interface EvidenceClaim {
   id: string;
   knowledgeAssetId: string;
   sourceReferenceId: string;
   claimType: "skill" | "experience" | "project" | "achievement";
   claimText: string;
+  status: EvidenceClaimStatus;
+  confidenceScore: number;
+  conflictSeverity: ConflictSeverity;
+  reviewedAt?: Date;
+  reviewReason?: string;
+}
+
+export interface ClaimStatusEvent {
+  id: string;
+  evidenceClaimId: string;
+  previousStatus?: EvidenceClaimStatus;
+  nextStatus: EvidenceClaimStatus;
+  reason?: string;
+  transitionSource: ClaimStatusTransitionSource;
+  createdAt: Date;
 }
 
 export interface EvidenceBackedRecord {

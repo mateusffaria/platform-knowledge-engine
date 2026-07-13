@@ -21,7 +21,9 @@ export function createIndexKnowledgeUseCase({
         knowledgeReader.listIndexableKnowledgeAssets(),
         knowledgeReader.listIndexableEvidenceClaims()
       ]);
-      const eligibleClaims = claims.filter((claim) => claim.verified);
+      const eligibleClaims = claims.filter((claim) =>
+        claim.status === "confirmed" || claim.status === "single_source"
+      );
       const documents: EmbeddingDocument[] = [
         ...assets.map(buildKnowledgeAssetEmbeddingDocument),
         ...eligibleClaims.map(buildEvidenceClaimEmbeddingDocument)

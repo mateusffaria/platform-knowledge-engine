@@ -14,6 +14,9 @@ export interface IngestCareerSourceCommand {
 export interface IngestCareerSourceDependencies {
   parser: CareerDocumentSourceParser;
   persistence: KnowledgePersistence;
+  claimAssessment?: {
+    execute(command: { sourceDocumentId?: string }): Promise<{ assessed: number }>;
+  };
 }
 
 export function createIngestCareerSourceUseCase(dependencies: IngestCareerSourceDependencies) {
@@ -30,6 +33,7 @@ export function createIngestCareerSourceUseCase(dependencies: IngestCareerSource
       }
 
       await dependencies.persistence.saveCanonicalCareerDocument(document);
+      await dependencies.claimAssessment?.execute({ sourceDocumentId: document.source.id });
 
       return { document, created: true };
     }

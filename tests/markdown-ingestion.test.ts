@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   assertCanonicalCareerDocument,
@@ -37,6 +37,7 @@ describe("Markdown ingestion", () => {
     const document = parseMarkdownCareerDocument("examples/profile.md", rawContent);
 
     expect(document.source.sourceType).toBe("markdown");
+    expect(document.source.sourceReliability).toBe(50);
     expect(document.source.contentHash).toMatch(/^[a-f0-9]{64}$/);
     expect(document.source.rawContent).toContain("# Alex Morgan");
     expect(document.asset.title).toBe("Alex Morgan Professional Profile");
@@ -50,6 +51,9 @@ describe("Markdown ingestion", () => {
     expect(document.evidenceClaims.length).toBe(
       document.skills.length + document.experiences.length + document.projects.length + document.achievements.length
     );
+    expect(document.evidenceClaims.every((claim) => claim.status === "single_source")).toBe(true);
+    expect(document.evidenceClaims.every((claim) => claim.confidenceScore === 50)).toBe(true);
+    expect(document.evidenceClaims.every((claim) => claim.conflictSeverity === "none")).toBe(true);
   });
 
   it("rejects unsupported source file types clearly", () => {
@@ -62,9 +66,13 @@ describe("Markdown ingestion", () => {
 
   it("persists only evidence-backed canonical career records through the ingestion pipeline", async () => {
     const persistence = new RecordingPersistence();
+    const claimAssessment = {
+      execute: vi.fn(async () => ({ assessed: 1 }))
+    };
     const useCase = createIngestCareerSourceUseCase({
       parser: new MarkdownCareerDocumentParser(),
-      persistence
+      persistence,
+      claimAssessment
     });
 
     const result = await useCase.execute({ sourcePath: "examples/profile.md" });
@@ -74,6 +82,7 @@ describe("Markdown ingestion", () => {
     expect(persistence.saved[0]).toBe(result.document);
     expect(result.document.skills.every((skill) => skill.evidenceClaimIds.length > 0)).toBe(true);
     expect(result.document.skills.every((skill) => skill.sourceReferenceIds.length > 0)).toBe(true);
+    expect(claimAssessment.execute).toHaveBeenCalledWith({ sourceDocumentId: result.document.source.id });
   });
 
   it("does not persist duplicates when the same source path and content are ingested repeatedly", async () => {

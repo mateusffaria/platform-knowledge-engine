@@ -10,6 +10,7 @@ interface VectorDatabase {
   select: (...args: any[]) => any;
   insert: (...args: any[]) => any;
   update: (...args: any[]) => any;
+  delete: (...args: any[]) => any;
   execute: (...args: any[]) => any;
 }
 
@@ -122,5 +123,17 @@ export class PgvectorStore implements VectorStore {
       similarityScore: Number(row.similarityScore),
       text: row.text
     }));
+  }
+
+  async deleteEmbeddingsForSubject(input: { subjectType: "knowledge_asset" | "evidence_claim"; subjectId: string }): Promise<number> {
+    const deleted = await this.db
+      .delete(knowledgeEmbeddings)
+      .where(and(
+        eq(knowledgeEmbeddings.subjectType, input.subjectType),
+        eq(knowledgeEmbeddings.subjectId, input.subjectId)
+      ))
+      .returning({ id: knowledgeEmbeddings.id });
+
+    return deleted.length;
   }
 }

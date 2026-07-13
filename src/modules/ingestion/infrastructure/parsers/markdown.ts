@@ -83,6 +83,7 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
     sourceType: "markdown" as const,
     path: filePath,
     contentHash: contentHash(rawContent),
+    sourceReliability: sourceReliability(metadata),
     metadata,
     rawContent,
     ingestedAt: now
@@ -118,7 +119,10 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
       knowledgeAssetId,
       sourceReferenceId: sourceReference.id,
       claimType,
-      claimText
+      claimText,
+      status: "single_source",
+      confidenceScore: source.sourceReliability,
+      conflictSeverity: "none"
     };
 
     references.push(sourceReference);
@@ -245,6 +249,20 @@ function parseFrontmatter(rawContent: string): {
     metadata,
     body: rawContent.slice(end + 4).replace(/^\r?\n/, "")
   };
+}
+
+function sourceReliability(metadata: Record<string, string | string[]>): number {
+  const value = metadata.sourceReliability ?? metadata.source_reliability ?? metadata.reliability;
+  if (Array.isArray(value)) {
+    return 50;
+  }
+
+  const parsed = Number.parseInt(value ?? "50", 10);
+  if (!Number.isFinite(parsed)) {
+    return 50;
+  }
+
+  return Math.min(100, Math.max(0, parsed));
 }
 
 function splitSections(body: string): MarkdownSection[] {

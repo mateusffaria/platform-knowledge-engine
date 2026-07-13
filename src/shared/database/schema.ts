@@ -19,6 +19,23 @@ export const evidenceClaimType = pgEnum("evidence_claim_type", [
   "project",
   "achievement"
 ]);
+export const evidenceClaimStatus = pgEnum("evidence_claim_status", [
+  "confirmed",
+  "single_source",
+  "needs_review",
+  "rejected",
+  "superseded"
+]);
+export const conflictSeverity = pgEnum("conflict_severity", [
+  "none",
+  "low",
+  "medium",
+  "high"
+]);
+export const claimStatusTransitionSource = pgEnum("claim_status_transition_source", [
+  "system",
+  "user"
+]);
 export const embeddingSubjectType = pgEnum("embedding_subject_type", [
   "knowledge_asset",
   "evidence_claim"
@@ -31,6 +48,7 @@ export const sourceDocuments = pgTable("source_documents", {
   sourceType: sourceDocumentType("source_type").notNull(),
   path: text("path").notNull(),
   contentHash: text("content_hash").notNull(),
+  sourceReliability: integer("source_reliability").notNull().default(50),
   metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
   rawContent: text("raw_content").notNull(),
   ingestedAt: timestamp("ingested_at", { withTimezone: true }).notNull()
@@ -73,9 +91,28 @@ export const evidenceClaims = pgTable("evidence_claims", {
     .notNull()
     .references(() => sourceReferences.id, { onDelete: "restrict" }),
   claimType: evidenceClaimType("claim_type").notNull(),
-  claimText: text("claim_text").notNull()
+  claimText: text("claim_text").notNull(),
+  status: evidenceClaimStatus("status").notNull().default("single_source"),
+  confidenceScore: integer("confidence_score").notNull().default(50),
+  conflictSeverity: conflictSeverity("conflict_severity").notNull().default("none"),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  reviewReason: text("review_reason")
 }, (table) => [
   index("evidence_claims_knowledge_asset_id_idx").on(table.knowledgeAssetId)
+]);
+
+export const claimStatusEvents = pgTable("claim_status_events", {
+  id: uuid("id").primaryKey(),
+  evidenceClaimId: uuid("evidence_claim_id")
+    .notNull()
+    .references(() => evidenceClaims.id, { onDelete: "cascade" }),
+  previousStatus: evidenceClaimStatus("previous_status"),
+  nextStatus: evidenceClaimStatus("next_status").notNull(),
+  reason: text("reason"),
+  transitionSource: claimStatusTransitionSource("transition_source").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull()
+}, (table) => [
+  index("claim_status_events_evidence_claim_id_idx").on(table.evidenceClaimId)
 ]);
 
 export const knowledgeEmbeddings = pgTable("knowledge_embeddings", {

@@ -1,6 +1,8 @@
 import { createIngestCareerSourceUseCase } from "../application/use-cases/ingest-career-source.js";
 import { IngestCommandRunner } from "../interfaces/cli/ingest-command.js";
+import { createAssessClaimsUseCase } from "../../knowledge/application/use-cases/assess-claims.js";
 import { DrizzleKnowledgePersistence } from "../../knowledge/infrastructure/repositories/drizzle-knowledge-persistence.js";
+import { DrizzleTrustedClaimRepository } from "../../knowledge/infrastructure/repositories/drizzle-trusted-claim-repository.js";
 import { loadConfig } from "../../../shared/config/env.js";
 import { createDatabase } from "../../../shared/database/client.js";
 import { createLogger } from "../../../shared/logging/logger.js";
@@ -25,7 +27,8 @@ export function createProductionIngestMarkdownRunner(): IngestCommandRunner {
         try {
           const useCase = createIngestCareerSourceUseCase({
             parser: new MarkdownCareerDocumentParser(),
-            persistence: new DrizzleKnowledgePersistence(database.db)
+            persistence: new DrizzleKnowledgePersistence(database.db),
+            claimAssessment: createAssessClaimsUseCase(new DrizzleTrustedClaimRepository(database.db))
           });
           const result = await telemetry.runWithSpan("pke.ingest.markdown", async () =>
             useCase.execute({ sourcePath })

@@ -36,6 +36,9 @@ const claim: IndexableEvidenceClaim = {
   sourceReferenceId: "reference-1",
   claimType: "project",
   claimText: "Built a pgvector retrieval service.",
+  status: "single_source",
+  confidenceScore: 50,
+  conflictSeverity: "none",
   asset: {
     id: "asset-1",
     title: "Alex Morgan Professional Profile",
@@ -148,6 +151,20 @@ class InMemoryVectorStore implements VectorStore {
       }
     ];
   }
+
+  async deleteEmbeddingsForSubject(input: { subjectType: "knowledge_asset" | "evidence_claim"; subjectId: string }): Promise<number> {
+    const keyPrefix = `${input.subjectType}:${input.subjectId}:`;
+    let deleted = 0;
+
+    for (const key of Array.from(this.rows.keys())) {
+      if (key.startsWith(keyPrefix)) {
+        this.rows.delete(key);
+        deleted += 1;
+      }
+    }
+
+    return deleted;
+  }
 }
 
 describe("Semantic retrieval", () => {
@@ -165,6 +182,7 @@ describe("Semantic retrieval", () => {
     expect(claimDocument.text).toContain("knowledge_asset_id: asset-1");
     expect(claimDocument.text).toContain("source_reference_id: reference-1");
     expect(claimDocument.text).toContain("claim_type: project");
+    expect(claimDocument.text).toContain("claim_status: single_source");
     expect(claimDocument.text).toContain("claim_text: Built a pgvector retrieval service.");
     expect(claimDocument.textHash).toMatch(/^[a-f0-9]{64}$/);
   });
@@ -334,11 +352,14 @@ describe("Semantic retrieval", () => {
     expect(result.results.map((searchResult) => searchResult.subjectId)).toEqual(["high", "middle"]);
   });
 
-  it("excludes unverified claims from confirmed indexing", async () => {
+  it("excludes rejected and superseded claims from indexing", async () => {
     const embeddingProvider = new RecordingEmbeddingProvider();
     const vectorStore = new InMemoryVectorStore();
     const useCase = createIndexKnowledgeUseCase({
-      knowledgeReader: new FakeKnowledgeReader([], [{ ...claim, verified: false }]),
+      knowledgeReader: new FakeKnowledgeReader([], [
+        { ...claim, id: "rejected-claim", status: "rejected", verified: false },
+        { ...claim, id: "superseded-claim", status: "superseded", verified: false }
+      ]),
       embeddingProvider,
       vectorStore
     });
