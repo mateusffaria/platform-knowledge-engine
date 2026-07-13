@@ -2,7 +2,7 @@
 
 Trusted knowledge is the policy layer that decides whether an extracted `EvidenceClaim` can be used as professional evidence.
 
-The source of truth remains PostgreSQL. Embeddings and LLM outputs are consumers of claim status; they do not decide whether a claim is true.
+The reconciliation module owns this policy. Knowledge owns `EvidenceClaim` identity, source references and provenance. Retrieval owns embedding and search mechanics. Embeddings and LLM outputs are consumers of claim status; they do not decide whether a claim is true.
 
 ## Claim Statuses
 
@@ -20,7 +20,7 @@ If one source says "Go" and another source does not mention Go, that is missing 
 
 ## Review Workflow
 
-Ingestion creates claims with conservative trust metadata, then assessment compares the new claims against existing evidence.
+Ingestion creates claims with conservative trust metadata, then invokes reconciliation after persistence. Reconciliation compares the new claims against existing evidence through explicit application contracts.
 
 Use the CLI review commands:
 
@@ -30,7 +30,7 @@ npm run pke -- claims confirm <claim-id>
 npm run pke -- claims reject <claim-id> --reason "Unsupported by source material"
 ```
 
-Confirming a claim marks it as trusted evidence. Rejecting a claim records the reason and removes stale semantic embeddings for that claim.
+Confirming a claim marks it as trusted evidence. Rejecting a claim records the reason and asks retrieval to remove stale semantic embeddings for that claim.
 
 All status transitions are recorded in `claim_status_events` so trust changes remain auditable.
 
@@ -44,7 +44,7 @@ All status transitions are recorded in `claim_status_events` so trust changes re
 | `rejected` | no | no | no |
 | `superseded` | no | no | no |
 
-Semantic indexing reads only `confirmed` and `single_source` claims. If a claim changes to a non-indexable status, its existing embeddings must be removed or refreshed so stale vectors are not returned.
+Reconciliation marks only `confirmed` and `single_source` claims as indexable by default. Retrieval performs the actual embedding writes, deletes and search operations. If a claim changes to a non-indexable status, reconciliation invokes retrieval cleanup so stale vectors are not returned.
 
 ## Deterministic Rules First
 

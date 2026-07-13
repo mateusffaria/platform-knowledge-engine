@@ -7,9 +7,9 @@ import {
   ClaimAssessmentUpdate,
   ClaimReviewItem,
   ClaimStatusTransition,
-  TrustedClaimRepository
-} from "../../application/ports/trusted-claim-repository.js";
-import { StructuredClaimFields } from "../../domain/trust.js";
+  ClaimReconciliationRepository
+} from "../../../reconciliation/application/ports/claim-reconciliation-repository.js";
+import { StructuredClaimFields } from "../../../reconciliation/domain/model.js";
 import {
   achievements,
   claimStatusEvents,
@@ -29,7 +29,7 @@ interface TrustedClaimDatabase {
   transaction: <T>(handler: (tx: any) => Promise<T>) => Promise<T>;
 }
 
-export class DrizzleTrustedClaimRepository implements TrustedClaimRepository {
+export class DrizzleTrustedClaimRepository implements ClaimReconciliationRepository {
   constructor(private readonly db: TrustedClaimDatabase) {}
 
   async listAssessmentCandidates(): Promise<ClaimAssessmentCandidate[]> {

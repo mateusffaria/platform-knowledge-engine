@@ -1,9 +1,25 @@
 import { Command } from "commander";
 
-import { ClaimReviewItem } from "../../application/ports/trusted-claim-repository.js";
-import { createProductionClaimReviewServices } from "../../infrastructure/claim-review-runner.js";
+import { ClaimReviewItem } from "../../application/ports/claim-reconciliation-repository.js";
 
-type ClaimReviewServicesFactory = typeof createProductionClaimReviewServices;
+export interface ClaimReviewServices {
+  listClaimsRequiringReview: {
+    execute(): Promise<ClaimReviewItem[]>;
+  };
+  confirmClaim: {
+    execute(command: { claimId: string }): Promise<{ claimId: string; status: "confirmed" }>;
+  };
+  rejectClaim: {
+    execute(command: { claimId: string; reason: string }): Promise<{
+      claimId: string;
+      status: "rejected";
+      removedEmbeddings: number;
+    }>;
+  };
+  close(): Promise<void>;
+}
+
+export type ClaimReviewServicesFactory = () => ClaimReviewServices;
 
 function printReviewItems(items: ClaimReviewItem[]): void {
   if (items.length === 0) {
@@ -23,7 +39,7 @@ function printReviewItems(items: ClaimReviewItem[]): void {
 
 export function registerClaimsCommands(
   program: Command,
-  createServices: ClaimReviewServicesFactory = createProductionClaimReviewServices
+  createServices: ClaimReviewServicesFactory
 ): void {
   const claims = program
     .command("claims")
@@ -63,9 +79,8 @@ export function registerClaimsCommands(
     .action(async (claimId: string, options: { reason: string }) => {
       const services = createServices();
       try {
-        await services.rejectClaim.execute({ claimId, reason: options.reason });
-        const deleted = await services.deleteClaimEmbeddings.execute(claimId);
-        console.log(`Rejected claim ${claimId}. Removed ${deleted} embedding(s).`);
+        const result = await services.rejectClaim.execute({ claimId, reason: options.reason });
+        console.log(`Rejected claim ${claimId}. Removed ${result.removedEmbeddings} embedding(s).`);
       } finally {
         await services.close();
       }

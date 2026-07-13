@@ -1,10 +1,10 @@
 import {
-  ConflictSeverity,
-  EvidenceClaimStatus,
+  ClaimStatus,
   ClaimStatusTransitionSource,
-  EvidenceClaim
+  ClaimType,
+  ConflictSeverity,
+  AssessableClaim
 } from "../../domain/model.js";
-import { AssessableClaim } from "../../domain/trust.js";
 
 export interface ClaimAssessmentCandidate extends AssessableClaim {
   sourcePath: string;
@@ -15,7 +15,7 @@ export interface ClaimAssessmentCandidate extends AssessableClaim {
 
 export interface ClaimAssessmentUpdate {
   claimId: string;
-  status: EvidenceClaimStatus;
+  status: ClaimStatus;
   confidenceScore: number;
   conflictSeverity: ConflictSeverity;
   reviewReason?: string;
@@ -24,11 +24,11 @@ export interface ClaimAssessmentUpdate {
 
 export interface ClaimReviewItem {
   id: string;
-  status: EvidenceClaimStatus;
+  status: ClaimStatus;
   confidenceScore: number;
   conflictSeverity: ConflictSeverity;
   reviewReason?: string;
-  claimType: EvidenceClaim["claimType"];
+  claimType: ClaimType;
   claimText: string;
   sourcePath: string;
   sourceReferenceSection: string;
@@ -38,7 +38,7 @@ export interface ClaimReviewItem {
 
 export interface ClaimStatusTransition {
   claimId: string;
-  nextStatus: EvidenceClaimStatus;
+  nextStatus: ClaimStatus;
   confidenceScore: number;
   conflictSeverity: ConflictSeverity;
   reason: string;
@@ -46,7 +46,7 @@ export interface ClaimStatusTransition {
   reviewedAt?: Date;
 }
 
-export interface TrustedClaimRepository {
+export interface ClaimReconciliationRepository {
   listAssessmentCandidates(): Promise<ClaimAssessmentCandidate[]>;
   updateClaimAssessment(update: ClaimAssessmentUpdate): Promise<void>;
   listClaimsRequiringReview(): Promise<ClaimReviewItem[]>;

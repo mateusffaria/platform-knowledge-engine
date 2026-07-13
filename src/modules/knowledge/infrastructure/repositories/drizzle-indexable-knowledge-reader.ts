@@ -1,4 +1,4 @@
-import { eq, or } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import {
   IndexableEvidenceClaim,
@@ -82,8 +82,7 @@ export class DrizzleIndexableKnowledgeReader implements IndexableKnowledgeReader
       .from(evidenceClaims)
       .innerJoin(knowledgeAssets, eq(evidenceClaims.knowledgeAssetId, knowledgeAssets.id))
       .innerJoin(sourceDocuments, eq(knowledgeAssets.sourceDocumentId, sourceDocuments.id))
-      .innerJoin(sourceReferences, eq(evidenceClaims.sourceReferenceId, sourceReferences.id))
-      .where(or(eq(evidenceClaims.status, "confirmed"), eq(evidenceClaims.status, "single_source")));
+      .innerJoin(sourceReferences, eq(evidenceClaims.sourceReferenceId, sourceReferences.id));
 
     return rows.map((row: any) => ({
       id: row.id,

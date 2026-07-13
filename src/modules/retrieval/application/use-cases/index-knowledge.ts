@@ -1,19 +1,28 @@
-import { IndexableKnowledgeReader } from "../../../knowledge/application/ports/indexable-knowledge-reader.js";
+import {
+  IndexableEvidenceClaim,
+  IndexableKnowledgeReader
+} from "../../../knowledge/application/ports/indexable-knowledge-reader.js";
 import { buildEvidenceClaimEmbeddingDocument, buildKnowledgeAssetEmbeddingDocument } from "../embedding-text.js";
 import { EmbeddingProvider } from "../ports/embedding-provider.js";
 import { VectorStore } from "../ports/vector-store.js";
 import { EmbeddingDocument, IndexSummary } from "../types.js";
 
+export interface ClaimIndexingEligibilityPolicy {
+  canIndexClaim(claim: IndexableEvidenceClaim): boolean;
+}
+
 export interface IndexKnowledgeDependencies {
   knowledgeReader: IndexableKnowledgeReader;
   embeddingProvider: EmbeddingProvider;
   vectorStore: VectorStore;
+  claimEligibilityPolicy: ClaimIndexingEligibilityPolicy;
 }
 
 export function createIndexKnowledgeUseCase({
   knowledgeReader,
   embeddingProvider,
-  vectorStore
+  vectorStore,
+  claimEligibilityPolicy
 }: IndexKnowledgeDependencies) {
   return {
     async execute(): Promise<IndexSummary> {
@@ -21,9 +30,7 @@ export function createIndexKnowledgeUseCase({
         knowledgeReader.listIndexableKnowledgeAssets(),
         knowledgeReader.listIndexableEvidenceClaims()
       ]);
-      const eligibleClaims = claims.filter((claim) =>
-        claim.status === "confirmed" || claim.status === "single_source"
-      );
+      const eligibleClaims = claims.filter((claim) => claimEligibilityPolicy.canIndexClaim(claim));
       const documents: EmbeddingDocument[] = [
         ...assets.map(buildKnowledgeAssetEmbeddingDocument),
         ...eligibleClaims.map(buildEvidenceClaimEmbeddingDocument)

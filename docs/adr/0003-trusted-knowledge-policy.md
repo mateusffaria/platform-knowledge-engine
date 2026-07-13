@@ -6,11 +6,11 @@ Accepted
 
 ## Context
 
-Professional source material can be incomplete, duplicated or contradictory. The system already preserves source references and can index knowledge semantically, but retrieval needs an explicit eligibility policy so unreviewed conflicts and rejected claims do not become trusted evidence.
+Professional source material can be incomplete, duplicated or contradictory. The system already preserves source references and can index knowledge semantically, but it needs an explicit reconciliation policy so unreviewed conflicts and rejected claims do not become trusted evidence.
 
 ## Decision
 
-Evidence claims will carry explicit trust status and assessment metadata.
+Evidence claims will carry explicit trust status and assessment metadata. Knowledge owns claim identity and provenance; reconciliation owns deterministic assessment, conflict detection, review decisions and indexing eligibility policy; retrieval owns vector indexing, cleanup and search mechanics.
 
 The supported statuses are:
 
@@ -20,7 +20,7 @@ The supported statuses are:
 - `rejected`
 - `superseded`
 
-Deterministic rules compare normalized claim signatures and structured career fields where possible. Human review can confirm or reject claims through the CLI. Status transitions are persisted in an append-only audit table.
+Deterministic rules in reconciliation compare normalized claim signatures and structured career fields where possible. Human review can confirm or reject claims through the CLI. Status transitions are persisted in an append-only audit table.
 
 `confirmed` and `single_source` claims are searchable by default. `needs_review`, `rejected` and `superseded` claims are excluded from trusted semantic indexing and generated outputs.
 

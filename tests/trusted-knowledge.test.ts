@@ -5,12 +5,12 @@ import {
   ClaimAssessmentUpdate,
   ClaimReviewItem,
   ClaimStatusTransition,
-  TrustedClaimRepository
-} from "../src/modules/knowledge/application/ports/trusted-claim-repository.js";
-import { createAssessClaimsUseCase } from "../src/modules/knowledge/application/use-cases/assess-claims.js";
-import { createConfirmClaimUseCase } from "../src/modules/knowledge/application/use-cases/confirm-claim.js";
-import { createRejectClaimUseCase } from "../src/modules/knowledge/application/use-cases/reject-claim.js";
-import { assessClaimCandidates } from "../src/modules/knowledge/domain/trust.js";
+  ClaimReconciliationRepository
+} from "../src/modules/reconciliation/application/ports/claim-reconciliation-repository.js";
+import { createAssessClaimsUseCase } from "../src/modules/reconciliation/application/use-cases/assess-claims.js";
+import { createConfirmClaimUseCase } from "../src/modules/reconciliation/application/use-cases/confirm-claim.js";
+import { createRejectClaimUseCase } from "../src/modules/reconciliation/application/use-cases/reject-claim.js";
+import { assessClaimCandidates } from "../src/modules/reconciliation/domain/assessment.js";
 
 function candidate(overrides: Partial<ClaimAssessmentCandidate>): ClaimAssessmentCandidate {
   return {
@@ -35,7 +35,7 @@ function candidate(overrides: Partial<ClaimAssessmentCandidate>): ClaimAssessmen
   };
 }
 
-class RecordingTrustedClaimRepository implements TrustedClaimRepository {
+class RecordingTrustedClaimRepository implements ClaimReconciliationRepository {
   public assessmentUpdates: ClaimAssessmentUpdate[] = [];
   public transitions: ClaimStatusTransition[] = [];
 
@@ -100,6 +100,28 @@ describe("Trusted knowledge validation", () => {
         confidenceScore: 80,
         conflictSeverity: "none"
       })
+    ]);
+  });
+
+  it("marks compatible claims from multiple sources as confirmed", () => {
+    const decisions = assessClaimCandidates([
+      candidate({
+        id: "claim-typescript-1",
+        sourceDocumentId: "source-1",
+        sourceReliability: 70,
+        structured: { skillName: "TypeScript" }
+      }),
+      candidate({
+        id: "claim-typescript-2",
+        sourceDocumentId: "source-2",
+        sourceReliability: 65,
+        structured: { skillName: "TypeScript" }
+      })
+    ]);
+
+    expect(decisions).toEqual([
+      expect.objectContaining({ claimId: "claim-typescript-1", status: "confirmed", conflictSeverity: "none" }),
+      expect.objectContaining({ claimId: "claim-typescript-2", status: "confirmed", conflictSeverity: "none" })
     ]);
   });
 
@@ -182,6 +204,17 @@ describe("Trusted knowledge validation", () => {
         reason: "Contradicted by source."
       })
     ]);
+  });
+
+  it("removes stale claim embeddings when rejecting a claim", async () => {
+    const repository = new RecordingTrustedClaimRepository();
+    const cleanup = { removeClaimEmbeddings: vi.fn(async () => 2) };
+
+    const result = await createRejectClaimUseCase(repository, cleanup)
+      .execute({ claimId: "claim-2", reason: "Contradicted by source." });
+
+    expect(cleanup.removeClaimEmbeddings).toHaveBeenCalledWith("claim-2");
+    expect(result).toEqual({ claimId: "claim-2", status: "rejected", removedEmbeddings: 2 });
   });
 
   it("rejects empty rejection reasons", async () => {

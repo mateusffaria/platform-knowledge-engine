@@ -60,4 +60,52 @@ describe("Architecture boundaries", () => {
       expect(contents, `src/cli/index.ts imports ${forbiddenImport}`).not.toContain(forbiddenImport);
     }
   });
+
+  it("keeps reconciliation isolated from other modules' infrastructure and persistence details", async () => {
+    const files = await readTypescriptFiles("src/modules/reconciliation");
+    const forbiddenImports = [
+      "modules/knowledge/infrastructure",
+      "modules/retrieval/infrastructure",
+      "../knowledge/infrastructure",
+      "../retrieval/infrastructure",
+      "../../knowledge/infrastructure",
+      "../../retrieval/infrastructure",
+      "../../../shared/database",
+      "../../../../shared/database",
+      "shared/database",
+      "drizzle-orm",
+      "pgvector",
+      "embedding-providers",
+      "vector-stores"
+    ];
+
+    for (const file of files) {
+      for (const forbiddenImport of forbiddenImports) {
+        expect(file.contents, `${file.path} imports ${forbiddenImport}`).not.toContain(forbiddenImport);
+      }
+    }
+  });
+
+  it("keeps reconciliation application code inside domain and port boundaries", async () => {
+    const files = await readTypescriptFiles("src/modules/reconciliation/application");
+    const forbiddenImports = [
+      "../../knowledge",
+      "../../../knowledge",
+      "../../retrieval",
+      "../../../retrieval",
+      "../../infrastructure",
+      "../infrastructure",
+      "../../../shared/database",
+      "drizzle-orm",
+      "postgres",
+      "@opentelemetry",
+      "pino"
+    ];
+
+    for (const file of files) {
+      for (const forbiddenImport of forbiddenImports) {
+        expect(file.contents, `${file.path} imports ${forbiddenImport}`).not.toContain(forbiddenImport);
+      }
+    }
+  });
 });

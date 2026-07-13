@@ -1,6 +1,6 @@
 import { createIngestCareerSourceUseCase } from "../application/use-cases/ingest-career-source.js";
 import { IngestCommandRunner } from "../interfaces/cli/ingest-command.js";
-import { createAssessClaimsUseCase } from "../../knowledge/application/use-cases/assess-claims.js";
+import { createAssessClaimsUseCase } from "../../reconciliation/application/use-cases/assess-claims.js";
 import { DrizzleKnowledgePersistence } from "../../knowledge/infrastructure/repositories/drizzle-knowledge-persistence.js";
 import { DrizzleTrustedClaimRepository } from "../../knowledge/infrastructure/repositories/drizzle-trusted-claim-repository.js";
 import { loadConfig } from "../../../shared/config/env.js";

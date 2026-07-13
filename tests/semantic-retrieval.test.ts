@@ -9,6 +9,7 @@ import {
   buildEvidenceClaimEmbeddingDocument,
   buildKnowledgeAssetEmbeddingDocument
 } from "../src/modules/retrieval/application/embedding-text.js";
+import { isClaimIndexableStatus } from "../src/modules/reconciliation/domain/eligibility.js";
 import { EmbeddingProvider } from "../src/modules/retrieval/application/ports/embedding-provider.js";
 import { VectorStore, VectorUpsertInput, VectorSearchInput } from "../src/modules/retrieval/application/ports/vector-store.js";
 import { createIndexKnowledgeUseCase } from "../src/modules/retrieval/application/use-cases/index-knowledge.js";
@@ -167,6 +168,12 @@ class InMemoryVectorStore implements VectorStore {
   }
 }
 
+const reconciliationClaimEligibilityPolicy = {
+  canIndexClaim(claim: IndexableEvidenceClaim): boolean {
+    return isClaimIndexableStatus(claim.status);
+  }
+};
+
 describe("Semantic retrieval", () => {
   it("builds deterministic embedding text with provenance for assets and evidence claims", () => {
     const firstAssetDocument = buildKnowledgeAssetEmbeddingDocument(asset);
@@ -193,7 +200,8 @@ describe("Semantic retrieval", () => {
     const useCase = createIndexKnowledgeUseCase({
       knowledgeReader: new FakeKnowledgeReader([asset], [claim]),
       embeddingProvider,
-      vectorStore
+      vectorStore,
+      claimEligibilityPolicy: reconciliationClaimEligibilityPolicy
     });
 
     const first = await useCase.execute();
@@ -361,7 +369,8 @@ describe("Semantic retrieval", () => {
         { ...claim, id: "superseded-claim", status: "superseded", verified: false }
       ]),
       embeddingProvider,
-      vectorStore
+      vectorStore,
+      claimEligibilityPolicy: reconciliationClaimEligibilityPolicy
     });
 
     const result = await useCase.execute();

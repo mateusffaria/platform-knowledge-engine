@@ -1,14 +1,14 @@
 import {
   ClaimAssessmentUpdate,
-  TrustedClaimRepository
-} from "../ports/trusted-claim-repository.js";
-import { assessClaimCandidates } from "../../domain/trust.js";
+  ClaimReconciliationRepository
+} from "../ports/claim-reconciliation-repository.js";
+import { assessClaimCandidates } from "../../domain/assessment.js";
 
 export interface AssessClaimsCommand {
   sourceDocumentId?: string;
 }
 
-export function createAssessClaimsUseCase(repository: TrustedClaimRepository) {
+export function createAssessClaimsUseCase(repository: ClaimReconciliationRepository) {
   return {
     async execute(command: AssessClaimsCommand = {}): Promise<{ assessed: number }> {
       const candidates = await repository.listAssessmentCandidates();
@@ -37,7 +37,7 @@ export function createAssessClaimsUseCase(repository: TrustedClaimRepository) {
           confidenceScore: decision.confidenceScore,
           conflictSeverity: decision.conflictSeverity,
           reviewReason: decision.reviewReason,
-          transitionSource: "system"
+          transitionSource: decision.transitionSource
         };
 
         await repository.updateClaimAssessment(update);

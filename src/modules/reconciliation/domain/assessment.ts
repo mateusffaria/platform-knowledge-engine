@@ -1,37 +1,12 @@
-import { ConflictSeverity, EvidenceClaim } from "./model.js";
-
-export interface StructuredClaimFields {
-  skillName?: string;
-  skillCategory?: string;
-  experienceRole?: string;
-  experienceOrganization?: string;
-  experienceStartDate?: string;
-  experienceEndDate?: string;
-  projectName?: string;
-  projectDescription?: string;
-  achievementTitle?: string;
-  achievementDescription?: string;
-}
-
-export interface AssessableClaim extends EvidenceClaim {
-  sourceDocumentId: string;
-  sourceReliability: number;
-  structured: StructuredClaimFields;
-}
-
-export interface ClaimSignature {
-  key: string;
-  value: string;
-  conflictSeverity: ConflictSeverity;
-}
-
-export interface ClaimAssessmentDecision {
-  claimId: string;
-  status: "confirmed" | "single_source" | "needs_review";
-  confidenceScore: number;
-  conflictSeverity: ConflictSeverity;
-  reviewReason?: string;
-}
+import {
+  AssessableClaim,
+  ClaimAssessment,
+  ClaimSignature,
+  ClaimStatus,
+  Conflict,
+  ConflictSeverity,
+  ReconciliationResult
+} from "./model.js";
 
 const severityRank: Record<ConflictSeverity, number> = {
   none: 0,
@@ -97,7 +72,7 @@ export function buildClaimSignature(claim: AssessableClaim): ClaimSignature {
   };
 }
 
-export function assessClaimCandidates(candidates: AssessableClaim[]): ClaimAssessmentDecision[] {
+export function reconcileClaims(candidates: AssessableClaim[]): ReconciliationResult {
   const groups = new Map<string, Array<{ claim: AssessableClaim; signature: ClaimSignature }>>();
 
   for (const claim of candidates) {
@@ -107,7 +82,8 @@ export function assessClaimCandidates(candidates: AssessableClaim[]): ClaimAsses
     groups.set(signature.key, group);
   }
 
-  const decisions: ClaimAssessmentDecision[] = [];
+  const assessments: ClaimAssessment[] = [];
+  const conflicts: Conflict[] = [];
 
   for (const group of groups.values()) {
     const values = new Set(group.map((item) => item.signature.value));
@@ -118,48 +94,68 @@ export function assessClaimCandidates(candidates: AssessableClaim[]): ClaimAsses
       ? `Conflicting ${group[0].claim.claimType} evidence for "${group[0].signature.key}".`
       : undefined;
 
+    if (hasConflict) {
+      conflicts.push({
+        claimIds: group.map((item) => item.claim.id),
+        normalizedSubject: group[0].signature.key,
+        incompatibleValues: [...values],
+        severity: conflictSeverity
+      });
+    }
+
     for (const item of group) {
       if (isUserReviewed(item.claim)) {
         continue;
       }
 
       if (hasConflict) {
-        decisions.push({
+        assessments.push({
           claimId: item.claim.id,
           status: "needs_review",
           confidenceScore: adjustedConfidence(item.claim.sourceReliability, conflictSeverity),
           conflictSeverity,
-          reviewReason: conflictReason
+          reviewReason: conflictReason,
+          transitionSource: "system"
         });
         continue;
       }
 
       if (sourceDocuments.size > 1) {
-        decisions.push({
+        assessments.push({
           claimId: item.claim.id,
           status: "confirmed",
           confidenceScore: Math.min(100, item.claim.sourceReliability + 20),
           conflictSeverity: "none",
-          reviewReason: "Compatible evidence appears in multiple sources."
+          reviewReason: "Compatible evidence appears in multiple sources.",
+          transitionSource: "system"
         });
         continue;
       }
 
-      decisions.push({
+      assessments.push({
         claimId: item.claim.id,
         status: "single_source",
         confidenceScore: item.claim.sourceReliability,
         conflictSeverity: "none",
-        reviewReason: undefined
+        reviewReason: undefined,
+        transitionSource: "system"
       });
     }
   }
 
-  return decisions;
+  return { assessments, conflicts };
+}
+
+export function assessClaimCandidates(candidates: AssessableClaim[]): ClaimAssessment[] {
+  return reconcileClaims(candidates).assessments;
 }
 
 function isUserReviewed(claim: AssessableClaim): boolean {
-  return claim.reviewedAt !== undefined && ["confirmed", "rejected", "superseded"].includes(claim.status);
+  return claim.reviewedAt !== undefined && isUserControlledStatus(claim.status);
+}
+
+function isUserControlledStatus(status: ClaimStatus): boolean {
+  return status === "confirmed" || status === "rejected" || status === "superseded";
 }
 
 function adjustedConfidence(sourceReliability: number, conflictSeverity: ConflictSeverity): number {

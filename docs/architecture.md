@@ -155,7 +155,7 @@ Future sources:
 
 ### Knowledge
 
-Responsible for storing and managing professional knowledge.
+Responsible for storing and managing professional knowledge identity and provenance.
 
 Key concepts:
 
@@ -168,16 +168,32 @@ Key concepts:
 - Project
 - Achievement
 
-The knowledge module also owns trusted-knowledge validation: deterministic claim assessment, conflict detection, review status, and audit events. Retrieval consumes claim eligibility through explicit application ports instead of deciding trust policy itself.
+Knowledge owns `EvidenceClaim` identity, source references and persistence. It does not own claim assessment policy.
+
+### Reconciliation
+
+Responsible for trusted-knowledge assessment and review policy.
+
+Key concepts:
+
+- ClaimAssessment
+- ClaimStatus
+- Conflict
+- ConflictSeverity
+- ReconciliationResult
+
+Reconciliation evaluates claims from knowledge through explicit application contracts, detects deterministic conflicts, manages review decisions and controls claim eligibility for trusted indexing and retrieval. It must not import knowledge repositories, Drizzle schemas, retrieval vector stores or provider adapters directly.
 
 ### Retrieval
 
-Responsible for retrieving evidence.
+Responsible for indexing and retrieving eligible evidence.
 
 It will eventually combine:
 
 - structured retrieval from PostgreSQL;
 - semantic retrieval from pgvector.
+
+Retrieval owns embedding text generation, vector persistence, vector cleanup and search mechanics. It consumes eligibility decisions supplied by reconciliation instead of deciding trusted-knowledge policy itself.
 
 ### Jobs
 

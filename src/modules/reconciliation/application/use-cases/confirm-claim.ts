@@ -1,6 +1,6 @@
-import { TrustedClaimRepository } from "../ports/trusted-claim-repository.js";
+import { ClaimReconciliationRepository } from "../ports/claim-reconciliation-repository.js";
 
-export function createConfirmClaimUseCase(repository: TrustedClaimRepository) {
+export function createConfirmClaimUseCase(repository: ClaimReconciliationRepository) {
   return {
     async execute(command: { claimId: string; reason?: string }): Promise<{ claimId: string; status: "confirmed" }> {
       await repository.transitionClaimStatus({
