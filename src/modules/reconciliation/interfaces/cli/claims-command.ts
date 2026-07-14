@@ -29,6 +29,7 @@ function printReviewItems(items: ClaimReviewItem[]): void {
 
   for (const [index, item] of items.entries()) {
     console.log(`${index + 1}. ${item.id} ${item.claimType} status=${item.status} severity=${item.conflictSeverity} confidence=${item.confidenceScore}`);
+    console.log(`   ${item.claimCategory} ${item.predicate} subject=${item.subjectAssetId}`);
     console.log(`   ${item.claimText}`);
     console.log(`   source=${item.sourcePath} ${item.sourceReferenceSection} ${item.sourceReferenceLocator}`);
     if (item.reviewReason) {

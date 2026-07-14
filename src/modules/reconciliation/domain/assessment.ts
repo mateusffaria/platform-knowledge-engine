@@ -25,6 +25,23 @@ export function normalizeClaimValue(value: string | undefined): string {
 
 export function buildClaimSignature(claim: AssessableClaim): ClaimSignature {
   const structured = claim.structured;
+  if (claim.subjectAssetId && claim.claimCategory && claim.predicate) {
+    const assertionTarget = claim.relatedAssetId
+      ? `related:${claim.relatedAssetId}`
+      : claim.claimCategory === "metric"
+        ? "metric-value"
+        : `text:${normalizeClaimValue(claim.claimText)}`;
+    return {
+      key: [
+        claim.claimCategory,
+        claim.predicate,
+        claim.subjectAssetId,
+        assertionTarget
+      ].join(":"),
+      value: normalizeClaimValue(claim.valueText ?? claim.valueUnit) || "present",
+      conflictSeverity: claim.claimCategory === "metric" ? "medium" : "low"
+    };
+  }
 
   if (claim.claimType === "skill" && structured.skillName) {
     return {

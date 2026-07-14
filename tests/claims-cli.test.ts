@@ -20,7 +20,11 @@ describe("claims CLI commands", () => {
       conflictSeverity: "high" as const,
       reviewReason: "Conflicting experience evidence.",
       claimType: "experience" as const,
+      claimCategory: "relationship" as const,
+      predicate: "holds_role" as const,
       claimText: "Staff Engineer at Acme",
+      subjectAssetId: "experience-asset-1",
+      originalSectionLabel: "Experience",
       sourcePath: "profile.md",
       sourceReferenceSection: "Experience",
       sourceReferenceLocator: "line:4",
@@ -37,6 +41,7 @@ describe("claims CLI commands", () => {
 
     expect(listClaimsRequiringReview.execute).toHaveBeenCalledWith();
     expect(log).toHaveBeenCalledWith("1. claim-1 experience status=needs_review severity=high confidence=40");
+    expect(log).toHaveBeenCalledWith("   relationship holds_role subject=experience-asset-1");
   });
 
   it("confirms a claim", async () => {

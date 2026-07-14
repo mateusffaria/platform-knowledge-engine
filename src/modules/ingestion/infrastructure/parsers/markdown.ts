@@ -4,7 +4,11 @@ import path from "node:path";
 
 import {
   CanonicalCareerDocument,
+  EvidenceClaimCategory,
+  EvidenceClaimPredicate,
   EvidenceClaim,
+  KnowledgeAsset,
+  LegacyEvidenceClaimType,
   SourceReference,
   assertCanonicalCareerDocument
 } from "../../../knowledge/domain/model.js";
@@ -77,6 +81,7 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
   const knowledgeAssetId = randomUUID();
   const title = metadata.title ?? findTitle(body) ?? path.basename(filePath);
   const summary = sectionText(sections, "summary") ?? sectionText(sections, "profile");
+  const sourceLanguage = metadataLanguage(metadata);
 
   const source = {
     id: sourceDocumentId,
@@ -92,17 +97,40 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
   const asset = {
     id: knowledgeAssetId,
     sourceDocumentId,
-    assetType: "canonical-career-document" as const,
+    assetType: "professional_profile" as const,
     title: String(title),
     summary,
     createdAt: now
   };
 
+  const assets: KnowledgeAsset[] = [asset];
   const references: SourceReference[] = [];
   const evidenceClaims: EvidenceClaim[] = [];
 
+  function createAsset(assetType: KnowledgeAsset["assetType"], assetTitle: string, assetSummary?: string): KnowledgeAsset {
+    const knowledgeAsset: KnowledgeAsset = {
+      id: randomUUID(),
+      sourceDocumentId,
+      assetType,
+      title: assetTitle,
+      summary: assetSummary,
+      createdAt: now
+    };
+    assets.push(knowledgeAsset);
+
+    return knowledgeAsset;
+  }
+
   function evidenceFor(
-    claimType: EvidenceClaim["claimType"],
+    input: {
+      subjectAssetId: string;
+      claimType: LegacyEvidenceClaimType;
+      claimCategory: EvidenceClaimCategory;
+      predicate: EvidenceClaimPredicate;
+      relatedAssetId?: string;
+      valueText?: string;
+      valueUnit?: string;
+    },
     section: MarkdownSection,
     claimText: string,
     excerpt: string
@@ -112,14 +140,24 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
       sourceDocumentId,
       section: section.title,
       locator: `line:${section.startLine}`,
-      excerpt
+      excerpt,
+      sourceLanguage,
+      originalSectionLabel: section.title
     };
     const evidenceClaim: EvidenceClaim = {
       id: randomUUID(),
-      knowledgeAssetId,
+      subjectAssetId: input.subjectAssetId,
+      knowledgeAssetId: input.subjectAssetId,
       sourceReferenceId: sourceReference.id,
-      claimType,
+      claimType: input.claimType,
+      claimCategory: input.claimCategory,
+      predicate: input.predicate,
       claimText,
+      relatedAssetId: input.relatedAssetId,
+      valueText: input.valueText,
+      valueUnit: input.valueUnit,
+      sourceLanguage,
+      originalSectionLabel: section.title,
       status: "single_source",
       confidenceScore: source.sourceReliability,
       conflictSeverity: "none"
@@ -131,12 +169,19 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
     return { sourceReference, evidenceClaim };
   }
 
-  const skills = collectSectionItems(sections, "skills").map((item) => {
-    const { sourceReference, evidenceClaim } = evidenceFor("skill", item.section, item.text, item.text);
+  const skills = collectSectionItems(sections, "skills", "habilidades", "competencias").map((item) => {
+    const skillAsset = createAsset("skill", item.text, item.subsection);
+    const { sourceReference, evidenceClaim } = evidenceFor({
+      subjectAssetId: asset.id,
+      claimType: "skill",
+      claimCategory: "capability",
+      predicate: "demonstrates",
+      relatedAssetId: skillAsset.id
+    }, item.section, `Demonstrates ${item.text}`, item.text);
 
     return {
       id: randomUUID(),
-      knowledgeAssetId,
+      knowledgeAssetId: skillAsset.id,
       name: item.text,
       category: item.subsection,
       evidenceClaimIds: [evidenceClaim.id],
@@ -144,45 +189,135 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
     };
   });
 
-  const experiences = collectSectionItems(sections, "experience", "experiences", "work experience").map((item) => {
+  const experiences = collectSectionItems(
+    sections,
+    "experience",
+    "experiences",
+    "work experience",
+    "experiencia",
+    "experiencias"
+  ).map((item) => {
     const parsed = parseExperience(item.text);
-    const { sourceReference, evidenceClaim } = evidenceFor("experience", item.section, item.text, item.text);
+    const experienceTitle = parsed.organization
+      ? `${parsed.role} at ${parsed.organization}`
+      : parsed.role;
+    const experienceAsset = createAsset("professional_experience", experienceTitle, parsed.description);
+    const relatedClaimIds: string[] = [];
+    const relatedReferenceIds: string[] = [];
+
+    if (parsed.organization) {
+      const organizationAsset = createAsset("organization", parsed.organization);
+      const { sourceReference, evidenceClaim } = evidenceFor({
+        subjectAssetId: experienceAsset.id,
+        claimType: "experience",
+        claimCategory: "relationship",
+        predicate: "works_at",
+        relatedAssetId: organizationAsset.id
+      }, item.section, `${experienceTitle} works at ${parsed.organization}`, item.text);
+      relatedClaimIds.push(evidenceClaim.id);
+      relatedReferenceIds.push(sourceReference.id);
+    }
+
+    const roleAsset = createAsset("role", parsed.role);
+    const { sourceReference: roleReference, evidenceClaim: roleClaim } = evidenceFor({
+      subjectAssetId: experienceAsset.id,
+      claimType: "experience",
+      claimCategory: "fact",
+      predicate: "holds_role",
+      relatedAssetId: roleAsset.id
+    }, item.section, `${experienceTitle} holds role ${parsed.role}`, item.text);
+    relatedClaimIds.push(roleClaim.id);
+    relatedReferenceIds.push(roleReference.id);
+
+    if (parsed.startDate || parsed.endDate) {
+      const occurredDuring = [parsed.startDate, parsed.endDate].filter(Boolean).join(" - ");
+      const { sourceReference, evidenceClaim } = evidenceFor({
+        subjectAssetId: experienceAsset.id,
+        claimType: "experience",
+        claimCategory: "fact",
+        predicate: "occurred_during",
+        valueText: occurredDuring
+      }, item.section, `${experienceTitle} occurred during ${occurredDuring}`, item.text);
+      relatedClaimIds.push(evidenceClaim.id);
+      relatedReferenceIds.push(sourceReference.id);
+    }
+
+    if (parsed.description) {
+      const { sourceReference, evidenceClaim } = evidenceFor({
+        subjectAssetId: experienceAsset.id,
+        claimType: "experience",
+        claimCategory: "responsibility",
+        predicate: "participated_in"
+      }, item.section, parsed.description, item.text);
+      relatedClaimIds.push(evidenceClaim.id);
+      relatedReferenceIds.push(sourceReference.id);
+    }
 
     return {
       id: randomUUID(),
-      knowledgeAssetId,
+      knowledgeAssetId: experienceAsset.id,
       role: parsed.role,
       organization: parsed.organization,
       startDate: parsed.startDate,
       endDate: parsed.endDate,
       description: parsed.description,
-      evidenceClaimIds: [evidenceClaim.id],
-      sourceReferenceIds: [sourceReference.id]
+      evidenceClaimIds: relatedClaimIds,
+      sourceReferenceIds: relatedReferenceIds
     };
   });
 
   const projects = collectSectionItems(sections, "projects").map((item) => {
     const parsed = parseNamedDescription(item.text);
-    const { sourceReference, evidenceClaim } = evidenceFor("project", item.section, item.text, item.text);
+    const projectAsset = createAsset("project", parsed.name, parsed.description);
+    const technologies = extractTechnologies(parsed.description ?? "");
+    const { sourceReference, evidenceClaim } = evidenceFor({
+      subjectAssetId: projectAsset.id,
+      claimType: "project",
+      claimCategory: "achievement",
+      predicate: "participated_in"
+    }, item.section, item.text, item.text);
+    const evidenceClaimIds = [evidenceClaim.id];
+    const sourceReferenceIds = [sourceReference.id];
+
+    for (const technology of technologies) {
+      const skillAsset = createAsset("skill", technology, "Technology");
+      const { sourceReference: technologyReference, evidenceClaim: technologyClaim } = evidenceFor({
+        subjectAssetId: projectAsset.id,
+        claimType: "project",
+        claimCategory: "relationship",
+        predicate: "uses_technology",
+        relatedAssetId: skillAsset.id
+      }, item.section, `${parsed.name} uses ${technology}`, item.text);
+      evidenceClaimIds.push(technologyClaim.id);
+      sourceReferenceIds.push(technologyReference.id);
+    }
 
     return {
       id: randomUUID(),
-      knowledgeAssetId,
+      knowledgeAssetId: projectAsset.id,
       name: parsed.name,
       description: parsed.description,
-      technologies: extractTechnologies(parsed.description ?? ""),
-      evidenceClaimIds: [evidenceClaim.id],
-      sourceReferenceIds: [sourceReference.id]
+      technologies,
+      evidenceClaimIds,
+      sourceReferenceIds
     };
   });
 
   const achievements = collectSectionItems(sections, "achievements").map((item) => {
     const parsed = parseNamedDescription(item.text);
-    const { sourceReference, evidenceClaim } = evidenceFor("achievement", item.section, item.text, item.text);
+    const metric = metricFromText(item.text);
+    const { sourceReference, evidenceClaim } = evidenceFor({
+      subjectAssetId: asset.id,
+      claimType: "achievement",
+      claimCategory: metric ? "metric" : "achievement",
+      predicate: metric?.predicate ?? "demonstrates",
+      valueText: metric?.valueText,
+      valueUnit: metric?.valueUnit
+    }, item.section, item.text, item.text);
 
     return {
       id: randomUUID(),
-      knowledgeAssetId,
+      knowledgeAssetId: asset.id,
       title: parsed.name,
       description: parsed.description,
       evidenceClaimIds: [evidenceClaim.id],
@@ -190,9 +325,32 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
     };
   });
 
+  for (const item of collectSectionItems(sections, "education", "educacao", "formacao")) {
+    const parsed = parseNamedDescription(item.text);
+    const educationAsset = createAsset("education", parsed.name, parsed.description);
+    evidenceFor({
+      subjectAssetId: educationAsset.id,
+      claimType: "achievement",
+      claimCategory: "fact",
+      predicate: "demonstrates"
+    }, item.section, item.text, item.text);
+  }
+
+  for (const item of collectSectionItems(sections, "certifications", "certification", "certificacoes", "certificacao")) {
+    const parsed = parseNamedDescription(item.text);
+    const certificationAsset = createAsset("certification", parsed.name, parsed.description);
+    evidenceFor({
+      subjectAssetId: certificationAsset.id,
+      claimType: "achievement",
+      claimCategory: "capability",
+      predicate: "demonstrates"
+    }, item.section, item.text, item.text);
+  }
+
   const document: CanonicalCareerDocument = {
     source,
     asset,
+    assets,
     references,
     evidenceClaims,
     skills,
@@ -263,6 +421,11 @@ function sourceReliability(metadata: Record<string, string | string[]>): number 
   }
 
   return Math.min(100, Math.max(0, parsed));
+}
+
+function metadataLanguage(metadata: Record<string, string | string[]>): string | undefined {
+  const value = metadata.language ?? metadata.sourceLanguage ?? metadata.source_language ?? metadata.lang;
+  return Array.isArray(value) ? undefined : value;
 }
 
 function splitSections(body: string): MarkdownSection[] {
@@ -372,6 +535,34 @@ function extractTechnologies(description: string): string[] {
     .split(",")
     .map((technology) => technology.trim().replace(/[.;]$/, ""))
     .filter(Boolean);
+}
+
+function metricFromText(text: string): {
+  predicate: EvidenceClaimPredicate;
+  valueText: string;
+  valueUnit?: string;
+} | undefined {
+  const lower = text.toLowerCase();
+  const percentage = /\b(\d+(?:\.\d+)?)\s*%/.exec(text);
+  const money = /(?:\$|usd\s*)(\d+(?:[\.,]\d+)?[kKmM]?)/.exec(text);
+  const valueText = percentage?.[0] ?? money?.[0];
+  if (!valueText) {
+    return undefined;
+  }
+
+  if (lower.includes("cost") || lower.includes("spend")) {
+    return { predicate: "reduced_cost", valueText, valueUnit: money ? "currency" : "percent" };
+  }
+
+  if (lower.includes("processing time") || lower.includes("latency") || lower.includes("time")) {
+    return { predicate: "reduced_processing_time", valueText, valueUnit: percentage ? "percent" : undefined };
+  }
+
+  if (lower.includes("reliability") || lower.includes("uptime")) {
+    return { predicate: "improved_reliability", valueText, valueUnit: percentage ? "percent" : undefined };
+  }
+
+  return undefined;
 }
 
 function splitOnce(value: string, separator: string): [string, string | undefined] {

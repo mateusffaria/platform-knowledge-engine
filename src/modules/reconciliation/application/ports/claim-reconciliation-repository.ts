@@ -29,7 +29,15 @@ export interface ClaimReviewItem {
   conflictSeverity: ConflictSeverity;
   reviewReason?: string;
   claimType: ClaimType;
+  claimCategory: ClaimAssessmentCandidate["claimCategory"];
+  predicate: ClaimAssessmentCandidate["predicate"];
   claimText: string;
+  subjectAssetId: string;
+  relatedAssetId?: string;
+  valueText?: string;
+  valueUnit?: string;
+  sourceLanguage?: string;
+  originalSectionLabel: string;
   sourcePath: string;
   sourceReferenceSection: string;
   sourceReferenceLocator: string;

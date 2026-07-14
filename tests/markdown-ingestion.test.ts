@@ -41,6 +41,15 @@ describe("Markdown ingestion", () => {
     expect(document.source.contentHash).toMatch(/^[a-f0-9]{64}$/);
     expect(document.source.rawContent).toContain("# Alex Morgan");
     expect(document.asset.title).toBe("Alex Morgan Professional Profile");
+    expect(document.asset.assetType).toBe("professional_profile");
+    expect(document.assets.map((asset) => asset.assetType)).toEqual(expect.arrayContaining([
+      "professional_profile",
+      "skill",
+      "organization",
+      "professional_experience",
+      "role",
+      "project"
+    ]));
     expect(document.skills.map((skill) => skill.name)).toContain("TypeScript");
     expect(document.experiences[0]).toMatchObject({
       role: "Senior Software Engineer",
@@ -48,12 +57,62 @@ describe("Markdown ingestion", () => {
     });
     expect(document.projects[0].technologies).toContain("pgvector");
     expect(document.achievements).toHaveLength(2);
-    expect(document.evidenceClaims.length).toBe(
+    expect(document.evidenceClaims.length).toBeGreaterThan(
       document.skills.length + document.experiences.length + document.projects.length + document.achievements.length
     );
+    expect(document.evidenceClaims).toEqual(expect.arrayContaining([
+      expect.objectContaining({ claimCategory: "capability", predicate: "demonstrates" }),
+      expect.objectContaining({ claimCategory: "relationship", predicate: "works_at" }),
+      expect.objectContaining({ claimCategory: "relationship", predicate: "uses_technology" }),
+      expect.objectContaining({ claimCategory: "metric", predicate: "reduced_processing_time", valueText: "60%" })
+    ]));
+    expect(document.evidenceClaims.every((claim) => claim.subjectAssetId.length > 0)).toBe(true);
+    expect(document.evidenceClaims.every((claim) => claim.originalSectionLabel.length > 0)).toBe(true);
+    expect(document.references.every((reference) => reference.originalSectionLabel.length > 0)).toBe(true);
     expect(document.evidenceClaims.every((claim) => claim.status === "single_source")).toBe(true);
     expect(document.evidenceClaims.every((claim) => claim.confidenceScore === 50)).toBe(true);
     expect(document.evidenceClaims.every((claim) => claim.conflictSeverity === "none")).toBe(true);
+  });
+
+  it("preserves source language and original section labels for multilingual sources", () => {
+    const document = parseMarkdownCareerDocument(
+      "examples/perfil.md",
+      [
+        "---",
+        "title: Perfil Profissional",
+        "language: pt-BR",
+        "---",
+        "",
+        "# Perfil",
+        "",
+        "## Habilidades",
+        "- TypeScript",
+        "",
+        "## Educacao",
+        "- Engenharia de Software: Universidade Local"
+      ].join("\n")
+    );
+
+    expect(document.assets.map((asset) => asset.assetType)).toEqual(expect.arrayContaining([
+      "professional_profile",
+      "skill",
+      "education"
+    ]));
+    expect(document.evidenceClaims).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceLanguage: "pt-BR",
+        originalSectionLabel: "Habilidades",
+        claimCategory: "capability"
+      }),
+      expect.objectContaining({
+        sourceLanguage: "pt-BR",
+        originalSectionLabel: "Educacao",
+        claimCategory: "fact"
+      })
+    ]));
+    expect(document.references).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceLanguage: "pt-BR", originalSectionLabel: "Habilidades" })
+    ]));
   });
 
   it("rejects unsupported source file types clearly", () => {

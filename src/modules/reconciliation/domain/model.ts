@@ -1,4 +1,15 @@
 export type ClaimType = "skill" | "experience" | "project" | "achievement";
+export type ClaimCategory = "fact" | "responsibility" | "achievement" | "metric" | "capability" | "relationship";
+export type ClaimPredicate =
+  | "works_at"
+  | "holds_role"
+  | "uses_technology"
+  | "participated_in"
+  | "occurred_during"
+  | "reduced_processing_time"
+  | "reduced_cost"
+  | "improved_reliability"
+  | "demonstrates";
 export type ClaimStatus = "confirmed" | "single_source" | "needs_review" | "rejected" | "superseded";
 export type ConflictSeverity = "none" | "low" | "medium" | "high";
 export type ClaimStatusTransitionSource = "system" | "user";
@@ -19,9 +30,17 @@ export interface StructuredClaimFields {
 export interface AssessableClaim {
   id: string;
   knowledgeAssetId: string;
+  subjectAssetId: string;
   sourceReferenceId: string;
   claimType: ClaimType;
+  claimCategory: ClaimCategory;
+  predicate: ClaimPredicate;
   claimText: string;
+  relatedAssetId?: string;
+  valueText?: string;
+  valueUnit?: string;
+  sourceLanguage?: string;
+  originalSectionLabel: string;
   status: ClaimStatus;
   confidenceScore: number;
   conflictSeverity: ConflictSeverity;

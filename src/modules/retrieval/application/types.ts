@@ -8,6 +8,17 @@ export type RetrievalStrategy = "structured" | "semantic";
 export type EvidenceClaimStatus = "confirmed" | "single_source" | "needs_review" | "rejected" | "superseded";
 export type TrustedEvidenceClaimStatus = "confirmed" | "single_source";
 export type EvidenceClaimType = "skill" | "experience" | "project" | "achievement";
+export type EvidenceClaimCategory = "fact" | "responsibility" | "achievement" | "metric" | "capability" | "relationship";
+export type EvidenceClaimPredicate =
+  | "works_at"
+  | "holds_role"
+  | "uses_technology"
+  | "participated_in"
+  | "occurred_during"
+  | "reduced_processing_time"
+  | "reduced_cost"
+  | "improved_reliability"
+  | "demonstrates";
 export type HybridSubjectType = EmbeddingSubjectType | EvidenceClaimType;
 
 export type IndexableKnowledgeRecord = IndexableKnowledgeAsset | IndexableEvidenceClaim;
@@ -78,14 +89,22 @@ export interface EvidenceSourceReference {
   locator?: string;
   excerpt: string;
   sourcePath?: string;
+  sourceLanguage?: string;
+  originalSectionLabel?: string;
 }
 
 export interface EvidenceItem {
   evidenceClaimId?: string;
   knowledgeAssetId: string;
+  subjectAssetId?: string;
   subjectType: HybridSubjectType;
   claimType?: EvidenceClaimType;
+  claimCategory?: EvidenceClaimCategory;
+  predicate?: EvidenceClaimPredicate;
   claimText: string;
+  relatedAssetId?: string;
+  valueText?: string;
+  valueUnit?: string;
   claimStatus?: EvidenceClaimStatus;
   confidenceScore: number;
   semanticScore?: number;
@@ -142,9 +161,15 @@ export interface PlannedQuery {
 export interface HybridSearchCandidate {
   evidenceClaimId?: string;
   knowledgeAssetId: string;
+  subjectAssetId?: string;
   subjectType: HybridSubjectType;
   claimType?: EvidenceClaimType;
+  claimCategory?: EvidenceClaimCategory;
+  predicate?: EvidenceClaimPredicate;
   claimText: string;
+  relatedAssetId?: string;
+  valueText?: string;
+  valueUnit?: string;
   claimStatus?: EvidenceClaimStatus;
   confidenceScore: number;
   semanticScore?: number;

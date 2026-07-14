@@ -34,6 +34,10 @@ function calculateStructuredScore(row: any, terms: string[]): number {
   const searchableText = normalize([
     row.claimText,
     row.claimType,
+    row.claimCategory,
+    row.predicate,
+    row.valueText,
+    row.valueUnit,
     row.assetTitle,
     row.assetSummary,
     row.referenceSection,
@@ -63,9 +67,17 @@ export class DrizzleStructuredKnowledgeSearch implements StructuredKnowledgeSear
       .select({
         id: evidenceClaims.id,
         knowledgeAssetId: evidenceClaims.knowledgeAssetId,
+        subjectAssetId: evidenceClaims.subjectAssetId,
         sourceReferenceId: evidenceClaims.sourceReferenceId,
         claimType: evidenceClaims.claimType,
+        claimCategory: evidenceClaims.claimCategory,
+        predicate: evidenceClaims.predicate,
         claimText: evidenceClaims.claimText,
+        relatedAssetId: evidenceClaims.relatedAssetId,
+        valueText: evidenceClaims.valueText,
+        valueUnit: evidenceClaims.valueUnit,
+        sourceLanguage: evidenceClaims.sourceLanguage,
+        originalSectionLabel: evidenceClaims.originalSectionLabel,
         status: evidenceClaims.status,
         confidenceScore: evidenceClaims.confidenceScore,
         assetTitle: knowledgeAssets.title,
@@ -76,7 +88,9 @@ export class DrizzleStructuredKnowledgeSearch implements StructuredKnowledgeSear
         referenceSourceDocumentId: sourceReferences.sourceDocumentId,
         referenceSection: sourceReferences.section,
         referenceLocator: sourceReferences.locator,
-        referenceExcerpt: sourceReferences.excerpt
+        referenceExcerpt: sourceReferences.excerpt,
+        referenceSourceLanguage: sourceReferences.sourceLanguage,
+        referenceOriginalSectionLabel: sourceReferences.originalSectionLabel
       })
       .from(evidenceClaims)
       .innerJoin(knowledgeAssets, eq(evidenceClaims.knowledgeAssetId, knowledgeAssets.id))
@@ -104,9 +118,15 @@ export class DrizzleStructuredKnowledgeSearch implements StructuredKnowledgeSear
       .map(({ row, score }: any) => ({
         evidenceClaimId: row.id,
         knowledgeAssetId: row.knowledgeAssetId,
+        subjectAssetId: row.subjectAssetId,
         subjectType: row.claimType,
         claimType: row.claimType,
+        claimCategory: row.claimCategory,
+        predicate: row.predicate,
         claimText: row.claimText,
+        relatedAssetId: row.relatedAssetId ?? undefined,
+        valueText: row.valueText ?? undefined,
+        valueUnit: row.valueUnit ?? undefined,
         claimStatus: row.status,
         confidenceScore: row.confidenceScore,
         structuredScore: score,
@@ -116,7 +136,9 @@ export class DrizzleStructuredKnowledgeSearch implements StructuredKnowledgeSear
           section: row.referenceSection,
           locator: row.referenceLocator,
           excerpt: row.referenceExcerpt,
-          sourcePath: row.sourcePath
+          sourcePath: row.sourcePath,
+          sourceLanguage: row.sourceLanguage ?? row.referenceSourceLanguage ?? undefined,
+          originalSectionLabel: row.originalSectionLabel ?? row.referenceOriginalSectionLabel
         }],
         retrievalStrategies: ["structured"]
       }));

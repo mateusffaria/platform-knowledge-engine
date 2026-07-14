@@ -50,7 +50,7 @@ export class DrizzleKnowledgePersistence implements KnowledgePersistence {
         return;
       }
 
-      await tx.insert(knowledgeAssets).values(document.asset);
+      await tx.insert(knowledgeAssets).values(document.assets);
 
       if (document.references.length > 0) {
         await tx.insert(sourceReferences).values(document.references);

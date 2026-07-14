@@ -188,12 +188,16 @@ Reconciliation evaluates claims from knowledge through explicit application cont
 
 Responsible for indexing and retrieving eligible evidence.
 
-It will eventually combine:
+It combines:
 
 - structured retrieval from PostgreSQL;
 - semantic retrieval from pgvector.
 
-Retrieval owns embedding text generation, vector persistence, vector cleanup and search mechanics. It consumes eligibility decisions supplied by reconciliation instead of deciding trusted-knowledge policy itself.
+Retrieval owns embedding text generation, vector persistence, vector cleanup, query planning, structured and semantic retrieval orchestration, result merging, deduplication, ranking and Evidence Pack generation. It consumes eligibility decisions supplied by reconciliation instead of deciding trusted-knowledge policy itself.
+
+Hybrid retrieval returns Evidence Packs rather than free-form text. Evidence Packs include the original query, strategies used, ranked Evidence Items, score components, provenance, source excerpts, generation timestamp and warnings. The final ranking score is used for ordering retrieval results and must not be treated as an objective probability of truth.
+
+Retrieval application code talks to structured knowledge through a `StructuredKnowledgeSearch` port and to semantic indexes through embedding and vector-store ports. Production adapters may use PostgreSQL, pgvector and knowledge infrastructure, but those details stay outside retrieval use cases.
 
 ### Jobs
 

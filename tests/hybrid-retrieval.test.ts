@@ -80,9 +80,13 @@ function structuredCandidate(overrides: Partial<HybridSearchCandidate> = {}): Hy
   return {
     evidenceClaimId: "claim-1",
     knowledgeAssetId: "asset-1",
+    subjectAssetId: "asset-1",
     subjectType: "skill",
     claimType: "skill",
+    claimCategory: "capability",
+    predicate: "demonstrates",
     claimText: "TypeScript",
+    relatedAssetId: "skill-typescript",
     claimStatus: "single_source",
     confidenceScore: 70,
     structuredScore: 1,
@@ -92,7 +96,9 @@ function structuredCandidate(overrides: Partial<HybridSearchCandidate> = {}): Hy
       section: "Skills",
       locator: "line:1",
       excerpt: "TypeScript",
-      sourcePath: "examples/profile.md"
+      sourcePath: "examples/profile.md",
+      sourceLanguage: "en",
+      originalSectionLabel: "Skills"
     }],
     retrievalStrategies: ["structured"],
     ...overrides
@@ -112,12 +118,18 @@ function semanticResult(overrides: Partial<SearchResult> = {}): SearchResult {
       "subject_type: evidence_claim",
       "evidence_claim_id: claim-1",
       "knowledge_asset_id: asset-1",
+      "subject_asset_id: asset-1",
+      "related_asset_id: skill-typescript",
       "source_document_id: source-1",
       "source_reference_id: reference-1",
       "source_path: examples/profile.md",
       "source_section: Skills",
       "source_locator: line:1",
+      "source_language: en",
+      "original_section_label: Skills",
       "claim_type: skill",
+      "claim_category: capability",
+      "predicate: demonstrates",
       "claim_status: single_source",
       "confidence_score: 70",
       "claim_text: TypeScript",
@@ -178,6 +190,13 @@ describe("Hybrid retrieval", () => {
       evidenceClaimId: "claim-1",
       semanticScore: 0.84,
       claimStatus: "single_source"
+    });
+    expect(pack.items[0]).toMatchObject({
+      subjectAssetId: "asset-1",
+      claimCategory: "capability",
+      predicate: "demonstrates",
+      relatedAssetId: "skill-typescript",
+      sources: [expect.objectContaining({ sourceLanguage: "en", originalSectionLabel: "Skills" })]
     });
   });
 

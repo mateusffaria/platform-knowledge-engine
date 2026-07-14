@@ -33,6 +33,10 @@ Semantic retrieval is better for meaning:
 - evidence ranking
 - evidence pack builder
 
+## Status
+
+In implementation.
+
 ## Out of Scope
 
 - document generation
@@ -53,12 +57,17 @@ Introduce a query planner that decides which retrieval strategies should be used
 
 The output of retrieval should be an Evidence Pack, not free-form text.
 
+### Ranking Scores
+
+Ranking uses deterministic weights for claim status, structured exact matches, semantic similarity and confidence. The final score is only a retrieval ranking score for ordering evidence; it is not an objective probability that a claim is true.
+
 ## Acceptance Criteria
 
 - The system can retrieve evidence using structured filters.
 - The system can retrieve evidence using semantic search.
 - Results are merged and ranked.
 - Evidence Pack contains traceable claims.
+- Rejected, superseded and needs-review claims are excluded from trusted Evidence Packs.
 
 ## Risks
 

@@ -183,6 +183,38 @@ describe("Trusted knowledge validation", () => {
     ]);
   });
 
+  it("uses enriched claim category, predicate, subject, and value when reconciling atomic claims", () => {
+    const decisions = assessClaimCandidates([
+      candidate({
+        id: "metric-1",
+        claimType: "achievement",
+        claimCategory: "metric",
+        predicate: "reduced_processing_time",
+        subjectAssetId: "project-asset-1",
+        valueText: "60%",
+        valueUnit: "percent",
+        claimText: "Reduced processing time by 60%",
+        sourceDocumentId: "source-1"
+      }),
+      candidate({
+        id: "metric-2",
+        claimType: "achievement",
+        claimCategory: "metric",
+        predicate: "reduced_processing_time",
+        subjectAssetId: "project-asset-1",
+        valueText: "40%",
+        valueUnit: "percent",
+        claimText: "Reduced processing time by 40%",
+        sourceDocumentId: "source-2"
+      })
+    ]);
+
+    expect(decisions).toEqual([
+      expect.objectContaining({ claimId: "metric-1", status: "needs_review", conflictSeverity: "medium" }),
+      expect.objectContaining({ claimId: "metric-2", status: "needs_review", conflictSeverity: "medium" })
+    ]);
+  });
+
   it("records confirm and reject review transitions through the repository port", async () => {
     const repository = new RecordingTrustedClaimRepository();
 

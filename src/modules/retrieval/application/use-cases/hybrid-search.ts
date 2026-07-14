@@ -5,6 +5,8 @@ import { VectorStore } from "../ports/vector-store.js";
 import { QueryPlanner } from "../query-planner.js";
 import {
   defaultRankingConfig,
+  EvidenceClaimCategory,
+  EvidenceClaimPredicate,
   EvidenceClaimStatus,
   EvidenceClaimType,
   EvidenceItem,
@@ -37,6 +39,25 @@ const claimStatuses = new Set<EvidenceClaimStatus>([
   "superseded"
 ]);
 const claimTypes = new Set<EvidenceClaimType>(["skill", "experience", "project", "achievement"]);
+const claimCategories = new Set<EvidenceClaimCategory>([
+  "fact",
+  "responsibility",
+  "achievement",
+  "metric",
+  "capability",
+  "relationship"
+]);
+const claimPredicates = new Set<EvidenceClaimPredicate>([
+  "works_at",
+  "holds_role",
+  "uses_technology",
+  "participated_in",
+  "occurred_during",
+  "reduced_processing_time",
+  "reduced_cost",
+  "improved_reliability",
+  "demonstrates"
+]);
 const subjectTypes = new Set<HybridSubjectType>([
   "knowledge_asset",
   "evidence_claim",
@@ -117,6 +138,18 @@ function parseClaimType(value: string | undefined): EvidenceClaimType | undefine
     : undefined;
 }
 
+function parseClaimCategory(value: string | undefined): EvidenceClaimCategory | undefined {
+  return value && claimCategories.has(value as EvidenceClaimCategory)
+    ? value as EvidenceClaimCategory
+    : undefined;
+}
+
+function parsePredicate(value: string | undefined): EvidenceClaimPredicate | undefined {
+  return value && claimPredicates.has(value as EvidenceClaimPredicate)
+    ? value as EvidenceClaimPredicate
+    : undefined;
+}
+
 function parseConfidenceScore(value: string | undefined): number {
   if (value === undefined) {
     return 0;
@@ -137,7 +170,9 @@ function sourceFromSemanticResult(result: SearchResult, fields: Record<string, s
     section: fields.source_section,
     locator: fields.source_locator,
     excerpt: fields.source_excerpt ?? fields.claim_text ?? result.text,
-    sourcePath: fields.source_path
+    sourcePath: fields.source_path,
+    sourceLanguage: fields.source_language,
+    originalSectionLabel: fields.original_section_label
   }];
 }
 
@@ -149,9 +184,15 @@ function semanticCandidateFromResult(result: SearchResult): HybridSearchCandidat
   return {
     evidenceClaimId: result.evidenceClaimId,
     knowledgeAssetId: result.knowledgeAssetId,
+    subjectAssetId: fields.subject_asset_id,
     subjectType: claimType ?? result.subjectType,
     claimType,
+    claimCategory: parseClaimCategory(fields.claim_category),
+    predicate: parsePredicate(fields.predicate),
     claimText,
+    relatedAssetId: fields.related_asset_id,
+    valueText: fields.value_text,
+    valueUnit: fields.value_unit,
     claimStatus: parseClaimStatus(fields.claim_status),
     confidenceScore: parseConfidenceScore(fields.confidence_score),
     semanticScore: result.similarityScore,
@@ -218,9 +259,15 @@ function mergeCandidate(
   return {
     evidenceClaimId: current.evidenceClaimId ?? next.evidenceClaimId,
     knowledgeAssetId: current.knowledgeAssetId,
+    subjectAssetId: current.subjectAssetId ?? next.subjectAssetId,
     subjectType: current.subjectType === "knowledge_asset" ? next.subjectType : current.subjectType,
     claimType: current.claimType ?? next.claimType,
+    claimCategory: current.claimCategory ?? next.claimCategory,
+    predicate: current.predicate ?? next.predicate,
     claimText: current.claimText || next.claimText,
+    relatedAssetId: current.relatedAssetId ?? next.relatedAssetId,
+    valueText: current.valueText ?? next.valueText,
+    valueUnit: current.valueUnit ?? next.valueUnit,
     claimStatus: betterClaimStatus(current.claimStatus, next.claimStatus),
     confidenceScore: Math.max(current.confidenceScore, next.confidenceScore),
     semanticScore: Math.max(scoreOrZero(current.semanticScore), scoreOrZero(next.semanticScore)) || undefined,
@@ -254,9 +301,15 @@ function itemFromCandidate(candidate: HybridSearchCandidate, config: RankingConf
   return {
     evidenceClaimId: candidate.evidenceClaimId,
     knowledgeAssetId: candidate.knowledgeAssetId,
+    subjectAssetId: candidate.subjectAssetId,
     subjectType: candidate.subjectType,
     claimType: candidate.claimType,
+    claimCategory: candidate.claimCategory,
+    predicate: candidate.predicate,
     claimText: candidate.claimText,
+    relatedAssetId: candidate.relatedAssetId,
+    valueText: candidate.valueText,
+    valueUnit: candidate.valueUnit,
     claimStatus: candidate.claimStatus,
     confidenceScore: candidate.confidenceScore,
     semanticScore: candidate.semanticScore,

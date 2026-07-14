@@ -12,12 +12,43 @@ import {
 } from "drizzle-orm/pg-core";
 
 export const sourceDocumentType = pgEnum("source_document_type", ["markdown"]);
-export const knowledgeAssetType = pgEnum("knowledge_asset_type", ["canonical-career-document"]);
+export const knowledgeAssetType = pgEnum("knowledge_asset_type", [
+  "canonical-career-document",
+  "professional_profile",
+  "organization",
+  "professional_experience",
+  "role",
+  "project",
+  "initiative",
+  "product",
+  "education",
+  "certification",
+  "skill"
+]);
 export const evidenceClaimType = pgEnum("evidence_claim_type", [
   "skill",
   "experience",
   "project",
   "achievement"
+]);
+export const evidenceClaimCategory = pgEnum("evidence_claim_category", [
+  "fact",
+  "responsibility",
+  "achievement",
+  "metric",
+  "capability",
+  "relationship"
+]);
+export const evidenceClaimPredicate = pgEnum("evidence_claim_predicate", [
+  "works_at",
+  "holds_role",
+  "uses_technology",
+  "participated_in",
+  "occurred_during",
+  "reduced_processing_time",
+  "reduced_cost",
+  "improved_reliability",
+  "demonstrates"
 ]);
 export const evidenceClaimStatus = pgEnum("evidence_claim_status", [
   "confirmed",
@@ -77,13 +108,18 @@ export const sourceReferences = pgTable("source_references", {
     .references(() => sourceDocuments.id, { onDelete: "cascade" }),
   section: text("section").notNull(),
   locator: text("locator").notNull(),
-  excerpt: text("excerpt").notNull()
+  excerpt: text("excerpt").notNull(),
+  sourceLanguage: text("source_language"),
+  originalSectionLabel: text("original_section_label").notNull().default("")
 }, (table) => [
   index("source_references_source_document_id_idx").on(table.sourceDocumentId)
 ]);
 
 export const evidenceClaims = pgTable("evidence_claims", {
   id: uuid("id").primaryKey(),
+  subjectAssetId: uuid("subject_asset_id")
+    .notNull()
+    .references(() => knowledgeAssets.id, { onDelete: "cascade" }),
   knowledgeAssetId: uuid("knowledge_asset_id")
     .notNull()
     .references(() => knowledgeAssets.id, { onDelete: "cascade" }),
@@ -91,14 +127,25 @@ export const evidenceClaims = pgTable("evidence_claims", {
     .notNull()
     .references(() => sourceReferences.id, { onDelete: "restrict" }),
   claimType: evidenceClaimType("claim_type").notNull(),
+  claimCategory: evidenceClaimCategory("claim_category").notNull().default("fact"),
+  predicate: evidenceClaimPredicate("predicate").notNull().default("demonstrates"),
   claimText: text("claim_text").notNull(),
+  relatedAssetId: uuid("related_asset_id")
+    .references(() => knowledgeAssets.id, { onDelete: "set null" }),
+  valueText: text("value_text"),
+  valueUnit: text("value_unit"),
+  sourceLanguage: text("source_language"),
+  originalSectionLabel: text("original_section_label").notNull().default(""),
   status: evidenceClaimStatus("status").notNull().default("single_source"),
   confidenceScore: integer("confidence_score").notNull().default(50),
   conflictSeverity: conflictSeverity("conflict_severity").notNull().default("none"),
   reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
   reviewReason: text("review_reason")
 }, (table) => [
-  index("evidence_claims_knowledge_asset_id_idx").on(table.knowledgeAssetId)
+  index("evidence_claims_knowledge_asset_id_idx").on(table.knowledgeAssetId),
+  index("evidence_claims_subject_asset_id_idx").on(table.subjectAssetId),
+  index("evidence_claims_predicate_idx").on(table.predicate),
+  index("evidence_claims_related_asset_id_idx").on(table.relatedAssetId)
 ]);
 
 export const claimStatusEvents = pgTable("claim_status_events", {

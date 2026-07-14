@@ -19,7 +19,7 @@ import { EmbeddingVector, SearchResult } from "../src/modules/retrieval/applicat
 const asset: IndexableKnowledgeAsset = {
   id: "asset-1",
   sourceDocumentId: "source-1",
-  assetType: "canonical-career-document",
+  assetType: "professional_profile",
   title: "Alex Morgan Professional Profile",
   summary: "Staff engineer focused on retrieval systems.",
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -34,9 +34,15 @@ const asset: IndexableKnowledgeAsset = {
 const claim: IndexableEvidenceClaim = {
   id: "claim-1",
   knowledgeAssetId: "asset-1",
+  subjectAssetId: "asset-1",
   sourceReferenceId: "reference-1",
   claimType: "project",
+  claimCategory: "achievement",
+  predicate: "participated_in",
   claimText: "Built a pgvector retrieval service.",
+  valueText: "pgvector retrieval service",
+  sourceLanguage: "en",
+  originalSectionLabel: "Projects",
   status: "single_source",
   confidenceScore: 50,
   conflictSeverity: "none",
@@ -44,7 +50,7 @@ const claim: IndexableEvidenceClaim = {
     id: "asset-1",
     title: "Alex Morgan Professional Profile",
     summary: "Staff engineer focused on retrieval systems.",
-    assetType: "canonical-career-document",
+    assetType: "professional_profile",
     sourceDocumentId: "source-1"
   },
   source: {
@@ -58,7 +64,9 @@ const claim: IndexableEvidenceClaim = {
     sourceDocumentId: "source-1",
     section: "Projects",
     locator: "Projects item 1",
-    excerpt: "Built a pgvector retrieval service."
+    excerpt: "Built a pgvector retrieval service.",
+    sourceLanguage: "en",
+    originalSectionLabel: "Projects"
   },
   verified: true
 };
@@ -187,9 +195,15 @@ describe("Semantic retrieval", () => {
 
     expect(claimDocument.text).toContain("evidence_claim_id: claim-1");
     expect(claimDocument.text).toContain("knowledge_asset_id: asset-1");
+    expect(claimDocument.text).toContain("subject_asset_id: asset-1");
     expect(claimDocument.text).toContain("source_reference_id: reference-1");
     expect(claimDocument.text).toContain("claim_type: project");
+    expect(claimDocument.text).toContain("claim_category: achievement");
+    expect(claimDocument.text).toContain("predicate: participated_in");
     expect(claimDocument.text).toContain("claim_status: single_source");
+    expect(claimDocument.text).toContain("source_language: en");
+    expect(claimDocument.text).toContain("original_section_label: Projects");
+    expect(claimDocument.text).toContain("value_text: pgvector retrieval service");
     expect(claimDocument.text).toContain("claim_text: Built a pgvector retrieval service.");
     expect(claimDocument.textHash).toMatch(/^[a-f0-9]{64}$/);
   });

@@ -72,6 +72,14 @@ Capabilities:
 - evidence ranking;
 - evidence pack creation.
 
+Status: in implementation.
+
+Current limitations:
+
+- query planning is deterministic and rule-based;
+- ranking weights are configurable in retrieval composition rather than calibrated by benchmarking;
+- final scores are retrieval ranking scores, not truth probabilities.
+
 ## AEM-006 — Agentic Workflows
 
 Introduce specialized agents.

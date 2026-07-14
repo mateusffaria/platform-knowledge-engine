@@ -57,9 +57,17 @@ export class DrizzleIndexableKnowledgeReader implements IndexableKnowledgeReader
       .select({
         id: evidenceClaims.id,
         knowledgeAssetId: evidenceClaims.knowledgeAssetId,
+        subjectAssetId: evidenceClaims.subjectAssetId,
         sourceReferenceId: evidenceClaims.sourceReferenceId,
         claimType: evidenceClaims.claimType,
+        claimCategory: evidenceClaims.claimCategory,
+        predicate: evidenceClaims.predicate,
         claimText: evidenceClaims.claimText,
+        relatedAssetId: evidenceClaims.relatedAssetId,
+        valueText: evidenceClaims.valueText,
+        valueUnit: evidenceClaims.valueUnit,
+        sourceLanguage: evidenceClaims.sourceLanguage,
+        originalSectionLabel: evidenceClaims.originalSectionLabel,
         status: evidenceClaims.status,
         confidenceScore: evidenceClaims.confidenceScore,
         conflictSeverity: evidenceClaims.conflictSeverity,
@@ -77,7 +85,9 @@ export class DrizzleIndexableKnowledgeReader implements IndexableKnowledgeReader
         referenceSourceDocumentId: sourceReferences.sourceDocumentId,
         referenceSection: sourceReferences.section,
         referenceLocator: sourceReferences.locator,
-        referenceExcerpt: sourceReferences.excerpt
+        referenceExcerpt: sourceReferences.excerpt,
+        referenceSourceLanguage: sourceReferences.sourceLanguage,
+        referenceOriginalSectionLabel: sourceReferences.originalSectionLabel
       })
       .from(evidenceClaims)
       .innerJoin(knowledgeAssets, eq(evidenceClaims.knowledgeAssetId, knowledgeAssets.id))
@@ -87,9 +97,17 @@ export class DrizzleIndexableKnowledgeReader implements IndexableKnowledgeReader
     return rows.map((row: any) => ({
       id: row.id,
       knowledgeAssetId: row.knowledgeAssetId,
+      subjectAssetId: row.subjectAssetId,
       sourceReferenceId: row.sourceReferenceId,
       claimType: row.claimType,
+      claimCategory: row.claimCategory,
+      predicate: row.predicate,
       claimText: row.claimText,
+      relatedAssetId: row.relatedAssetId ?? undefined,
+      valueText: row.valueText ?? undefined,
+      valueUnit: row.valueUnit ?? undefined,
+      sourceLanguage: row.sourceLanguage ?? undefined,
+      originalSectionLabel: row.originalSectionLabel,
       status: row.status,
       confidenceScore: row.confidenceScore,
       conflictSeverity: row.conflictSeverity,
@@ -113,7 +131,9 @@ export class DrizzleIndexableKnowledgeReader implements IndexableKnowledgeReader
         sourceDocumentId: row.referenceSourceDocumentId,
         section: row.referenceSection,
         locator: row.referenceLocator,
-        excerpt: row.referenceExcerpt
+        excerpt: row.referenceExcerpt,
+        sourceLanguage: row.referenceSourceLanguage ?? undefined,
+        originalSectionLabel: row.referenceOriginalSectionLabel
       },
       verified: row.status === "confirmed"
     }));

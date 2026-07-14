@@ -11,7 +11,31 @@ export interface SourceDocument {
   ingestedAt: Date;
 }
 
-export type KnowledgeAssetType = "canonical-career-document";
+export type KnowledgeAssetType =
+  | "canonical-career-document"
+  | "professional_profile"
+  | "organization"
+  | "professional_experience"
+  | "role"
+  | "project"
+  | "initiative"
+  | "product"
+  | "education"
+  | "certification"
+  | "skill";
+
+export const professionalKnowledgeAssetTypes = new Set<KnowledgeAssetType>([
+  "professional_profile",
+  "organization",
+  "professional_experience",
+  "role",
+  "project",
+  "initiative",
+  "product",
+  "education",
+  "certification",
+  "skill"
+]);
 
 export interface KnowledgeAsset {
   id: string;
@@ -28,18 +52,46 @@ export interface SourceReference {
   section: string;
   locator: string;
   excerpt: string;
+  sourceLanguage?: string;
+  originalSectionLabel: string;
 }
 
 export type EvidenceClaimStatus = "confirmed" | "single_source" | "needs_review" | "rejected" | "superseded";
 export type ConflictSeverity = "none" | "low" | "medium" | "high";
 export type ClaimStatusTransitionSource = "system" | "user";
+export type LegacyEvidenceClaimType = "skill" | "experience" | "project" | "achievement";
+export type EvidenceClaimCategory =
+  | "fact"
+  | "responsibility"
+  | "achievement"
+  | "metric"
+  | "capability"
+  | "relationship";
+export type EvidenceClaimPredicate =
+  | "works_at"
+  | "holds_role"
+  | "uses_technology"
+  | "participated_in"
+  | "occurred_during"
+  | "reduced_processing_time"
+  | "reduced_cost"
+  | "improved_reliability"
+  | "demonstrates";
 
 export interface EvidenceClaim {
   id: string;
+  subjectAssetId: string;
   knowledgeAssetId: string;
   sourceReferenceId: string;
-  claimType: "skill" | "experience" | "project" | "achievement";
+  claimType: LegacyEvidenceClaimType;
+  claimCategory: EvidenceClaimCategory;
+  predicate: EvidenceClaimPredicate;
   claimText: string;
+  relatedAssetId?: string;
+  valueText?: string;
+  valueUnit?: string;
+  sourceLanguage?: string;
+  originalSectionLabel: string;
   status: EvidenceClaimStatus;
   confidenceScore: number;
   conflictSeverity: ConflictSeverity;
@@ -97,6 +149,7 @@ export interface Achievement extends EvidenceBackedRecord {
 export interface CanonicalCareerDocument {
   source: SourceDocument;
   asset: KnowledgeAsset;
+  assets: KnowledgeAsset[];
   references: SourceReference[];
   evidenceClaims: EvidenceClaim[];
   skills: Skill[];
@@ -114,6 +167,30 @@ export function assertEvidenceBacked(record: EvidenceBackedRecord): void {
 }
 
 export function assertCanonicalCareerDocument(document: CanonicalCareerDocument): void {
+  const assetIds = new Set(document.assets.map((asset) => asset.id));
+  const sourceReferenceIds = new Set(document.references.map((reference) => reference.id));
+  if (!assetIds.has(document.asset.id)) {
+    throw new Error("Canonical career document asset must be included in the assets collection.");
+  }
+
+  for (const asset of document.assets) {
+    if (!professionalKnowledgeAssetTypes.has(asset.assetType) && asset.assetType !== "canonical-career-document") {
+      throw new Error(`Unsupported canonical knowledge asset type: ${asset.assetType}`);
+    }
+  }
+
+  for (const claim of document.evidenceClaims) {
+    if (!assetIds.has(claim.subjectAssetId) || !assetIds.has(claim.knowledgeAssetId)) {
+      throw new Error("Evidence claims must reference known knowledge assets.");
+    }
+    if (!sourceReferenceIds.has(claim.sourceReferenceId)) {
+      throw new Error("Evidence claims must reference known source references.");
+    }
+    if (claim.originalSectionLabel.trim().length === 0) {
+      throw new Error("Evidence claims must preserve the original source section label.");
+    }
+  }
+
   for (const record of [
     ...document.skills,
     ...document.experiences,
