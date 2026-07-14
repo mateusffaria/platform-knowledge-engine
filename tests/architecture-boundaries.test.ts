@@ -22,6 +22,11 @@ async function readTypescriptFiles(directory: string): Promise<Array<{ path: str
   return files.flat();
 }
 
+function importedSpecifiers(contents: string): string[] {
+  return Array.from(contents.matchAll(/from\s+["']([^"']+)["']/g))
+    .map((match) => match[1]);
+}
+
 describe("Architecture boundaries", () => {
   it("keeps knowledge domain independent from application, infrastructure, shared services, and SDKs", async () => {
     const files = await readTypescriptFiles("src/modules/knowledge/domain");
@@ -105,6 +110,34 @@ describe("Architecture boundaries", () => {
     for (const file of files) {
       for (const forbiddenImport of forbiddenImports) {
         expect(file.contents, `${file.path} imports ${forbiddenImport}`).not.toContain(forbiddenImport);
+      }
+    }
+  });
+
+  it("keeps retrieval application code inside domain and port boundaries", async () => {
+    const files = await readTypescriptFiles("src/modules/retrieval/application");
+    const forbiddenImports = [
+      "../../knowledge/infrastructure",
+      "../../../knowledge/infrastructure",
+      "../../reconciliation/infrastructure",
+      "../../../reconciliation/infrastructure",
+      "../infrastructure",
+      "../../infrastructure",
+      "../../../shared/database",
+      "../../../../shared/database",
+      "shared/database",
+      "drizzle-orm",
+      "postgres",
+      "embedding-providers",
+      "vector-stores"
+    ];
+
+    for (const file of files) {
+      const imports = importedSpecifiers(file.contents);
+      for (const forbiddenImport of forbiddenImports) {
+        for (const importSpecifier of imports) {
+          expect(importSpecifier, `${file.path} imports ${forbiddenImport}`).not.toContain(forbiddenImport);
+        }
       }
     }
   });

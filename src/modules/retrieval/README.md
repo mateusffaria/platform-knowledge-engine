@@ -1,3 +1,53 @@
 # Retrieval Module
 
-Placeholder for future retrieval use cases, ports, and adapters. Retrieval code should access career knowledge through knowledge application contracts rather than database tables or infrastructure repositories.
+The retrieval module owns indexing and retrieval of eligible professional evidence. It accesses career knowledge through application contracts and ports; retrieval application code must not import knowledge infrastructure, reconciliation infrastructure, database schemas, vector adapters, or provider SDKs directly.
+
+## Responsibilities
+
+- Build deterministic embedding text for indexable knowledge.
+- Persist and search vectors through the `VectorStore` port.
+- Plan retrieval queries with deterministic rules.
+- Orchestrate structured and semantic retrieval.
+- Merge, deduplicate, rank, and return Evidence Packs.
+
+Retrieval does not own source ingestion, claim reconciliation, truth resolution, document generation, or LLM-based planning.
+
+## Hybrid Retrieval
+
+`pke retrieve "<query>"` runs the hybrid retrieval use case. The query planner selects one or both strategies:
+
+- `structured`: exact metadata matches from the current knowledge store, plus generic structured cues such as date-like or quoted terms.
+- `semantic`: natural-language intent and conceptual queries.
+
+Mixed queries use both strategies in deterministic order. The planner is metadata-driven, rule-based, and does not use an LLM. It does not own hardcoded skill, technology, company, project, or role dictionaries; those values come from the `KnowledgeMetadataProvider` port so new knowledge can affect planning without code changes.
+
+Structured retrieval is accessed through the `StructuredKnowledgeSearch` port. Semantic retrieval reuses the configured embedding provider and `VectorStore`.
+
+## Evidence Packs
+
+An Evidence Pack includes:
+
+- original query;
+- retrieval strategies used;
+- ranked Evidence Items;
+- generation timestamp;
+- warnings, including empty-result limitations.
+
+Each Evidence Item includes claim or asset identity, claim text, claim status when available, confidence score, structured score when available, semantic score when available, final score, retrieval strategies, source references, and excerpts.
+
+Duplicate candidates are merged by evidence claim identity first, then by knowledge asset identity when a claim id is unavailable.
+
+## Ranking
+
+Ranking is deterministic. Confirmed claims receive a higher status boost than equivalent single-source claims, exact structured matches receive a configurable boost, semantic similarity contributes through a configurable weight, and stable identities break ties.
+
+`finalScore` is a retrieval ranking score used for ordering Evidence Items. It is not an objective probability that a claim is true.
+
+## Eligibility
+
+Evidence Packs only include trusted retrieval output:
+
+- `confirmed`
+- `single_source`
+
+Claims with `needs_review`, `rejected`, or `superseded` status remain auditable in the knowledge store but are excluded from Evidence Packs.
