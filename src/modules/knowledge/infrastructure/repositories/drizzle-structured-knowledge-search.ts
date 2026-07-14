@@ -4,10 +4,18 @@ import {
   StructuredKnowledgeSearch,
   StructuredKnowledgeSearchInput
 } from "../../../retrieval/application/ports/structured-knowledge-search.js";
-import { EvidenceClaimStatus, EvidenceClaimType, HybridSearchCandidate } from "../../../retrieval/application/types.js";
+import {
+  EvidenceClaimStatus,
+  EvidenceClaimType,
+  HybridSearchCandidate,
+  SearchFilter
+} from "../../../retrieval/application/types.js";
 import {
   evidenceClaims,
+  experiences,
   knowledgeAssets,
+  projects,
+  skills,
   sourceDocuments,
   sourceReferences
 } from "../../../../shared/database/schema.js";
@@ -26,9 +34,9 @@ function uniqueTerms(terms: string[]): string[] {
   return Array.from(new Set(terms.map(normalize).filter(Boolean)));
 }
 
-function calculateStructuredScore(row: any, terms: string[]): number {
+function calculateStructuredScore(row: any, terms: string[], hasFilters: boolean): number {
   if (terms.length === 0) {
-    return 0;
+    return hasFilters ? 1 : 0;
   }
 
   const searchableText = normalize([
@@ -48,6 +56,77 @@ function calculateStructuredScore(row: any, terms: string[]): number {
   const matches = terms.filter((term) => searchableText.includes(term)).length;
 
   return Number((matches / terms.length).toFixed(6));
+}
+
+function filterValue(filter: SearchFilter): string {
+  return normalize(filter.value.value);
+}
+
+function isQuotedTextFilter(filter: SearchFilter): boolean {
+  return filter.value.kind === "text" && /^["']/.test(filter.value.rawValue);
+}
+
+function matchesTextFilter(candidate: string | undefined, filter: SearchFilter): boolean {
+  const normalizedCandidate = normalize(candidate);
+  const value = filterValue(filter);
+  return isQuotedTextFilter(filter)
+    ? normalizedCandidate === value
+    : normalizedCandidate.startsWith(value);
+}
+
+function parseDateStart(value: string): Date {
+  const [year, month = "01", day = "01"] = value.split("-");
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+}
+
+function parseDateEnd(value: string): Date {
+  const [year, month, day] = value.split("-");
+  if (month === undefined) {
+    return new Date(Date.UTC(Number(year), 11, 31));
+  }
+  if (day === undefined) {
+    return new Date(Date.UTC(Number(year), Number(month), 0));
+  }
+  return new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+}
+
+function matchesDateAfter(row: any, value: string): boolean {
+  const experienceEnd = row.experienceEndDate ?? row.experienceStartDate;
+  return experienceEnd !== undefined && parseDateEnd(experienceEnd) >= parseDateStart(value);
+}
+
+function matchesDateBefore(row: any, value: string): boolean {
+  const experienceStart = row.experienceStartDate ?? row.experienceEndDate;
+  return experienceStart !== undefined && parseDateStart(experienceStart) <= parseDateEnd(value);
+}
+
+function matchesFilter(row: any, filter: SearchFilter): boolean {
+  const value = filterValue(filter);
+  switch (filter.field) {
+    case "company":
+      return matchesTextFilter(row.experienceOrganization, filter);
+    case "role":
+      return matchesTextFilter(row.experienceRole, filter);
+    case "technology":
+      return Array.isArray(row.projectTechnologies)
+        && row.projectTechnologies.some((technology: string) => matchesTextFilter(technology, filter));
+    case "skill":
+      return matchesTextFilter(row.skillName, filter);
+    case "project":
+      return matchesTextFilter(row.projectName, filter);
+    case "status":
+      return normalize(row.status) === value;
+    case "type":
+      return value === "evidence_claim" || normalize(row.claimType) === value;
+    case "after":
+      return matchesDateAfter(row, filter.value.value);
+    case "before":
+      return matchesDateBefore(row, filter.value.value);
+  }
+}
+
+function matchesFilters(row: any, filters: SearchFilter[]): boolean {
+  return filters.every((filter) => matchesFilter(row, filter));
 }
 
 function subjectTypeMatches(input: StructuredKnowledgeSearchInput, claimType: EvidenceClaimType): boolean {
@@ -80,6 +159,13 @@ export class DrizzleStructuredKnowledgeSearch implements StructuredKnowledgeSear
         originalSectionLabel: evidenceClaims.originalSectionLabel,
         status: evidenceClaims.status,
         confidenceScore: evidenceClaims.confidenceScore,
+        experienceRole: experiences.role,
+        experienceOrganization: experiences.organization,
+        experienceStartDate: experiences.startDate,
+        experienceEndDate: experiences.endDate,
+        projectName: projects.name,
+        projectTechnologies: projects.technologies,
+        skillName: skills.name,
         assetTitle: knowledgeAssets.title,
         assetSummary: knowledgeAssets.summary,
         sourceDocumentId: sourceDocuments.id,
@@ -95,12 +181,16 @@ export class DrizzleStructuredKnowledgeSearch implements StructuredKnowledgeSear
       .from(evidenceClaims)
       .innerJoin(knowledgeAssets, eq(evidenceClaims.knowledgeAssetId, knowledgeAssets.id))
       .innerJoin(sourceDocuments, eq(knowledgeAssets.sourceDocumentId, sourceDocuments.id))
-      .innerJoin(sourceReferences, eq(evidenceClaims.sourceReferenceId, sourceReferences.id));
+      .innerJoin(sourceReferences, eq(evidenceClaims.sourceReferenceId, sourceReferences.id))
+      .leftJoin(experiences, eq(experiences.evidenceClaimId, evidenceClaims.id))
+      .leftJoin(projects, eq(projects.evidenceClaimId, evidenceClaims.id))
+      .leftJoin(skills, eq(skills.evidenceClaimId, evidenceClaims.id));
 
     return rows
+      .filter((row: any) => matchesFilters(row, input.filters))
       .map((row: any) => ({
         row,
-        score: calculateStructuredScore(row, terms)
+        score: calculateStructuredScore(row, terms, input.filters.length > 0)
       }))
       .filter(({ row, score }: any) => score > 0)
       .filter(({ row }: any) => eligibleClaimStatuses.has(row.status))

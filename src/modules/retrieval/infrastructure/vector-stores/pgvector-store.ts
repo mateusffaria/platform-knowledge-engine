@@ -24,6 +24,24 @@ function ensureSupportedDimensions(values: number[], dimensions: number): void {
   }
 }
 
+function candidateConstraint(input: VectorSearchInput) {
+  const conditions = [];
+  if (input.candidateEvidenceClaimIds && input.candidateEvidenceClaimIds.length > 0) {
+    conditions.push(sql`evidence_claim_id IN (${sql.join(
+      input.candidateEvidenceClaimIds.map((id) => sql`${id}`),
+      sql`, `
+    )})`);
+  }
+  if (input.candidateKnowledgeAssetIds && input.candidateKnowledgeAssetIds.length > 0) {
+    conditions.push(sql`knowledge_asset_id IN (${sql.join(
+      input.candidateKnowledgeAssetIds.map((id) => sql`${id}`),
+      sql`, `
+    )})`);
+  }
+
+  return conditions.length > 0 ? sql`AND (${sql.join(conditions, sql` OR `)})` : sql``;
+}
+
 export class PgvectorStore implements VectorStore {
   constructor(private readonly db: VectorDatabase) {}
 
@@ -109,6 +127,7 @@ export class PgvectorStore implements VectorStore {
       FROM knowledge_embeddings
       WHERE provider = ${input.embedding.provider}
         AND model = ${input.embedding.model}
+        ${candidateConstraint(input)}
       ORDER BY embedding <=> ${vectorLiteral}::vector
       LIMIT ${input.limit}
     `);

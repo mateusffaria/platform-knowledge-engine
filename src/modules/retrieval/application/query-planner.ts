@@ -2,26 +2,7 @@ import {
   KnowledgeMetadata,
   KnowledgeMetadataProvider
 } from "./ports/knowledge-metadata-provider.js";
-import { PlannedQuery, RetrievalStrategy } from "./types.js";
-
-const naturalLanguageTerms = new Set([
-  "about",
-  "any",
-  "can",
-  "did",
-  "does",
-  "for",
-  "how",
-  "of",
-  "show",
-  "that",
-  "the",
-  "what",
-  "where",
-  "which",
-  "who",
-  "with"
-]);
+import { PlannedQuery, QueryAst, RetrievalStrategy } from "./types.js";
 
 const metadataGroups: Array<keyof KnowledgeMetadata> = [
   "skills",
@@ -43,30 +24,6 @@ function normalize(value: string): string {
     .trim();
 }
 
-function tokenize(query: string): string[] {
-  return normalize(query).match(/[a-z0-9+#.-]+/g) ?? [];
-}
-
-function hasDateLikeTerm(query: string): boolean {
-  return /\b(19|20)\d{2}(?:-\d{2})?\b/i.test(query)
-    || /\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\b/i.test(query)
-    || /\bpresent\b/i.test(query);
-}
-
-function hasQuotedTerm(query: string): boolean {
-  return /"[^"]+"|'[^']+'/.test(query);
-}
-
-function hasCapitalizedPhrase(query: string): boolean {
-  return /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/.test(query);
-}
-
-function hasNaturalLanguageShape(query: string, tokens: string[]): boolean {
-  return query.includes("?")
-    || tokens.length >= 5
-    || tokens.some((token) => naturalLanguageTerms.has(token));
-}
-
 function selectStrategies(input: {
   hasStructuredSignal: boolean;
   hasSemanticSignal: boolean;
@@ -86,8 +43,8 @@ function metadataTerms(metadata: KnowledgeMetadata): string[] {
   return metadataGroups.flatMap((group) => metadata[group]);
 }
 
-function metadataMatches(query: string, metadata: KnowledgeMetadata): string[] {
-  const normalizedQuery = ` ${normalize(query)} `;
+function metadataMatches(semanticText: string, metadata: KnowledgeMetadata): string[] {
+  const normalizedQuery = ` ${normalize(semanticText)} `;
   return unique(
     metadataTerms(metadata)
       .map(normalize)
@@ -96,43 +53,29 @@ function metadataMatches(query: string, metadata: KnowledgeMetadata): string[] {
   );
 }
 
-function genericStructuredTerms(query: string, tokens: string[]): string[] {
-  const terms: string[] = [];
-
-  if (hasDateLikeTerm(query)) {
-    terms.push(...tokens.filter((token) => /\b(19|20)\d{2}(?:-\d{2})?\b/.test(token) || token === "present"));
-  }
-
-  if (hasQuotedTerm(query) || hasCapitalizedPhrase(query)) {
-    terms.push(...tokens.filter((token) => token.length >= 3));
-  }
-
-  return unique(terms);
+function isExactMetadataQuery(semanticText: string, matchingMetadataTerms: string[]): boolean {
+  const normalizedSemanticText = normalize(semanticText);
+  return matchingMetadataTerms.some((term) => term === normalizedSemanticText);
 }
 
 export class QueryPlanner {
   constructor(private readonly metadataProvider: KnowledgeMetadataProvider) {}
 
-  async plan(rawQuery: string): Promise<PlannedQuery> {
-    const query = rawQuery.trim();
-    if (query.length === 0) {
-      throw new Error("Retrieval query must not be empty.");
-    }
-
-    const tokens = tokenize(query);
-    const metadata = await this.metadataProvider.getMetadata();
-    const matchingMetadataTerms = metadataMatches(query, metadata);
-    const structuredTerms = unique([
-      ...matchingMetadataTerms,
-      ...genericStructuredTerms(query, tokens)
-    ]);
-    const hasStructuredSignal = structuredTerms.length > 0;
-    const hasSemanticSignal = hasNaturalLanguageShape(query, tokens);
+  async plan(query: QueryAst): Promise<PlannedQuery> {
+    const matchingMetadataTerms = query.semanticText.length > 0
+      ? metadataMatches(query.semanticText, await this.metadataProvider.getMetadata())
+      : [];
+    const hasStructuredSignal = query.filters.length > 0 || matchingMetadataTerms.length > 0;
+    const hasSemanticSignal = query.semanticText.length > 0
+      && !isExactMetadataQuery(query.semanticText, matchingMetadataTerms);
 
     return {
-      query,
+      query: query.originalQuery,
+      semanticText: query.semanticText,
       strategies: selectStrategies({ hasStructuredSignal, hasSemanticSignal }),
-      structuredTerms
+      structuredTerms: matchingMetadataTerms,
+      filters: query.filters,
+      diagnostics: query.diagnostics
     };
   }
 }

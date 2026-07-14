@@ -5,6 +5,19 @@ import {
 
 export type EmbeddingSubjectType = "knowledge_asset" | "evidence_claim";
 export type RetrievalStrategy = "structured" | "semantic";
+export const pkqlFilterFields = [
+  "company",
+  "role",
+  "technology",
+  "skill",
+  "project",
+  "status",
+  "after",
+  "before",
+  "type"
+] as const;
+export type PkqlFilterField = typeof pkqlFilterFields[number];
+export type PkqlDateFilterField = "after" | "before";
 export type EvidenceClaimStatus = "confirmed" | "single_source" | "needs_review" | "rejected" | "superseded";
 export type TrustedEvidenceClaimStatus = "confirmed" | "single_source";
 export type EvidenceClaimType = "skill" | "experience" | "project" | "achievement";
@@ -50,6 +63,36 @@ export interface SearchQuery {
   query: string;
   limit?: number;
   minScore?: number;
+}
+
+export interface TextPkqlFilterValue {
+  kind: "text";
+  value: string;
+  rawValue: string;
+}
+
+export interface DatePkqlFilterValue {
+  kind: "date";
+  value: string;
+  rawValue: string;
+}
+
+export type PkqlFilterValue = TextPkqlFilterValue | DatePkqlFilterValue;
+
+export interface SearchFilter {
+  field: PkqlFilterField;
+  value: PkqlFilterValue;
+}
+
+export interface QueryDiagnostic {
+  message: string;
+}
+
+export interface QueryAst {
+  originalQuery: string;
+  semanticText: string;
+  filters: SearchFilter[];
+  diagnostics: QueryDiagnostic[];
 }
 
 export interface SearchResult {
@@ -154,8 +197,11 @@ export const defaultRankingConfig: RankingConfig = {
 
 export interface PlannedQuery {
   query: string;
+  semanticText: string;
   strategies: RetrievalStrategy[];
   structuredTerms: string[];
+  filters: SearchFilter[];
+  diagnostics: QueryDiagnostic[];
 }
 
 export interface HybridSearchCandidate {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { KnowledgeMetadataProvider } from "../src/modules/retrieval/application/ports/knowledge-metadata-provider.js";
+import { parsePkqlQuery } from "../src/modules/retrieval/application/pkql-parser.js";
 import { QueryPlanner } from "../src/modules/retrieval/application/query-planner.js";
 
 const metadataProvider: KnowledgeMetadataProvider = {
@@ -16,34 +17,39 @@ const metadataProvider: KnowledgeMetadataProvider = {
 };
 
 describe("Hybrid query planner", () => {
-  it("selects structured retrieval for exact professional metadata terms", async () => {
-    const plan = await new QueryPlanner(metadataProvider).plan("TypeScript Staff Engineer 2024");
+  it("selects structured retrieval for filter-only PKQL queries", async () => {
+    const plan = await new QueryPlanner(metadataProvider).plan(parsePkqlQuery("company:Acme"));
 
     expect(plan.strategies).toEqual(["structured"]);
-    expect(plan.structuredTerms).toEqual(expect.arrayContaining(["typescript", "staff engineer", "2024"]));
+    expect(plan.semanticText).toBe("");
+    expect(plan.filters).toEqual([expect.objectContaining({ field: "company" })]);
   });
 
-  it("selects semantic retrieval for conceptual queries", async () => {
-    const plan = await new QueryPlanner(metadataProvider).plan("evidence of leadership impact");
+  it("selects semantic retrieval for conceptual ASTs", async () => {
+    const plan = await new QueryPlanner(metadataProvider).plan(parsePkqlQuery("evidence of leadership impact"));
 
     expect(plan.strategies).toEqual(["semantic"]);
+    expect(plan.structuredTerms).toEqual([]);
   });
 
-  it("selects both strategies for mixed exact and conceptual queries", async () => {
-    const plan = await new QueryPlanner(metadataProvider).plan("evidence of TypeScript leadership impact");
+  it("selects both strategies for mixed PKQL and semantic text", async () => {
+    const plan = await new QueryPlanner(metadataProvider).plan(
+      parsePkqlQuery("technology:Temporal leadership impact")
+    );
 
     expect(plan.strategies).toEqual(["structured", "semantic"]);
-    expect(plan.structuredTerms).toContain("typescript");
+    expect(plan.semanticText).toBe("leadership impact");
+    expect(plan.filters).toEqual([expect.objectContaining({ field: "technology" })]);
   });
 
-  it("uses current metadata for new technologies without planner code changes", async () => {
-    const plan = await new QueryPlanner(metadataProvider).plan("Temporal");
+  it("uses current metadata for exact bare terms without planner vocabulary changes", async () => {
+    const plan = await new QueryPlanner(metadataProvider).plan(parsePkqlQuery("Temporal"));
 
     expect(plan.strategies).toEqual(["structured"]);
-    expect(plan.structuredTerms).toContain("temporal");
+    expect(plan.structuredTerms).toEqual(["temporal"]);
   });
 
-  it("does not treat technology names as structured unless metadata exposes them", async () => {
+  it("keeps unknown bare terms semantic", async () => {
     const plan = await new QueryPlanner({
       async getMetadata() {
         return {
@@ -54,13 +60,15 @@ describe("Hybrid query planner", () => {
           roles: []
         };
       }
-    }).plan("TypeScript");
+    }).plan(parsePkqlQuery("Temporal"));
 
     expect(plan.strategies).toEqual(["semantic"]);
     expect(plan.structuredTerms).toEqual([]);
   });
 
-  it("rejects empty queries before reading metadata", async () => {
-    await expect(new QueryPlanner(metadataProvider).plan("   ")).rejects.toThrow("Retrieval query must not be empty.");
+  it("does not use stopword-dependent classification for semantic text", async () => {
+    const plan = await new QueryPlanner(metadataProvider).plan(parsePkqlQuery("show evidence"));
+
+    expect(plan.strategies).toEqual(["semantic"]);
   });
 });

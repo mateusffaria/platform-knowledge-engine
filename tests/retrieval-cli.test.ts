@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { PkqlParseError } from "../src/modules/retrieval/application/pkql-parser.js";
 import { EvidencePack, SearchKnowledgeResult } from "../src/modules/retrieval/application/types.js";
 import { MissingEmbeddingProviderError } from "../src/modules/retrieval/infrastructure/embedding-providers/missing-embedding-provider-error.js";
 import { registerRetrievalCommands } from "../src/modules/retrieval/interfaces/cli/retrieval-commands.js";
@@ -117,6 +118,22 @@ describe("retrieval CLI commands", () => {
     await program.parseAsync(["node", "pke", "search", "retrieval systems"]);
 
     expect(error).toHaveBeenCalledWith("configure Ollama embeddings");
+    expect(process.exitCode).toBe(1);
+  });
+
+  it("reports actionable PKQL validation errors for retrieve", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const execute = vi.fn(async () => {
+      throw new PkqlParseError('Unsupported PKQL filter "team". Supported filters: company, role, technology, skill, project, status, after, before, type.');
+    });
+    const services = createHybridServices(evidencePack, execute);
+    const program = createProgram(() => services);
+
+    await program.parseAsync(["node", "pke", "retrieve", "team:Platform"]);
+
+    expect(error).toHaveBeenCalledWith(
+      'Unsupported PKQL filter "team". Supported filters: company, role, technology, skill, project, status, after, before, type.'
+    );
     expect(process.exitCode).toBe(1);
   });
 

@@ -14,12 +14,23 @@ Retrieval does not own source ingestion, claim reconciliation, truth resolution,
 
 ## Hybrid Retrieval
 
-`pke retrieve "<query>"` runs the hybrid retrieval use case. The query planner selects one or both strategies:
+`pke retrieve "<query>"` runs the hybrid retrieval use case. It first parses PKQL (Professional Knowledge Query Language) filters into a query AST, then the planner selects one or both strategies:
 
-- `structured`: exact metadata matches from the current knowledge store, plus generic structured cues such as date-like or quoted terms.
-- `semantic`: natural-language intent and conceptual queries.
+- `structured`: explicit PKQL filters and exact metadata matches from the current knowledge store.
+- `semantic`: remaining natural-language or conceptual text.
 
-Mixed queries use both strategies in deterministic order. The planner is metadata-driven, rule-based, and does not use an LLM. It does not own hardcoded skill, technology, company, project, or role dictionaries; those values come from the `KnowledgeMetadataProvider` port so new knowledge can affect planning without code changes.
+PKQL supports `company`, `role`, `technology`, `skill`, `project`, `status`, `after`, `before`, and `type` filters. Quoted text values are normalized exact matches; unquoted text values are case-insensitive normalized prefixes. For example, `company:acme` matches `Acme Knowledge Systems`, while `company:"Acme Knowledge Systems"` targets that full canonical organization name.
+
+Values with spaces must be quoted. For example:
+
+- `pke retrieve "company:VTEX"`
+- `pke retrieve "project:\"Professional Knowledge Engine\""`
+- `pke retrieve "company:acme"`
+- `pke retrieve "company:\"Acme Knowledge Systems\" observability"`
+- `pke retrieve "company:VTEX distributed systems observability"`
+- `pke retrieve "status:confirmed"`
+
+When unquoted text follows a text filter, PKQL returns an advisory warning because the text may be part of a compound value. Quote the full value when that is intended. Mixed queries use both strategies in deterministic order. Explicit filters constrain both strategies: structured search produces the allowed evidence set, and semantic search ranks only embeddings in that set. Filter-only queries skip semantic embedding. The planner is metadata-driven, rule-based, and does not use an LLM. It does not own hardcoded skill, technology, company, project, or role dictionaries; those values come from the `KnowledgeMetadataProvider` port so new knowledge can affect planning without code changes.
 
 Structured retrieval is accessed through the `StructuredKnowledgeSearch` port. Semantic retrieval reuses the configured embedding provider and `VectorStore`.
 

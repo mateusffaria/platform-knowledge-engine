@@ -2,6 +2,7 @@ import { EmbeddingProvider } from "../ports/embedding-provider.js";
 import { KnowledgeMetadataProvider } from "../ports/knowledge-metadata-provider.js";
 import { StructuredKnowledgeSearch } from "../ports/structured-knowledge-search.js";
 import { VectorStore } from "../ports/vector-store.js";
+import { parsePkqlQuery } from "../pkql-parser.js";
 import { QueryPlanner } from "../query-planner.js";
 import {
   defaultRankingConfig,
@@ -345,7 +346,7 @@ export function createHybridSearchUseCase({
 
   return {
     async execute(input: HybridSearchInput): Promise<EvidencePack> {
-      const plan = await planner.plan(input.query);
+      const plan = await planner.plan(parsePkqlQuery(input.query));
       const limit = parsePositiveInteger(input.limit, 10, "Retrieval limit");
       const minScore = parseOptionalScore(input.minScore, "Minimum score");
       validateClaimStatus(input.claimStatus);
@@ -353,20 +354,34 @@ export function createHybridSearchUseCase({
 
       const candidateLimit = Math.max(limit * 2, limit);
       const candidates: HybridSearchCandidate[] = [];
+      let structuredCandidates: HybridSearchCandidate[] = [];
 
       if (plan.strategies.includes("structured")) {
-        candidates.push(...await structuredKnowledgeSearch.search({
+        structuredCandidates = await structuredKnowledgeSearch.search({
           query: plan.query,
           terms: plan.structuredTerms,
+          filters: plan.filters,
           limit: candidateLimit,
           claimStatus: input.claimStatus,
           subjectType: input.subjectType
-        }));
+        });
+        candidates.push(...structuredCandidates);
       }
 
-      if (plan.strategies.includes("semantic")) {
-        const embedding = await embeddingProvider.embedQuery(plan.query);
-        const results = await vectorStore.search({ embedding, limit: candidateLimit });
+      const hasExplicitFilters = plan.filters.length > 0;
+      if (plan.strategies.includes("semantic") && (!hasExplicitFilters || structuredCandidates.length > 0)) {
+        const embedding = await embeddingProvider.embedQuery(plan.semanticText);
+        const results = await vectorStore.search({
+          embedding,
+          limit: candidateLimit,
+          ...(hasExplicitFilters
+            ? {
+              candidateEvidenceClaimIds: structuredCandidates
+                .flatMap((candidate) => candidate.evidenceClaimId ? [candidate.evidenceClaimId] : []),
+              candidateKnowledgeAssetIds: structuredCandidates.map((candidate) => candidate.knowledgeAssetId)
+            }
+            : {})
+        });
         candidates.push(...results.map(semanticCandidateFromResult));
       }
 
@@ -396,7 +411,10 @@ export function createHybridSearchUseCase({
         strategies: plan.strategies,
         items,
         generatedAt: now(),
-        warnings: items.length === 0 ? ["No relevant eligible evidence was found."] : []
+        warnings: [
+          ...(items.length === 0 ? ["No relevant eligible evidence was found."] : []),
+          ...plan.diagnostics.map((diagnostic) => diagnostic.message)
+        ]
       };
     }
   };

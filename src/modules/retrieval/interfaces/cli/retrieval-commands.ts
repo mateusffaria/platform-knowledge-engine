@@ -8,6 +8,7 @@ import {
   SearchKnowledgeResult,
   SearchResult
 } from "../../application/types.js";
+import { PkqlParseError } from "../../application/pkql-parser.js";
 import { MissingEmbeddingProviderError } from "../../infrastructure/embedding-providers/missing-embedding-provider-error.js";
 import { createProductionRetrievalServices } from "../../infrastructure/retrieval-runner.js";
 
@@ -15,6 +16,16 @@ type RetrievalServicesFactory = typeof createProductionRetrievalServices;
 
 function reportMissingEmbeddingProvider(error: unknown): boolean {
   if (!(error instanceof MissingEmbeddingProviderError)) {
+    return false;
+  }
+
+  console.error(error.message);
+  process.exitCode = 1;
+  return true;
+}
+
+function reportPkqlParseError(error: unknown): boolean {
+  if (!(error instanceof PkqlParseError)) {
     return false;
   }
 
@@ -188,6 +199,10 @@ function printEvidencePack(pack: EvidencePack, options: { json?: boolean; verbos
       printCompactEvidenceItem(item, index);
     }
   }
+
+  for (const warning of pack.warnings) {
+    console.log(`Warning: ${warning}`);
+  }
 }
 
 export function registerRetrievalCommands(
@@ -204,7 +219,7 @@ export function registerRetrievalCommands(
         const result = await services.indexKnowledge.execute();
         console.log(`Indexed ${result.indexed} embeddings; skipped ${result.skipped} unchanged embeddings.`);
       } catch (error) {
-        if (!reportMissingEmbeddingProvider(error)) {
+        if (!reportMissingEmbeddingProvider(error) && !reportPkqlParseError(error)) {
           throw error;
         }
       } finally {
@@ -230,7 +245,7 @@ export function registerRetrievalCommands(
         const result = await services.searchKnowledge.execute({ query, limit, minScore });
         printSearchResult(result, options);
       } catch (error) {
-        if (!reportMissingEmbeddingProvider(error)) {
+        if (!reportMissingEmbeddingProvider(error) && !reportPkqlParseError(error)) {
           throw error;
         }
       } finally {
@@ -241,7 +256,7 @@ export function registerRetrievalCommands(
   program
     .command("retrieve")
     .description("Retrieve a ranked Evidence Pack using structured and semantic search")
-    .argument("<query>", "hybrid retrieval query")
+    .argument("<query>", "PKQL or natural-language retrieval query")
     .option("-l, --limit <number>", "maximum number of evidence items", "10")
     .option("--min-score <number>", "minimum final ranking score")
     .option("--claim-status <status>", "filter trusted evidence by claim status: confirmed or single_source")
@@ -276,7 +291,7 @@ export function registerRetrievalCommands(
         });
         printEvidencePack(result, options);
       } catch (error) {
-        if (!reportMissingEmbeddingProvider(error)) {
+        if (!reportMissingEmbeddingProvider(error) && !reportPkqlParseError(error)) {
           throw error;
         }
       } finally {

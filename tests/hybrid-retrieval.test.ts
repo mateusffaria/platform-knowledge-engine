@@ -45,7 +45,14 @@ class FakeVectorStore implements VectorStore {
 
   async search(input: VectorSearchInput): Promise<SearchResult[]> {
     this.searches.push(input);
-    return this.results;
+    if (!input.candidateEvidenceClaimIds && !input.candidateKnowledgeAssetIds) {
+      return this.results;
+    }
+
+    return this.results.filter((result) => (
+      (result.evidenceClaimId !== undefined && input.candidateEvidenceClaimIds?.includes(result.evidenceClaimId))
+      || input.candidateKnowledgeAssetIds?.includes(result.knowledgeAssetId)
+    ));
   }
 
   async deleteEmbeddingsForSubject(): Promise<number> {
@@ -177,6 +184,24 @@ describe("Hybrid retrieval", () => {
     });
   });
 
+  it("passes filter-only PKQL filters to structured retrieval without embedding", async () => {
+    const { embeddingProvider, structuredKnowledgeSearch, useCase } = createUseCase({
+      structured: [structuredCandidate({ claimStatus: "confirmed" })]
+    });
+
+    const pack = await useCase.execute({ query: "status:confirmed", limit: 5 });
+
+    expect(pack.strategies).toEqual(["structured"]);
+    expect(embeddingProvider.queries).toEqual([]);
+    expect(structuredKnowledgeSearch.inputs).toEqual([expect.objectContaining({
+      filters: [expect.objectContaining({
+        field: "status",
+        value: expect.objectContaining({ value: "confirmed" })
+      })],
+      terms: []
+    })]);
+  });
+
   it("returns semantic-only matches with semantic score metadata", async () => {
     const { useCase, structuredKnowledgeSearch } = createUseCase({
       semantic: [semanticResult()]
@@ -200,6 +225,21 @@ describe("Hybrid retrieval", () => {
     });
   });
 
+  it("uses structured retrieval only for a quoted company query", async () => {
+    const { embeddingProvider, structuredKnowledgeSearch, useCase } = createUseCase({
+      structured: [structuredCandidate({ claimStatus: "confirmed" })]
+    });
+
+    const pack = await useCase.execute({ query: 'company:"Acme Knowledge Systems"', limit: 5 });
+
+    expect(pack.strategies).toEqual(["structured"]);
+    expect(embeddingProvider.queries).toEqual([]);
+    expect(structuredKnowledgeSearch.inputs[0].filters).toEqual([expect.objectContaining({
+      field: "company",
+      value: expect.objectContaining({ value: "Acme Knowledge Systems" })
+    })]);
+  });
+
   it("merges duplicate structured and semantic evidence into one item", async () => {
     const { useCase } = createUseCase({
       structured: [structuredCandidate({ structuredScore: 1 })],
@@ -216,6 +256,89 @@ describe("Hybrid retrieval", () => {
       semanticScore: 0.88,
       retrievalStrategies: ["structured", "semantic"]
     });
+  });
+
+  it("passes mixed PKQL filters to structured retrieval and embeds only semantic text", async () => {
+    const { embeddingProvider, structuredKnowledgeSearch, useCase } = createUseCase({
+      structured: [structuredCandidate()],
+      semantic: [semanticResult()]
+    });
+
+    const pack = await useCase.execute({ query: "company:Acme observability impact" });
+
+    expect(pack.strategies).toEqual(["structured", "semantic"]);
+    expect(structuredKnowledgeSearch.inputs[0]).toMatchObject({
+      filters: [expect.objectContaining({
+        field: "company",
+        value: expect.objectContaining({ value: "Acme" })
+      })]
+    });
+    expect(embeddingProvider.queries).toEqual(["observability impact"]);
+  });
+
+  it("constrains mixed semantic ranking to structured company candidates", async () => {
+    const acmeCandidate = structuredCandidate({
+      evidenceClaimId: "claim-acme",
+      knowledgeAssetId: "asset-acme"
+    });
+    const unrelatedResult = semanticResult({
+      evidenceClaimId: "claim-other",
+      knowledgeAssetId: "asset-other",
+      similarityScore: 0.99
+    });
+    const acmeResult = semanticResult({
+      evidenceClaimId: "claim-acme",
+      knowledgeAssetId: "asset-acme",
+      similarityScore: 0.61
+    });
+    const { vectorStore, useCase } = createUseCase({
+      structured: [acmeCandidate],
+      semantic: [unrelatedResult, acmeResult]
+    });
+
+    const pack = await useCase.execute({ query: 'company:"Acme Knowledge Systems" observability' });
+
+    expect(vectorStore.searches[0]).toMatchObject({
+      candidateEvidenceClaimIds: ["claim-acme"],
+      candidateKnowledgeAssetIds: ["asset-acme"]
+    });
+    expect(pack.items.map((item) => item.evidenceClaimId)).toEqual(["claim-acme"]);
+  });
+
+  it("supports partial company filters while keeping semantic ranking constrained", async () => {
+    const acmeCandidate = structuredCandidate({
+      evidenceClaimId: "claim-acme",
+      knowledgeAssetId: "asset-acme"
+    });
+    const unrelatedResult = semanticResult({
+      evidenceClaimId: "claim-other",
+      knowledgeAssetId: "asset-other",
+      similarityScore: 0.99
+    });
+    const acmeResult = semanticResult({
+      evidenceClaimId: "claim-acme",
+      knowledgeAssetId: "asset-acme",
+      similarityScore: 0.61
+    });
+    const { vectorStore, useCase } = createUseCase({
+      structured: [acmeCandidate],
+      semantic: [unrelatedResult, acmeResult]
+    });
+
+    const pack = await useCase.execute({ query: "company:acme observability" });
+
+    expect(vectorStore.searches[0].candidateEvidenceClaimIds).toEqual(["claim-acme"]);
+    expect(pack.items.map((item) => item.evidenceClaimId)).toEqual(["claim-acme"]);
+    expect(pack.warnings).toEqual([expect.stringContaining("Quote compound values")]);
+  });
+
+  it("keeps pure semantic queries unconstrained", async () => {
+    const { vectorStore, useCase } = createUseCase({ semantic: [semanticResult()] });
+
+    await useCase.execute({ query: "observability impact" });
+
+    expect(vectorStore.searches[0].candidateEvidenceClaimIds).toBeUndefined();
+    expect(vectorStore.searches[0].candidateKnowledgeAssetIds).toBeUndefined();
   });
 
   it("excludes rejected, superseded, and needs-review claims from evidence packs", async () => {

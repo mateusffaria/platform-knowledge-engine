@@ -1,12 +1,14 @@
 import {
   EvidenceClaimStatus,
   HybridSearchCandidate,
-  HybridSubjectType
+  HybridSubjectType,
+  SearchFilter
 } from "../types.js";
 
 export interface StructuredKnowledgeSearchInput {
   query: string;
   terms: string[];
+  filters: SearchFilter[];
   limit: number;
   claimStatus?: EvidenceClaimStatus;
   subjectType?: HybridSubjectType;

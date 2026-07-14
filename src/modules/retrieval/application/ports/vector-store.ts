@@ -8,6 +8,8 @@ export interface VectorUpsertInput {
 export interface VectorSearchInput {
   embedding: EmbeddingVector;
   limit: number;
+  candidateEvidenceClaimIds?: string[];
+  candidateKnowledgeAssetIds?: string[];
 }
 
 export interface VectorStore {
