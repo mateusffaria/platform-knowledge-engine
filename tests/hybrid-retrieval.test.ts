@@ -76,9 +76,11 @@ const metadataProvider: KnowledgeMetadataProvider = {
     return {
       skills: ["TypeScript"],
       technologies: [],
-      companies: [],
+      organizations: [],
       projects: [],
-      roles: []
+      roles: [],
+      products: [],
+      initiatives: []
     };
   }
 };

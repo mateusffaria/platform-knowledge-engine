@@ -5,6 +5,15 @@ import {
 
 export type EmbeddingSubjectType = "knowledge_asset" | "evidence_claim";
 export type RetrievalStrategy = "structured" | "semantic";
+export type MetadataCategory =
+  | "skill"
+  | "technology"
+  | "organization"
+  | "role"
+  | "project"
+  | "product"
+  | "initiative";
+export type MetadataMatchType = "exact" | "prefix" | "partial" | "alias";
 export const pkqlFilterFields = [
   "company",
   "role",
@@ -93,6 +102,15 @@ export interface QueryAst {
   semanticText: string;
   filters: SearchFilter[];
   diagnostics: QueryDiagnostic[];
+}
+
+export interface MetadataMatch {
+  category: MetadataCategory;
+  value: string;
+  normalizedValue: string;
+  matchType: MetadataMatchType;
+  matchedText: string;
+  alias?: string;
 }
 
 export interface SearchResult {
@@ -199,6 +217,7 @@ export interface PlannedQuery {
   query: string;
   semanticText: string;
   strategies: RetrievalStrategy[];
+  metadataMatches: MetadataMatch[];
   structuredTerms: string[];
   filters: SearchFilter[];
   diagnostics: QueryDiagnostic[];

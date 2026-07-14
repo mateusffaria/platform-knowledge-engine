@@ -47,9 +47,11 @@ export class DrizzleKnowledgeMetadataProvider implements KnowledgeMetadataProvid
     return {
       skills: uniqueDefined(skillRows.map((row: any) => row.name)),
       technologies: uniqueDefined(projectRows.flatMap((row: any) => row.technologies ?? [])),
-      companies: uniqueDefined(experienceRows.map((row: any) => row.organization)),
+      organizations: uniqueDefined(experienceRows.map((row: any) => row.organization)),
       projects: uniqueDefined(projectRows.map((row: any) => row.name)),
-      roles: uniqueDefined(experienceRows.map((row: any) => row.role))
+      roles: uniqueDefined(experienceRows.map((row: any) => row.role)),
+      products: [],
+      initiatives: []
     };
   }
 }

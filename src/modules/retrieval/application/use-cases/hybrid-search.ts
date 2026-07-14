@@ -1,7 +1,9 @@
 import { EmbeddingProvider } from "../ports/embedding-provider.js";
 import { KnowledgeMetadataProvider } from "../ports/knowledge-metadata-provider.js";
+import { MetadataMatcher } from "../ports/metadata-matcher.js";
 import { StructuredKnowledgeSearch } from "../ports/structured-knowledge-search.js";
 import { VectorStore } from "../ports/vector-store.js";
+import { KnowledgeMetadataMatcher } from "../metadata-matcher.js";
 import { parsePkqlQuery } from "../pkql-parser.js";
 import { QueryPlanner } from "../query-planner.js";
 import {
@@ -26,6 +28,7 @@ export interface HybridSearchDependencies {
   vectorStore: VectorStore;
   structuredKnowledgeSearch: StructuredKnowledgeSearch;
   knowledgeMetadataProvider?: KnowledgeMetadataProvider;
+  metadataMatcher?: MetadataMatcher;
   queryPlanner?: QueryPlanner;
   rankingConfig?: Partial<RankingConfig>;
   now?: () => Date;
@@ -330,15 +333,19 @@ export function createHybridSearchUseCase({
   vectorStore,
   structuredKnowledgeSearch,
   knowledgeMetadataProvider,
+  metadataMatcher,
   queryPlanner,
   rankingConfig,
   now = () => new Date()
 }: HybridSearchDependencies) {
-  if (!queryPlanner && !knowledgeMetadataProvider) {
-    throw new Error("Hybrid search requires a query planner or knowledge metadata provider.");
+  if (!queryPlanner && !metadataMatcher && !knowledgeMetadataProvider) {
+    throw new Error("Hybrid search requires a query planner, metadata matcher, or knowledge metadata provider.");
   }
 
-  const planner = queryPlanner ?? new QueryPlanner(knowledgeMetadataProvider!);
+  const planner = queryPlanner ?? new QueryPlanner();
+  const matcher = metadataMatcher ?? (
+    knowledgeMetadataProvider ? new KnowledgeMetadataMatcher(knowledgeMetadataProvider) : undefined
+  );
   const config = {
     ...defaultRankingConfig,
     ...rankingConfig
@@ -346,7 +353,9 @@ export function createHybridSearchUseCase({
 
   return {
     async execute(input: HybridSearchInput): Promise<EvidencePack> {
-      const plan = await planner.plan(parsePkqlQuery(input.query));
+      const queryAst = parsePkqlQuery(input.query);
+      const metadataMatches = matcher ? await matcher.match(queryAst) : [];
+      const plan = planner.plan(queryAst, metadataMatches);
       const limit = parsePositiveInteger(input.limit, 10, "Retrieval limit");
       const minScore = parseOptionalScore(input.minScore, "Minimum score");
       validateClaimStatus(input.claimStatus);
