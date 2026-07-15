@@ -45,7 +45,8 @@ function jobDescription(): JobDescriptionWithRequirements {
 
 function validAnalysisOutput() {
   return JSON.stringify({
-    contractVersion: "job-analyzer-v1",
+    contractVersion: "job-analyzer-v2",
+    task: "Infer job signals without changing the canonical job model.",
     inferredRequirements: [{
       text: "Experience leading platform reliability initiatives",
       inferred: true,
@@ -168,6 +169,9 @@ describe("Job Analyzer", () => {
     expect(analysis.inferredRequirements[0]).toMatchObject({ inferred: true, value: "Experience leading platform reliability initiatives" });
     expect(analyses.saved).toEqual([analysis]);
     expect(document.requirements).toHaveLength(1);
+    expect(provider.generate).toHaveBeenCalledWith(expect.objectContaining({
+      systemPrompt: expect.stringContaining("Never restate a deterministic requirement")
+    }));
     expect(observability.traces[0].events.map((event) => event.name)).toEqual(["provider_completed", "validation_succeeded"]);
     expect(observability.traces[0].flushed).toBe(true);
   });
@@ -206,7 +210,7 @@ describe("Job Analyzer", () => {
     const provider: LlmProvider = { generate: vi.fn(async () => ({ content: validAnalysisOutput(), provider: "ollama", model: "llama3.2" })) };
     const analyzer = new JobAnalyzerAgent(provider, new LangfuseJobAnalysisObservability(createLangfuseClient(false)));
 
-    await expect(analyzer.analyze({ jobDescription: jobDescription() })).resolves.toMatchObject({ promptVersion: "job-analyzer-v1" });
+    await expect(analyzer.analyze({ jobDescription: jobDescription() })).resolves.toMatchObject({ promptVersion: "job-analyzer-v2" });
   });
 });
 

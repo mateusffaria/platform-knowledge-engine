@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { JobAnalysisContent, JobAnalysisSignal, JobDescriptionWithRequirements } from "../domain/model.js";
+import { jobAnalyzerPromptVersion } from "./job-analysis-prompt.js";
 
 const sourceLocationSchema = z.object({
   startLine: z.number().int().positive(),
@@ -27,7 +28,7 @@ const inferredRequirementSchema = z.object({
 }).strict();
 
 export const jobAnalysisOutputSchema = z.object({
-  contractVersion: z.literal("job-analyzer-v1").optional(),
+  contractVersion: z.literal(jobAnalyzerPromptVersion).optional(),
   inferredRequirements: z.array(inferredRequirementSchema),
   senioritySignals: z.array(signalSchema),
   domainSignals: z.array(signalSchema),
@@ -35,7 +36,7 @@ export const jobAnalysisOutputSchema = z.object({
   architectureAndReliabilityExpectations: z.array(signalSchema),
   ambiguities: z.array(z.string().trim().min(1)),
   warnings: z.array(z.string().trim().min(1))
-}).strict();
+}).strip();
 
 function validateSourceReferences(signals: JobAnalysisSignal[], jobDescription: JobDescriptionWithRequirements): void {
   const lineCount = jobDescription.job.rawContent.split(/\r?\n/).length;

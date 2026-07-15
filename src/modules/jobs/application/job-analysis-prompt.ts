@@ -1,12 +1,14 @@
 import { JobDescriptionWithRequirements } from "../domain/model.js";
 
-export const jobAnalyzerPromptVersion = "job-analyzer-v1";
+export const jobAnalyzerPromptVersion = "job-analyzer-v2";
 
 export const jobAnalyzerSystemPrompt = [
   "You are JobAnalyzerAgent for a professional knowledge system.",
   "Analyze only the supplied job description and deterministic requirements.",
   "Do not invent candidate facts, modify source requirements, resolve conflicts, access tools, repositories, or databases.",
-  "Return JSON only. Inferred requirements must be genuinely inferred and must use inferred: true.",
+  "Return only the analysis JSON object; do not echo the input contract, task, canonicalJob, or deterministic requirements.",
+  "inferredRequirements is only for implicit requirements that are absent from deterministicRequirements. Never restate a deterministic requirement there.",
+  "Every inferredRequirements entry must use inferred: true. If there are no implicit requirements, return an empty inferredRequirements array.",
   "Use sourceReference excerpts or line ranges when they support a signal; omit sourceReference when no source reference is available."
 ].join(" ");
 
@@ -24,7 +26,7 @@ export function buildJobAnalyzerUserPrompt(jobDescription: JobDescriptionWithReq
 
   return JSON.stringify({
     contractVersion: jobAnalyzerPromptVersion,
-    task: "Infer job signals without changing the canonical job model.",
+    task: "Infer only job signals absent from the deterministic requirements without changing the canonical job model.",
     output: {
       inferredRequirements: [{ text: "string", inferred: true, importance: "required | preferred", sourceReference: { excerpt: "optional string", sourceLocation: { startLine: 1, endLine: 1 } } }],
       senioritySignals: [{ value: "string", sourceReference: { excerpt: "optional string", sourceLocation: { startLine: 1, endLine: 1 } } }],
