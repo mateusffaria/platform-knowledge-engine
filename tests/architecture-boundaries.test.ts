@@ -153,7 +153,10 @@ describe("Architecture boundaries", () => {
       "drizzle-orm",
       "postgres",
       "embedding-providers",
-      "interfaces/cli"
+      "interfaces/cli",
+      "llm-providers",
+      "infrastructure/observability",
+      "shared/observability"
     ];
 
     for (const file of files) {

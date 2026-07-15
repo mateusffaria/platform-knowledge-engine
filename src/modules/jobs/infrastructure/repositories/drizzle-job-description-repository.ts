@@ -45,6 +45,12 @@ export class DrizzleJobDescriptionRepository implements JobDescriptionRepository
     return rows.length > 0;
   }
 
+  async findByVersion(identity: { sourcePath: string; contentHash: string }): Promise<JobDescriptionWithRequirements | undefined> {
+    const rows = await this.db.select({ id: jobDescriptions.id }).from(jobDescriptions)
+      .where(and(eq(jobDescriptions.sourcePath, identity.sourcePath), eq(jobDescriptions.contentHash, identity.contentHash))).limit(1);
+    return rows[0] ? this.findById(rows[0].id) : undefined;
+  }
+
   async save(jobDescription: JobDescriptionWithRequirements): Promise<void> {
     await this.db.transaction(async (tx) => {
       const inserted = await tx.insert(jobDescriptions).values(jobDescription.job)

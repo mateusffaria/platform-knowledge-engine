@@ -30,7 +30,8 @@
     "dotenv": "^17.2.0",
     "drizzle-orm": "^0.44.0",
     "pino": "^9.7.0",
-    "postgres": "^3.4.7"
+    "postgres": "^3.4.7",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

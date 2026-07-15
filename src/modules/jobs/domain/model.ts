@@ -44,6 +44,41 @@ export interface JobDescriptionWithRequirements {
   requirements: JobRequirement[];
 }
 
+export interface JobAnalysisSourceReference {
+  excerpt?: string;
+  sourceLocation?: JobSourceLocation;
+}
+
+export interface JobAnalysisSignal {
+  value: string;
+  sourceReference?: JobAnalysisSourceReference;
+}
+
+export interface JobAnalysisInferredRequirement extends JobAnalysisSignal {
+  id: string;
+  inferred: true;
+  importance: JobRequirementImportance;
+}
+
+export interface JobAnalysisContent {
+  inferredRequirements: JobAnalysisInferredRequirement[];
+  senioritySignals: JobAnalysisSignal[];
+  domainSignals: JobAnalysisSignal[];
+  crossTeamLeadershipSignals: JobAnalysisSignal[];
+  architectureAndReliabilityExpectations: JobAnalysisSignal[];
+  ambiguities: string[];
+  warnings: string[];
+}
+
+export interface JobAnalysis extends JobAnalysisContent {
+  id: string;
+  jobDescriptionId: string;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  createdAt: Date;
+}
+
 export interface JobPkqlFilter {
   field: JobPkqlFilterField;
   value: string;
@@ -54,6 +89,8 @@ export interface JobRetrievalIntent {
   jobDescriptionId: string;
   sourceRequirementIds: string[];
   inferredRequirementIds: string[];
+  inferredAnalysisRequirementIds: string[];
+  analysisId?: string;
   filters: JobPkqlFilter[];
   query: string;
   semanticText: string;

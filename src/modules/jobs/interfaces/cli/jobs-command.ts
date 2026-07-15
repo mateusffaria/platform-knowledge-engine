@@ -1,6 +1,6 @@
 import { Command } from "commander";
 
-import { JobDescriptionWithRequirements, JobRetrievalIntent } from "../../domain/model.js";
+import { JobAnalysis, JobAnalysisSignal, JobDescriptionWithRequirements, JobRetrievalIntent } from "../../domain/model.js";
 import { EvidenceClaimStatus, EvidencePack, HybridSubjectType } from "../../../retrieval/application/types.js";
 
 export interface JobsServices {
@@ -9,6 +9,9 @@ export interface JobsServices {
   };
   showJobDescription: {
     execute(command: { jobDescriptionId: string }): Promise<JobDescriptionWithRequirements>;
+  };
+  analyzeJobDescription: {
+    execute(command: { jobDescriptionId: string; model?: string }): Promise<JobAnalysis>;
   };
   buildJobRetrievalIntent: {
     execute(command: { jobDescriptionId: string }): Promise<JobRetrievalIntent>;
@@ -93,6 +96,45 @@ function printJobDescription(jobDescription: JobDescriptionWithRequirements, jso
   }
 }
 
+function printSignal(label: string, signal: JobAnalysisSignal): void {
+  const reference = signal.sourceReference;
+  const location = reference?.sourceLocation
+    ? ` line:${reference.sourceLocation.startLine}-${reference.sourceLocation.endLine}`
+    : "";
+  console.log(`   ${label}: ${signal.value}${location}`);
+  if (reference?.excerpt) {
+    console.log(`   source: ${reference.excerpt}`);
+  }
+}
+
+function printJobAnalysis(analysis: JobAnalysis, options: { json?: boolean; verbose?: boolean }): void {
+  if (options.json) {
+    console.log(JSON.stringify(analysis, null, 2));
+    return;
+  }
+  console.log(`Job Analysis ${analysis.id} for ${analysis.jobDescriptionId}`);
+  console.log(`provider=${analysis.provider} model=${analysis.model} prompt=${analysis.promptVersion}`);
+  console.log(`inferred requirements=${analysis.inferredRequirements.length}`);
+  if (options.verbose) {
+    for (const requirement of analysis.inferredRequirements) {
+      printSignal(`${requirement.importance} inferred requirement`, requirement);
+    }
+    for (const [label, signals] of [
+      ["seniority", analysis.senioritySignals],
+      ["domain", analysis.domainSignals],
+      ["cross-team leadership", analysis.crossTeamLeadershipSignals],
+      ["architecture/reliability", analysis.architectureAndReliabilityExpectations]
+    ] as const) {
+      for (const signal of signals) {
+        printSignal(label, signal);
+      }
+    }
+  }
+  for (const warning of [...analysis.ambiguities, ...analysis.warnings]) {
+    console.log(`Warning: ${warning}`);
+  }
+}
+
 function printEvidencePack(pack: EvidencePack, options: { json?: boolean; verbose?: boolean }): void {
   if (options.json) {
     console.log(JSON.stringify(pack, null, 2));
@@ -156,6 +198,22 @@ export function registerJobsCommands(
       const services = createJobsServices();
       try {
         printJobDescription(await services.showJobDescription.execute({ jobDescriptionId }), options.json ?? false);
+      } finally {
+        await services.close();
+      }
+    });
+
+  jobs.command("analyze")
+    .description("Analyze a persisted job description with the configured LLM")
+    .argument("<job-id>", "job description id")
+    .option("--model <model>", "override the configured LLM model for this analysis")
+    .option("--json", "print machine-readable JSON")
+    .option("--verbose", "include analysis source references and execution metadata")
+    .action(async (jobDescriptionId: string, options: { model?: string; json?: boolean; verbose?: boolean }) => {
+      const services = createJobsServices();
+      try {
+        const analysis = await services.analyzeJobDescription.execute({ jobDescriptionId, model: options.model });
+        printJobAnalysis(analysis, options);
       } finally {
         await services.close();
       }

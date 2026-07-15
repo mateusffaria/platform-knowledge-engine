@@ -76,7 +76,9 @@ Canonical Job Description + Job Requirements
         ↓
 Job Store
         ↓
-Job Retrieval Intent (PKQL filters + semantic text)
+JobAnalyzerAgent (optional validated enrichment)
+        ↓
+Job Analysis snapshots + Job Retrieval Intent (deterministic PKQL filters + enriched semantic text)
         ↓
 Hybrid Retrieval
         ↓
@@ -228,9 +230,11 @@ Key concepts:
 - JobSourceLocation
 - JobRetrievalIntent
 
-Jobs owns external job-source provenance, normalized requirement signals, and semantic fallback text. It does not create `KnowledgeAsset` or `EvidenceClaim` records, rank evidence, select retrieval strategies, or generate Evidence Packs. The CLI composition layer passes a Job Retrieval Intent to retrieval's hybrid-search application contract.
+Jobs owns external job-source provenance, normalized requirement signals, agent-produced job-analysis snapshots, and semantic fallback text. It does not create `KnowledgeAsset` or `EvidenceClaim` records, rank evidence, select retrieval strategies, resolve truth conflicts, or generate Evidence Packs. The CLI composition layer passes a Job Retrieval Intent to retrieval's hybrid-search application contract.
 
-The initial parser supports local Markdown and plain text. It detects common requirements, qualifications, responsibilities, and preferred sections, preserves source excerpts and line locations, and flags any inferred signals. It intentionally does not use LLM extraction, scrape URLs or ATS systems, score a candidate, generate documents, or submit applications.
+The initial parser supports local Markdown and plain text. It detects common requirements, qualifications, responsibilities, and preferred sections, preserves source excerpts and line locations, and flags any inferred signals. Deterministic extraction remains the authority for explicit source text.
+
+`JobAnalyzerAgent` is a bounded application service. It consumes only an already loaded canonical job through ports, invokes an `LlmProvider` port, validates its structured output, and persists immutable `JobAnalysis` snapshots separately from `JobDescription` and `JobRequirement`. Analysis requirements are always marked inferred. They can enrich semantic retrieval text but cannot alter deterministic PKQL filters or professional evidence. Provider HTTP access, database access, and Langfuse adaptation remain in infrastructure; prompt version, model, provider, and validation outcomes are observable through ports.
 
 ### Documents
 

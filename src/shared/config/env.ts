@@ -7,6 +7,8 @@ export interface AppConfig {
   langfuseEnabled: boolean;
   embeddingProvider?: string;
   embeddingModel?: string;
+  llmProvider?: string;
+  llmModel?: string;
   ollamaBaseUrl: string;
   semanticSearchMinScore?: number;
 }
@@ -42,6 +44,8 @@ export function loadConfig(): AppConfig {
     langfuseEnabled: readBoolean("LANGFUSE_ENABLED", false),
     embeddingProvider: process.env.EMBEDDING_PROVIDER || undefined,
     embeddingModel: process.env.EMBEDDING_MODEL || undefined,
+    llmProvider: process.env.LLM_PROVIDER || undefined,
+    llmModel: process.env.LLM_MODEL || undefined,
     ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434",
     semanticSearchMinScore: readOptionalNumber("SEMANTIC_SEARCH_MIN_SCORE")
   };

@@ -26,12 +26,12 @@ export function createIngestJobDescriptionUseCase({ parser, repository }: Ingest
         throw new Error("Job description content must not be empty.");
       }
 
-      const exists = await repository.hasJobDescriptionVersion({
+      const existing = await repository.findByVersion({
         sourcePath: jobDescription.job.sourcePath,
         contentHash: jobDescription.job.contentHash
       });
-      if (exists) {
-        return { jobDescription, created: false };
+      if (existing) {
+        return { jobDescription: existing, created: false };
       }
 
       await repository.save(jobDescription);

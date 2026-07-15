@@ -4,6 +4,7 @@ import {
   JobRequirement,
   JobRetrievalIntent
 } from "../../domain/model.js";
+import { JobAnalysisRepository } from "../ports/job-analysis-repository.js";
 import { JobDescriptionRepository } from "../ports/job-description-repository.js";
 
 function importanceRank(requirement: JobRequirement): number {
@@ -43,7 +44,10 @@ function explicitFilter(requirement: JobRequirement): { field: JobPkqlFilterFiel
   return undefined;
 }
 
-export function createBuildJobRetrievalIntentUseCase(repository: JobDescriptionRepository) {
+export function createBuildJobRetrievalIntentUseCase(
+  repository: JobDescriptionRepository,
+  jobAnalysisRepository?: JobAnalysisRepository
+) {
   return {
     async execute(command: { jobDescriptionId: string }): Promise<JobRetrievalIntent> {
       const jobDescription = await repository.findById(command.jobDescriptionId);
@@ -57,6 +61,8 @@ export function createBuildJobRetrievalIntentUseCase(repository: JobDescriptionR
       });
       const sourceRequirementIds = requirements.map((requirement) => requirement.id);
       const inferredRequirementIds = requirements.filter((requirement) => requirement.inferred).map((requirement) => requirement.id);
+      const analysis = await jobAnalysisRepository?.findLatestByJobDescriptionId(jobDescription.job.id);
+      const inferredAnalysisRequirementIds = analysis?.inferredRequirements.map((requirement) => requirement.id) ?? [];
       const filterMap = new Map<string, JobPkqlFilter>();
       const semanticText: string[] = [];
       const semanticSeen = new Set<string>();
@@ -80,6 +86,21 @@ export function createBuildJobRetrievalIntentUseCase(repository: JobDescriptionR
         }
       }
 
+      const analysisSignals = analysis ? [
+        ...analysis.inferredRequirements.map((requirement) => requirement.value),
+        ...analysis.senioritySignals.map((signal) => signal.value),
+        ...analysis.domainSignals.map((signal) => signal.value),
+        ...analysis.crossTeamLeadershipSignals.map((signal) => signal.value),
+        ...analysis.architectureAndReliabilityExpectations.map((signal) => signal.value)
+      ] : [];
+      for (const signal of analysisSignals) {
+        const semanticKey = normalizeKey(signal);
+        if (!semanticSeen.has(semanticKey)) {
+          semanticSeen.add(semanticKey);
+          semanticText.push(signal);
+        }
+      }
+
       const filters = [...filterMap.values()];
       const query = [...filters.map((filter) => `${filter.field}:${quotedPkqlValue(filter.value)}`), ...semanticText].join(" ").trim();
       const warnings: string[] = [];
@@ -89,11 +110,16 @@ export function createBuildJobRetrievalIntentUseCase(repository: JobDescriptionR
       if (inferredRequirementIds.length > 0) {
         warnings.push(`${inferredRequirementIds.length} inferred job requirement signal(s) are included in retrieval intent.`);
       }
+      if (analysisSignals.length > 0) {
+        warnings.push(`${analysisSignals.length} agent-inferred job analysis signal(s) are included in retrieval intent.`);
+      }
 
       return {
         jobDescriptionId: jobDescription.job.id,
         sourceRequirementIds,
         inferredRequirementIds,
+        inferredAnalysisRequirementIds,
+        analysisId: analysis?.id,
         filters,
         query,
         semanticText: semanticText.join(" "),

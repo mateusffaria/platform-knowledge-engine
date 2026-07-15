@@ -258,6 +258,20 @@ export const jobRequirements = pgTable("job_requirements", {
   index("job_requirements_importance_idx").on(table.importance)
 ]);
 
+export const jobAnalyses = pgTable("job_analyses", {
+  id: uuid("id").primaryKey(),
+  jobDescriptionId: uuid("job_description_id")
+    .notNull()
+    .references(() => jobDescriptions.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  analysis: jsonb("analysis").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull()
+}, (table) => [
+  index("job_analyses_job_description_created_at_idx").on(table.jobDescriptionId, table.createdAt)
+]);
+
 export const experiences = pgTable("experiences", {
   id: uuid("id").primaryKey(),
   knowledgeAssetId: uuid("knowledge_asset_id")

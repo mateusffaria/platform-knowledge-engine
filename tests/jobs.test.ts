@@ -80,6 +80,10 @@ class RecordingJobRepository implements JobDescriptionRepository {
     return this.saved.some((item) => item.job.sourcePath === identity.sourcePath && item.job.contentHash === identity.contentHash);
   }
 
+  async findByVersion(identity: { sourcePath: string; contentHash: string }): Promise<JobDescriptionWithRequirements | undefined> {
+    return this.saved.find((item) => item.job.sourcePath === identity.sourcePath && item.job.contentHash === identity.contentHash);
+  }
+
   async save(jobDescription: JobDescriptionWithRequirements): Promise<void> {
     this.saved.push(jobDescription);
   }
@@ -166,6 +170,27 @@ describe("job application use cases", () => {
     await expect(createShowJobDescriptionUseCase(repository).execute({ jobDescriptionId: "missing" })).rejects.toThrow("Job description not found: missing");
   });
 
+  it("returns the persisted job identifier when an identical source is already ingested", async () => {
+    const repository = new RecordingJobRepository();
+    const persisted = makeJobDescription();
+    await repository.save(persisted);
+    const parsedAgain: JobDescriptionWithRequirements = {
+      ...persisted,
+      job: { ...persisted.job, id: "temporary-parser-id" },
+      requirements: persisted.requirements.map((requirement) => ({ ...requirement, id: `temporary-${requirement.id}`, jobDescriptionId: "temporary-parser-id" }))
+    };
+    const ingest = createIngestJobDescriptionUseCase({
+      parser: { parse: vi.fn(async () => parsedAgain) },
+      repository
+    });
+
+    const result = await ingest.execute({ sourcePath: persisted.job.sourcePath });
+
+    expect(result).toEqual({ jobDescription: persisted, created: false });
+    expect(result.jobDescription.job.id).toBe("job-1");
+    expect(repository.saved).toHaveLength(1);
+  });
+
   it("persists the job and all of its requirements in one transaction", async () => {
     const document = makeJobDescription();
     const values = vi.fn(async () => undefined);
@@ -226,10 +251,12 @@ describe("jobs CLI commands", () => {
     const jobsServices = {
       ingestJobDescription: { execute: vi.fn(async () => ({ jobDescription: document, created: true })) },
       showJobDescription: { execute: vi.fn(async () => document) },
+      analyzeJobDescription: { execute: vi.fn() },
       buildJobRetrievalIntent: { execute: vi.fn(async () => ({
         jobDescriptionId: document.job.id,
         sourceRequirementIds: document.requirements.map((item) => item.id),
         inferredRequirementIds: ["requirement-inferred"],
+        inferredAnalysisRequirementIds: [],
         filters: [{ field: "technology" as const, value: "TypeScript", sourceRequirementIds: ["requirement-typescript"] }],
         query: evidencePack.query,
         semanticText: "TypeScript",
