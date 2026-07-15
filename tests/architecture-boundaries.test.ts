@@ -141,4 +141,28 @@ describe("Architecture boundaries", () => {
       }
     }
   });
+
+  it("keeps jobs application code independent from retrieval infrastructure, persistence, providers, and CLI", async () => {
+    const files = await readTypescriptFiles("src/modules/jobs/application");
+    const forbiddenImports = [
+      "../../retrieval/infrastructure",
+      "../../../retrieval/infrastructure",
+      "../infrastructure",
+      "../../infrastructure",
+      "../../../shared/database",
+      "drizzle-orm",
+      "postgres",
+      "embedding-providers",
+      "interfaces/cli"
+    ];
+
+    for (const file of files) {
+      const imports = importedSpecifiers(file.contents);
+      for (const forbiddenImport of forbiddenImports) {
+        for (const importSpecifier of imports) {
+          expect(importSpecifier, `${file.path} imports ${forbiddenImport}`).not.toContain(forbiddenImport);
+        }
+      }
+    }
+  });
 });

@@ -82,14 +82,26 @@ Current limitations:
 
 ## AEM-006 — Agentic Workflows
 
-Introduce specialized agents.
+Introduce job-aware workflows on top of trusted evidence.
 
 Capabilities:
 
-- job analyzer;
+- canonical Markdown and plain-text job description ingestion;
+- deterministic requirement extraction with provenance and inference flags;
+- job retrieval intent generation with PKQL mapping and semantic fallback;
+- `pke jobs ingest`, `pke jobs show`, and `pke jobs retrieve`;
+- future job analyzer;
 - evidence builder;
 - reviewer;
 - validator.
+
+Status: job description ingestion and retrieval intent implemented.
+
+Current limitations:
+
+- parsing is deterministic and conservative; unknown or ambiguous requirements remain semantic text;
+- no LLM analysis, URL scraping, ATS scoring, resume or cover-letter generation, automatic applications, or benchmarking;
+- job descriptions are external requirements, never verified professional knowledge or evidence claims.
 
 ## AEM-007 — Knowledge Products
 

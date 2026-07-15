@@ -65,6 +65,24 @@ Evidence Pack
 Agentic Document Generation
 ```
 
+Job descriptions follow a separate retrieval-intent flow. They are external requirements, not candidate evidence:
+
+```text
+Job Source (.md, .markdown, .txt)
+        ↓
+Deterministic Job Parser
+        ↓
+Canonical Job Description + Job Requirements
+        ↓
+Job Store
+        ↓
+Job Retrieval Intent (PKQL filters + semantic text)
+        ↓
+Hybrid Retrieval
+        ↓
+Evidence Pack
+```
+
 ## Module Organization
 
 Target structure:
@@ -201,9 +219,18 @@ Retrieval application code talks to structured knowledge through a `StructuredKn
 
 ### Jobs
 
-Responsible for parsing and analyzing job descriptions.
+Responsible for storing job descriptions, deterministically extracting their requirements, and building retrieval intent.
 
-It will extract requirements, seniority signals, domain signals and relevant keywords.
+Key concepts:
+
+- JobDescription
+- JobRequirement
+- JobSourceLocation
+- JobRetrievalIntent
+
+Jobs owns external job-source provenance, normalized requirement signals, and semantic fallback text. It does not create `KnowledgeAsset` or `EvidenceClaim` records, rank evidence, select retrieval strategies, or generate Evidence Packs. The CLI composition layer passes a Job Retrieval Intent to retrieval's hybrid-search application contract.
+
+The initial parser supports local Markdown and plain text. It detects common requirements, qualifications, responsibilities, and preferred sections, preserves source excerpts and line locations, and flags any inferred signals. It intentionally does not use LLM extraction, scrape URLs or ATS systems, score a candidate, generate documents, or submit applications.
 
 ### Documents
 

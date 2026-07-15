@@ -1,4 +1,5 @@
 import {
+  boolean,
   jsonb,
   index,
   integer,
@@ -71,6 +72,18 @@ export const embeddingSubjectType = pgEnum("embedding_subject_type", [
   "knowledge_asset",
   "evidence_claim"
 ]);
+export const jobSourceType = pgEnum("job_source_type", ["markdown", "plain_text"]);
+export const jobRequirementType = pgEnum("job_requirement_type", [
+  "skill",
+  "technology",
+  "experience",
+  "responsibility",
+  "seniority",
+  "domain",
+  "education",
+  "language"
+]);
+export const jobRequirementImportance = pgEnum("job_requirement_importance", ["required", "preferred"]);
 
 export const embeddingDimensions = 768;
 
@@ -211,6 +224,39 @@ export const skills = pgTable("skills", {
   name: text("name").notNull(),
   category: text("category")
 });
+
+export const jobDescriptions = pgTable("job_descriptions", {
+  id: uuid("id").primaryKey(),
+  sourceType: jobSourceType("source_type").notNull(),
+  sourcePath: text("source_path").notNull(),
+  rawContent: text("raw_content").notNull(),
+  contentHash: text("content_hash").notNull(),
+  title: text("title"),
+  ingestedAt: timestamp("ingested_at", { withTimezone: true }).notNull()
+}, (table) => [
+  index("job_descriptions_source_path_idx").on(table.sourcePath),
+  uniqueIndex("job_descriptions_source_path_content_hash_unique").on(table.sourcePath, table.contentHash)
+]);
+
+export const jobRequirements = pgTable("job_requirements", {
+  id: uuid("id").primaryKey(),
+  jobDescriptionId: uuid("job_description_id")
+    .notNull()
+    .references(() => jobDescriptions.id, { onDelete: "cascade" }),
+  requirementType: jobRequirementType("requirement_type").notNull(),
+  importance: jobRequirementImportance("importance").notNull(),
+  normalizedValue: text("normalized_value"),
+  originalText: text("original_text").notNull(),
+  sourceExcerpt: text("source_excerpt").notNull(),
+  sourceStartLine: integer("source_start_line").notNull(),
+  sourceEndLine: integer("source_end_line").notNull(),
+  sectionLabel: text("section_label"),
+  inferred: boolean("inferred").notNull().default(false)
+}, (table) => [
+  index("job_requirements_job_description_id_idx").on(table.jobDescriptionId),
+  index("job_requirements_type_normalized_value_idx").on(table.requirementType, table.normalizedValue),
+  index("job_requirements_importance_idx").on(table.importance)
+]);
 
 export const experiences = pgTable("experiences", {
   id: uuid("id").primaryKey(),
