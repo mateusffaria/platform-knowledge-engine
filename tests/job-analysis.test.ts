@@ -16,6 +16,7 @@ import { LangfuseJobAnalysisObservability } from "../src/modules/jobs/infrastruc
 import { registerJobsCommands } from "../src/modules/jobs/interfaces/cli/jobs-command.js";
 import { AppConfig } from "../src/shared/config/env.js";
 import { createLangfuseClient } from "../src/shared/observability/langfuse.js";
+import { normalizeStoredJobAnalysisContent, parseJobAnalysisContent } from "../src/modules/jobs/application/job-analysis-schema.js";
 
 function jobDescription(): JobDescriptionWithRequirements {
   return {
@@ -45,21 +46,28 @@ function jobDescription(): JobDescriptionWithRequirements {
 
 function validAnalysisOutput() {
   return JSON.stringify({
-    contractVersion: "job-analyzer-v2",
-    task: "Infer job signals without changing the canonical job model.",
+    contractVersion: "job-analyzer-v3",
     inferredRequirements: [{
       text: "Experience leading platform reliability initiatives",
       inferred: true,
       importance: "required",
       sourceReference: { excerpt: "Lead reliable platform systems", sourceLocation: { startLine: 5, endLine: 5 } }
     }],
-    senioritySignals: [{ value: "Staff-level scope", sourceReference: { excerpt: "Staff Platform Engineer" } }],
-    domainSignals: ["platform engineering"].map((value) => ({ value })),
-    crossTeamLeadershipSignals: [{ value: "Cross-team platform leadership" }],
+    senioritySignals: [{ canonicalLevel: "staff", sourceValue: "Staff", signalType: "title", sourceReference: { excerpt: "Staff Platform Engineer", sourceLocation: { startLine: 1, endLine: 1 } } }],
+    domainSignals: [{ sourceValue: "Platform Engineer", sourceReference: { excerpt: "Platform Engineer" } }],
+    crossTeamCollaborationSignals: [],
+    crossTeamLeadershipSignals: [],
     architectureAndReliabilityExpectations: [{ value: "Reliable platform systems", sourceReference: { excerpt: "reliable platform systems" } }],
     ambiguities: ["No team size is specified."],
     warnings: []
   });
+}
+
+function providerWith(content: string): LlmProvider {
+  return {
+    resolveIdentity: (model) => ({ provider: "ollama", model: model ?? "llama3.2" }),
+    generate: vi.fn(async () => ({ content, provider: "ollama", model: "llama3.2" }))
+  };
 }
 
 class MemoryJobRepository {
@@ -83,6 +91,10 @@ class MemoryAnalysisRepository implements JobAnalysisRepository {
 
   async findLatestByJobDescriptionId(jobDescriptionId: string): Promise<JobAnalysis | undefined> {
     return this.saved.filter((analysis) => analysis.jobDescriptionId === jobDescriptionId).at(-1);
+  }
+
+  async findByAnalysisIdentity(jobDescriptionId: string, analysisIdentity: string): Promise<JobAnalysis | undefined> {
+    return this.saved.find((analysis) => analysis.jobDescriptionId === jobDescriptionId && analysis.analysisIdentity === analysisIdentity);
   }
 }
 
@@ -155,7 +167,7 @@ describe("LLM provider", () => {
 describe("Job Analyzer", () => {
   it("validates, traces, and persists source-aware inferred analysis without changing the job", async () => {
     const document = jobDescription();
-    const provider: LlmProvider = { generate: vi.fn(async () => ({ content: validAnalysisOutput(), provider: "ollama", model: "llama3.2" })) };
+    const provider = providerWith(validAnalysisOutput());
     const observability = new RecordingObservability();
     const analyses = new MemoryAnalysisRepository();
     const useCase = createAnalyzeJobDescriptionUseCase({
@@ -178,7 +190,7 @@ describe("Job Analyzer", () => {
 
   it("rejects invalid output, flushes tracing, and leaves prior analysis snapshots untouched", async () => {
     const document = jobDescription();
-    const provider: LlmProvider = { generate: vi.fn(async () => ({ content: "not json", provider: "ollama", model: "llama3.2" })) };
+    const provider = providerWith("not json");
     const observability = new RecordingObservability();
     const analyses = new MemoryAnalysisRepository();
     const useCase = createAnalyzeJobDescriptionUseCase({
@@ -207,10 +219,146 @@ describe("Job Analyzer", () => {
   });
 
   it("works with the no-op Langfuse implementation", async () => {
-    const provider: LlmProvider = { generate: vi.fn(async () => ({ content: validAnalysisOutput(), provider: "ollama", model: "llama3.2" })) };
+    const provider = providerWith(validAnalysisOutput());
     const analyzer = new JobAnalyzerAgent(provider, new LangfuseJobAnalysisObservability(createLangfuseClient(false)));
 
-    await expect(analyzer.analyze({ jobDescription: jobDescription() })).resolves.toMatchObject({ promptVersion: "job-analyzer-v2" });
+    await expect(analyzer.analyze({ jobDescription: jobDescription() })).resolves.toMatchObject({ promptVersion: "job-analyzer-v3" });
+  });
+
+  it("rejects unsupported stakeholder-management even with a valid source reference and warning", () => {
+    const output = JSON.parse(validAnalysisOutput());
+    output.inferredRequirements = [{
+      text: "Stakeholder management",
+      inferred: true,
+      importance: "required",
+      sourceReference: { excerpt: "Lead reliable platform systems", sourceLocation: { startLine: 5, endLine: 5 } }
+    }];
+    output.warnings = ["This is uncertain."];
+
+    expect(() => parseJobAnalysisContent(JSON.stringify(output), jobDescription())).toThrow("unsupported stakeholder-management");
+  });
+
+  it("accepts a stale provider contract label when the payload itself satisfies v3", () => {
+    const output = JSON.parse(validAnalysisOutput());
+    output.contractVersion = "job-analyzer-v2";
+
+    expect(parseJobAnalysisContent(JSON.stringify(output), jobDescription())).toMatchObject({
+      senioritySignals: [expect.objectContaining({ canonicalLevel: "staff" })],
+      crossTeamCollaborationSignals: []
+    });
+  });
+
+  it("keeps collaboration and explicit cross-team leadership distinct in analysis and retrieval", async () => {
+    const document = jobDescription();
+    document.job.rawContent = "# Engineer\n- Partner with product and design teams\n- Lead cross-team platform delivery";
+    const output = JSON.parse(validAnalysisOutput());
+    output.inferredRequirements = [];
+    output.senioritySignals = [];
+    output.domainSignals = [];
+    output.architectureAndReliabilityExpectations = [];
+    output.crossTeamCollaborationSignals = [{ value: "Partner with product and design teams", sourceReference: { excerpt: "Partner with product and design teams", sourceLocation: { startLine: 2, endLine: 2 } } }];
+    output.crossTeamLeadershipSignals = [{ value: "Lead cross-team platform delivery", sourceReference: { excerpt: "Lead cross-team platform delivery", sourceLocation: { startLine: 3, endLine: 3 } } }];
+
+    const content = parseJobAnalysisContent(JSON.stringify(output), document);
+    expect(content.crossTeamCollaborationSignals).toHaveLength(1);
+    expect(content.crossTeamLeadershipSignals).toHaveLength(1);
+    const analysis: JobAnalysis = {
+      id: "analysis-collaboration",
+      jobDescriptionId: document.job.id,
+      provider: "ollama",
+      model: "llama3.2",
+      promptVersion: "job-analyzer-v3",
+      createdAt: new Date(),
+      ...content
+    };
+    const intent = await createBuildJobRetrievalIntentUseCase(new MemoryJobRepository(document), {
+      save: async () => undefined,
+      findLatestByJobDescriptionId: async () => analysis,
+      findByAnalysisIdentity: async () => undefined
+    }).execute({ jobDescriptionId: document.job.id });
+    expect(intent.semanticText).toContain("Partner with product and design teams");
+    expect(intent.semanticText).toContain("Lead cross-team platform delivery");
+  });
+
+  it("rejects cross-team leadership when the source supports collaboration only", () => {
+    const document = jobDescription();
+    document.job.rawContent = "# Engineer\n- Partner with cross-team product and design teams";
+    const output = JSON.parse(validAnalysisOutput());
+    output.inferredRequirements = [];
+    output.senioritySignals = [];
+    output.domainSignals = [];
+    output.architectureAndReliabilityExpectations = [];
+    output.crossTeamCollaborationSignals = [{ value: "Partner with cross-team product and design teams" }];
+    output.crossTeamLeadershipSignals = [{ value: "Cross-team leadership" }];
+
+    expect(() => parseJobAnalysisContent(JSON.stringify(output), document)).toThrow("cross-team leadership");
+  });
+
+  it("normalizes domain variations, preserves source wording, and omits absent seniority", () => {
+    const document = jobDescription();
+    document.job.rawContent = "# Engineer\n- Platform Engineers";
+    const output = JSON.parse(validAnalysisOutput());
+    output.inferredRequirements = [];
+    output.senioritySignals = [];
+    output.domainSignals = [{ sourceValue: "Platform Engineers" }];
+    output.architectureAndReliabilityExpectations = [];
+
+    const content = parseJobAnalysisContent(JSON.stringify(output), document);
+    expect(content.domainSignals).toEqual([expect.objectContaining({ canonicalValue: "platform engineering", sourceValue: "Platform Engineers" })]);
+    expect(content.senioritySignals).toEqual([]);
+  });
+
+  it("adapts legacy snapshots without inventing collaboration evidence", () => {
+    const content = normalizeStoredJobAnalysisContent({
+      inferredRequirements: [],
+      senioritySignals: [{ value: "Staff-level scope", sourceReference: { excerpt: "Staff" } }],
+      domainSignals: [{ value: "Platform Engineers" }],
+      crossTeamLeadershipSignals: [{ value: "Lead platform work" }],
+      architectureAndReliabilityExpectations: [],
+      ambiguities: [],
+      warnings: []
+    });
+
+    expect(content.senioritySignals).toEqual([expect.objectContaining({ canonicalLevel: "staff", signalType: "legacy-unclassified", sourceValue: "Staff-level scope" })]);
+    expect(content.domainSignals).toEqual([expect.objectContaining({ canonicalValue: "platform engineering", sourceValue: "Platform Engineers" })]);
+    expect(content.crossTeamCollaborationSignals).toEqual([]);
+  });
+
+  it("reuses an exact analysis identity and creates a new snapshot when the model changes", async () => {
+    const document = jobDescription();
+    const provider = providerWith(validAnalysisOutput());
+    const analyses = new MemoryAnalysisRepository();
+    const useCase = createAnalyzeJobDescriptionUseCase({
+      jobDescriptionRepository: new MemoryJobRepository(document),
+      jobAnalysisRepository: analyses,
+      jobAnalyzer: new JobAnalyzerAgent(provider, new RecordingObservability())
+    });
+
+    const first = await useCase.execute({ jobDescriptionId: document.job.id });
+    const repeated = await useCase.execute({ jobDescriptionId: document.job.id });
+    const changedModel = await useCase.execute({ jobDescriptionId: document.job.id, model: "llama3.3" });
+    expect(repeated.id).toBe(first.id);
+    expect(changedModel.id).not.toBe(first.id);
+    expect(provider.generate).toHaveBeenCalledTimes(2);
+    expect(analyses.saved).toHaveLength(2);
+  });
+
+  it("returns the matching persisted snapshot after a concurrent identity conflict", async () => {
+    const document = jobDescription();
+    const provider = providerWith(validAnalysisOutput());
+    const analyses = new MemoryAnalysisRepository();
+    analyses.save = async (analysis) => {
+      analyses.saved.push(analysis);
+      throw new Error("duplicate analysis identity");
+    };
+    const useCase = createAnalyzeJobDescriptionUseCase({
+      jobDescriptionRepository: new MemoryJobRepository(document),
+      jobAnalysisRepository: analyses,
+      jobAnalyzer: new JobAnalyzerAgent(provider, new RecordingObservability())
+    });
+
+    await expect(useCase.execute({ jobDescriptionId: document.job.id })).resolves.toMatchObject({ jobDescriptionId: document.job.id });
+    expect(provider.generate).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -223,7 +371,8 @@ describe("Job analysis persistence and retrieval intent", () => {
       jobDescriptionId: document.job.id,
       provider: "ollama",
       model: "llama3.2",
-      promptVersion: "job-analyzer-v1",
+      promptVersion: "job-analyzer-v3",
+      analysisIdentity: "identity-1",
       createdAt: new Date("2026-07-15T13:00:00.000Z"),
       analysis: {
         ...content,
@@ -233,27 +382,31 @@ describe("Job analysis persistence and retrieval intent", () => {
           importance: requirement.importance,
           value: requirement.text,
           sourceReference: requirement.sourceReference
-        }))
+        })),
+        senioritySignals: [{ canonicalLevel: "staff", sourceValue: "Staff", signalType: "title", sourceReference: { excerpt: "Staff Platform Engineer" } }],
+        domainSignals: [{ canonicalValue: "platform engineering", sourceValue: "Platform Engineer" }],
+        crossTeamCollaborationSignals: []
       }
     };
     const values = vi.fn(async () => undefined);
     const insert = vi.fn(() => ({ values }));
-    const select = vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ orderBy: vi.fn(() => ({ limit: vi.fn(async () => [row]) })) })) })) }));
+    const limit = vi.fn(async () => [row]);
+    const select = vi.fn(() => ({ from: vi.fn(() => ({ where: vi.fn(() => ({ orderBy: vi.fn(() => ({ limit })), limit })) })) }));
     const repository = new DrizzleJobAnalysisRepository({ select, insert });
     await repository.save({ ...row, ...row.analysis } as JobAnalysis);
-    await expect(repository.findLatestByJobDescriptionId(document.job.id)).resolves.toMatchObject({ id: "analysis-1", promptVersion: "job-analyzer-v1" });
+    await expect(repository.findLatestByJobDescriptionId(document.job.id)).resolves.toMatchObject({ id: "analysis-1", promptVersion: "job-analyzer-v3" });
     expect(values).toHaveBeenCalledOnce();
 
     const analysis: JobAnalysis = { ...row, ...row.analysis } as JobAnalysis;
     const intent = await createBuildJobRetrievalIntentUseCase(
       new MemoryJobRepository(document),
-      { save: async () => undefined, findLatestByJobDescriptionId: async () => analysis }
+      { save: async () => undefined, findLatestByJobDescriptionId: async () => analysis, findByAnalysisIdentity: async () => undefined }
     ).execute({ jobDescriptionId: document.job.id });
     expect(intent.filters).toEqual([expect.objectContaining({ field: "technology", value: "TypeScript" })]);
     expect(intent.semanticText).toContain("Experience leading platform reliability initiatives");
     expect(intent.analysisId).toBe("analysis-1");
     expect(intent.inferredAnalysisRequirementIds).toEqual(["inferred-1"]);
-    expect(intent.warnings).toContain("5 agent-inferred job analysis signal(s) are included in retrieval intent.");
+    expect(intent.warnings).toContain("4 agent-inferred job analysis signal(s) are included in retrieval intent.");
   });
 });
 
@@ -265,9 +418,9 @@ describe("jobs analyze CLI", () => {
       jobDescriptionId: document.job.id,
       provider: "ollama",
       model: "llama3.2",
-      promptVersion: "job-analyzer-v1",
+      promptVersion: "job-analyzer-v3",
       createdAt: new Date("2026-07-15T13:00:00.000Z"),
-      inferredRequirements: [], senioritySignals: [], domainSignals: [], crossTeamLeadershipSignals: [], architectureAndReliabilityExpectations: [], ambiguities: [], warnings: []
+      inferredRequirements: [], senioritySignals: [], domainSignals: [], crossTeamCollaborationSignals: [], crossTeamLeadershipSignals: [], architectureAndReliabilityExpectations: [], ambiguities: [], warnings: []
     };
     const analyze = vi.fn(async () => analysis);
     const services = {

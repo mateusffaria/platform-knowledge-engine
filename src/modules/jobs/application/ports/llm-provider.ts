@@ -11,6 +11,12 @@ export interface LlmGenerationResponse {
   model: string;
 }
 
+export interface LlmProviderIdentity {
+  provider: string;
+  model: string;
+}
+
 export interface LlmProvider {
+  resolveIdentity(model?: string): LlmProviderIdentity;
   generate(request: LlmGenerationRequest): Promise<LlmGenerationResponse>;
 }

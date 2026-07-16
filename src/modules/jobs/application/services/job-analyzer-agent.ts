@@ -1,8 +1,9 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { JobAnalyzer } from "../ports/job-analyzer.js";
 import { JobAnalysisObservability } from "../ports/job-analysis-observability.js";
 import { LlmProvider } from "../ports/llm-provider.js";
+import { JobAnalysisRunIdentity } from "../ports/job-analyzer.js";
 import { buildJobAnalyzerUserPrompt, jobAnalyzerPromptVersion, jobAnalyzerSystemPrompt } from "../job-analysis-prompt.js";
 import { parseJobAnalysisContent } from "../job-analysis-schema.js";
 
@@ -12,11 +13,26 @@ export class JobAnalyzerAgent implements JobAnalyzer {
     private readonly observability: JobAnalysisObservability
   ) {}
 
+  getRunIdentity(command: Parameters<JobAnalyzer["analyze"]>[0]): JobAnalysisRunIdentity {
+    const provider = this.provider.resolveIdentity(command.model);
+    const analysisIdentity = createHash("sha256")
+      .update(JSON.stringify({
+        contentHash: command.jobDescription.job.contentHash,
+        promptVersion: jobAnalyzerPromptVersion,
+        provider: provider.provider,
+        model: provider.model
+      }))
+      .digest("hex");
+    return { analysisIdentity, promptVersion: jobAnalyzerPromptVersion, ...provider };
+  }
+
   async analyze(command: Parameters<JobAnalyzer["analyze"]>[0]) {
+    const runIdentity = this.getRunIdentity(command);
     const trace = this.observability.trace("job-analysis", {
       jobDescriptionId: command.jobDescription.job.id,
       promptVersion: jobAnalyzerPromptVersion,
-      requestedModel: command.model
+      requestedModel: command.model,
+      analysisIdentity: runIdentity.analysisIdentity
     });
 
     try {
@@ -43,6 +59,7 @@ export class JobAnalyzerAgent implements JobAnalyzer {
           provider: generated.provider,
           model: generated.model,
           promptVersion: jobAnalyzerPromptVersion,
+          analysisIdentity: runIdentity.analysisIdentity,
           createdAt: new Date(),
           ...content
         };

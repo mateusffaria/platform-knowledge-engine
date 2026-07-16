@@ -88,8 +88,9 @@ export function createBuildJobRetrievalIntentUseCase(
 
       const analysisSignals = analysis ? [
         ...analysis.inferredRequirements.map((requirement) => requirement.value),
-        ...analysis.senioritySignals.map((signal) => signal.value),
-        ...analysis.domainSignals.map((signal) => signal.value),
+        ...analysis.senioritySignals.map((signal) => signal.canonicalLevel),
+        ...analysis.domainSignals.map((signal) => signal.canonicalValue),
+        ...analysis.crossTeamCollaborationSignals.map((signal) => signal.value),
         ...analysis.crossTeamLeadershipSignals.map((signal) => signal.value),
         ...analysis.architectureAndReliabilityExpectations.map((signal) => signal.value)
       ] : [];

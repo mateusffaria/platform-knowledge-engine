@@ -1,4 +1,4 @@
-import { LlmGenerationRequest, LlmGenerationResponse, LlmProvider } from "../../application/ports/llm-provider.js";
+import { LlmGenerationRequest, LlmGenerationResponse, LlmProvider, LlmProviderIdentity } from "../../application/ports/llm-provider.js";
 
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -24,8 +24,12 @@ export class OllamaLlmProvider implements LlmProvider {
     this.fetchImpl = fetchImpl;
   }
 
+  resolveIdentity(model?: string): LlmProviderIdentity {
+    return { provider: "ollama", model: model?.trim() || this.model };
+  }
+
   async generate(request: LlmGenerationRequest): Promise<LlmGenerationResponse> {
-    const model = request.model?.trim() || this.model;
+    const { model } = this.resolveIdentity(request.model);
     const response = await this.fetchImpl(this.endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },

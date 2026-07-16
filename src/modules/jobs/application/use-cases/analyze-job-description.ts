@@ -13,8 +13,21 @@ export function createAnalyzeJobDescriptionUseCase(dependencies: {
       if (!jobDescription) {
         throw new Error(`Job description not found: ${command.jobDescriptionId}`);
       }
+      const runIdentity = dependencies.jobAnalyzer.getRunIdentity({ jobDescription, model: command.model });
+      const existing = await dependencies.jobAnalysisRepository.findByAnalysisIdentity(jobDescription.job.id, runIdentity.analysisIdentity);
+      if (existing) {
+        return existing;
+      }
       const analysis = await dependencies.jobAnalyzer.analyze({ jobDescription, model: command.model });
-      await dependencies.jobAnalysisRepository.save(analysis);
+      try {
+        await dependencies.jobAnalysisRepository.save(analysis);
+      } catch (error) {
+        const concurrentAnalysis = await dependencies.jobAnalysisRepository.findByAnalysisIdentity(jobDescription.job.id, runIdentity.analysisIdentity);
+        if (concurrentAnalysis) {
+          return concurrentAnalysis;
+        }
+        throw error;
+      }
       return analysis;
     }
   };

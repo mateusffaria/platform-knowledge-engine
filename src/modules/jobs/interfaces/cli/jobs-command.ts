@@ -1,6 +1,6 @@
 import { Command } from "commander";
 
-import { JobAnalysis, JobAnalysisSignal, JobDescriptionWithRequirements, JobRetrievalIntent } from "../../domain/model.js";
+import { JobAnalysis, JobAnalysisDomainSignal, JobAnalysisSenioritySignal, JobAnalysisSignal, JobDescriptionWithRequirements, JobRetrievalIntent } from "../../domain/model.js";
 import { EvidenceClaimStatus, EvidencePack, HybridSubjectType } from "../../../retrieval/application/types.js";
 
 export interface JobsServices {
@@ -107,6 +107,26 @@ function printSignal(label: string, signal: JobAnalysisSignal): void {
   }
 }
 
+function printDomainSignal(signal: JobAnalysisDomainSignal): void {
+  const location = signal.sourceReference?.sourceLocation
+    ? ` line:${signal.sourceReference.sourceLocation.startLine}-${signal.sourceReference.sourceLocation.endLine}`
+    : "";
+  console.log(`   domain: ${signal.canonicalValue} (source: ${signal.sourceValue})${location}`);
+  if (signal.sourceReference?.excerpt) {
+    console.log(`   source: ${signal.sourceReference.excerpt}`);
+  }
+}
+
+function printSenioritySignal(signal: JobAnalysisSenioritySignal): void {
+  const location = signal.sourceReference?.sourceLocation
+    ? ` line:${signal.sourceReference.sourceLocation.startLine}-${signal.sourceReference.sourceLocation.endLine}`
+    : "";
+  console.log(`   seniority: ${signal.canonicalLevel} (source: ${signal.sourceValue}; type: ${signal.signalType})${location}`);
+  if (signal.sourceReference?.excerpt) {
+    console.log(`   source: ${signal.sourceReference.excerpt}`);
+  }
+}
+
 function printJobAnalysis(analysis: JobAnalysis, options: { json?: boolean; verbose?: boolean }): void {
   if (options.json) {
     console.log(JSON.stringify(analysis, null, 2));
@@ -119,9 +139,14 @@ function printJobAnalysis(analysis: JobAnalysis, options: { json?: boolean; verb
     for (const requirement of analysis.inferredRequirements) {
       printSignal(`${requirement.importance} inferred requirement`, requirement);
     }
+    for (const signal of analysis.senioritySignals) {
+      printSenioritySignal(signal);
+    }
+    for (const signal of analysis.domainSignals) {
+      printDomainSignal(signal);
+    }
     for (const [label, signals] of [
-      ["seniority", analysis.senioritySignals],
-      ["domain", analysis.domainSignals],
+      ["cross-team collaboration", analysis.crossTeamCollaborationSignals],
       ["cross-team leadership", analysis.crossTeamLeadershipSignals],
       ["architecture/reliability", analysis.architectureAndReliabilityExpectations]
     ] as const) {

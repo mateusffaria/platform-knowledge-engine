@@ -19,12 +19,7 @@ export function createProductionJobsServices() {
   const analysisRepository = new DrizzleJobAnalysisRepository(database.db);
   const observability = new LangfuseJobAnalysisObservability(createLangfuseClient(config.langfuseEnabled));
   const providerFactory = new LlmProviderFactory();
-  const jobAnalyzer = {
-    analyze: (command: Parameters<JobAnalyzerAgent["analyze"]>[0]) => new JobAnalyzerAgent(
-      providerFactory.create(config),
-      observability
-    ).analyze(command)
-  };
+  const jobAnalyzer = new JobAnalyzerAgent(providerFactory.create(config), observability);
 
   return {
     ingestJobDescription: createIngestJobDescriptionUseCase({

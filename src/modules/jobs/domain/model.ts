@@ -54,6 +54,33 @@ export interface JobAnalysisSignal {
   sourceReference?: JobAnalysisSourceReference;
 }
 
+export interface JobAnalysisDomainSignal {
+  canonicalValue: string;
+  sourceValue: string;
+  sourceReference?: JobAnalysisSourceReference;
+}
+
+export type JobAnalysisSeniorityLevel =
+  | "entry"
+  | "junior"
+  | "mid"
+  | "senior"
+  | "staff"
+  | "principal"
+  | "lead"
+  | "manager"
+  | "director"
+  | "executive";
+
+export type JobAnalysisSenioritySignalType = "title" | "requirement" | "explicit-wording" | "legacy-unclassified";
+
+export interface JobAnalysisSenioritySignal {
+  canonicalLevel: JobAnalysisSeniorityLevel;
+  sourceValue: string;
+  signalType: JobAnalysisSenioritySignalType;
+  sourceReference?: JobAnalysisSourceReference;
+}
+
 export interface JobAnalysisInferredRequirement extends JobAnalysisSignal {
   id: string;
   inferred: true;
@@ -62,8 +89,9 @@ export interface JobAnalysisInferredRequirement extends JobAnalysisSignal {
 
 export interface JobAnalysisContent {
   inferredRequirements: JobAnalysisInferredRequirement[];
-  senioritySignals: JobAnalysisSignal[];
-  domainSignals: JobAnalysisSignal[];
+  senioritySignals: JobAnalysisSenioritySignal[];
+  domainSignals: JobAnalysisDomainSignal[];
+  crossTeamCollaborationSignals: JobAnalysisSignal[];
   crossTeamLeadershipSignals: JobAnalysisSignal[];
   architectureAndReliabilityExpectations: JobAnalysisSignal[];
   ambiguities: string[];
@@ -76,6 +104,7 @@ export interface JobAnalysis extends JobAnalysisContent {
   provider: string;
   model: string;
   promptVersion: string;
+  analysisIdentity?: string;
   createdAt: Date;
 }
 

@@ -6,7 +6,9 @@ The jobs module owns external job descriptions, their deterministic requirement 
 
 The parser recognizes common requirements, qualifications, responsibilities, and preferred sections. It preserves original text and source lines for every extraction. These deterministic requirements remain authoritative and immutable.
 
-Job analysis is enrichment, not extraction. `JobAnalyzerAgent` receives only the canonical job source and deterministic provenance through application ports. It returns Zod-validated inferred requirements and categorized seniority, domain, leadership, architecture, and reliability signals. Successful outputs are immutable snapshots in `job_analyses`; malformed provider output is rejected without modifying the canonical job or any prior analysis.
+Job analysis is enrichment, not extraction. `JobAnalyzerAgent` receives only the canonical job source and deterministic provenance through application ports. It returns Zod-validated inferred requirements plus distinct cross-team collaboration and leadership signals, canonicalized domain signals that preserve source wording, and source-aware seniority signals. It makes the narrowest defensible inference, prefers omission to unsupported competency expansion, and never treats a source reference or warning as proof of an unsupported claim.
+
+Successful outputs are immutable snapshots in `job_analyses`; malformed provider output is rejected without modifying the canonical job or any prior analysis. Existing v2 snapshots remain readable through the current analysis view. An identical v3 request—same canonical content hash, prompt version, provider, and resolved model—reuses its existing snapshot; changing any of those inputs creates a distinct snapshot.
 
 Analysis-derived signals are marked inferred and can only enrich semantic retrieval text. They do not change deterministic PKQL filters, professional `EvidenceClaim` records, conflict resolution, Evidence Pack generation, or retrieval ownership. The agent does not access PostgreSQL, pgvector, repositories, or Ollama directly.
 
@@ -26,4 +28,4 @@ npm run pke -- jobs analyze <job-id> --json
 npm run pke -- jobs retrieve <job-id> --verbose
 ```
 
-`analyze` requires `LLM_PROVIDER=ollama` and `LLM_MODEL=<model>`. It returns clear setup guidance when either value is absent. A failed model call or invalid structured output does not persist a new analysis. Re-analyzing a job creates a newer immutable snapshot; retrieval uses the latest valid one.
+`analyze` requires `LLM_PROVIDER=ollama` and `LLM_MODEL=<model>`. It returns clear setup guidance when either value is absent. A failed model call or invalid structured output does not persist a new analysis. Retrieval uses the latest valid snapshot and includes analysis only as semantic enrichment; deterministic PKQL filters remain unchanged.

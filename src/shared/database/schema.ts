@@ -266,10 +266,12 @@ export const jobAnalyses = pgTable("job_analyses", {
   provider: text("provider").notNull(),
   model: text("model").notNull(),
   promptVersion: text("prompt_version").notNull(),
+  analysisIdentity: text("analysis_identity"),
   analysis: jsonb("analysis").$type<Record<string, unknown>>().notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull()
 }, (table) => [
-  index("job_analyses_job_description_created_at_idx").on(table.jobDescriptionId, table.createdAt)
+  index("job_analyses_job_description_created_at_idx").on(table.jobDescriptionId, table.createdAt),
+  uniqueIndex("job_analyses_job_description_analysis_identity_unique").on(table.jobDescriptionId, table.analysisIdentity)
 ]);
 
 export const experiences = pgTable("experiences", {

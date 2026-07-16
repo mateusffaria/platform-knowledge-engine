@@ -141,7 +141,7 @@ Environment variables:
 
 ## Job Analysis
 
-Job analysis enriches a persisted canonical job description with inferred requirements and seniority, domain, cross-team leadership, architecture, and reliability signals. It is not an LLM replacement for deterministic extraction.
+Job analysis enriches a persisted canonical job description with conservative inferred requirements; source-aware seniority; canonicalized, source-preserving domain signals; distinct cross-team collaboration and leadership; architecture; and reliability signals. It is not an LLM replacement for deterministic extraction.
 
 ```bash
 npm run pke -- jobs ingest examples/staff-backend-engineer-job.md --json
@@ -149,7 +149,7 @@ npm run pke -- jobs analyze <job-id> --json
 npm run pke -- jobs retrieve <job-id> --verbose
 ```
 
-The agent receives only the job source and deterministic requirement provenance. Successful analyses are immutable snapshots linked to the job; malformed model output is rejected without altering the canonical job or previous analyses. Analysis-derived text can enrich semantic retrieval, but deterministic requirements remain authoritative for PKQL filters and no analysis can modify professional EvidenceClaims.
+The agent receives only the job source and deterministic requirement provenance. It prefers omission over unsupported competency expansion; a source reference or warning never validates an unsupported claim. Successful analyses are immutable snapshots linked to the job, and an identical v3 request (canonical content, prompt version, provider, and model) reuses its existing snapshot. Malformed model output is rejected without altering the canonical job or previous analyses. Analysis-derived text can enrich semantic retrieval, but deterministic requirements remain authoritative for PKQL filters and no analysis can modify professional EvidenceClaims.
 
 ## Semantic Search Relevance
 
