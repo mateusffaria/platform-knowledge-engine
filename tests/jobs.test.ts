@@ -243,13 +243,20 @@ describe("jobs CLI commands", () => {
     strategies: ["structured", "semantic"],
     generatedAt: new Date("2026-07-15T12:00:00.000Z"),
     warnings: [],
-    items: []
+    items: [],
+    diagnostics: {
+      rawStructuredResultCount: 0,
+      rawSemanticResultCount: 0,
+      rawResults: [],
+      eligibleResults: [],
+      discardedResults: []
+    }
   };
   const curatedEvidencePack = {
     id: "curated-1",
     runIdentity: "run-1",
     jobDescriptionId: "job-1",
-    candidatePackVersion: "candidate-evidence-pack-v1",
+    candidatePackVersion: "candidate-evidence-pack-v2",
     candidatePackHash: "pack-hash",
     provider: "ollama",
     model: "test-model",
@@ -283,7 +290,11 @@ describe("jobs CLI commands", () => {
       reasonJobEvidence: { execute: vi.fn(async () => curatedEvidencePack) },
       close: vi.fn(async () => undefined)
     };
-    const retrievalServices = { hybridSearch: { execute: vi.fn(async () => evidencePack) }, close: vi.fn(async () => undefined) };
+    const retrievalServices = {
+      hybridSearch: { execute: vi.fn(async () => evidencePack) },
+      canonicalEvidenceReader: { read: vi.fn() },
+      close: vi.fn(async () => undefined)
+    };
     const program = new Command();
     program.exitOverride();
     registerJobsCommands(program, () => jobsServices, () => retrievalServices);
@@ -319,17 +330,35 @@ describe("jobs CLI commands", () => {
     await expect(program.parseAsync(["node", "pke", "jobs", "retrieve", "job-1", "--claim-status", "rejected"])).rejects.toThrow("Claim status filter must be confirmed or single_source");
   });
 
+  it("prints requirement-scoped candidate diagnostics as JSON and verbose output", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { program } = createProgram();
+    await program.parseAsync(["node", "pke", "jobs", "candidates", "job-1", "--json"]);
+    const pack = JSON.parse(log.mock.calls[0][0]);
+    expect(pack.requirements).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        requirementId: "requirement-typescript",
+        diagnostics: expect.objectContaining({ rawRetrievalResultCount: 0, requirementAssociationCount: 0 })
+      })
+    ]));
+    await program.parseAsync(["node", "pke", "jobs", "candidates", "job-1", "--verbose"]);
+    expect(log.mock.calls.flat().join("\n")).toContain("raw=0 eligible=0 hydrated=0 associated=0");
+    log.mockRestore();
+  });
+
   it("curates retrieved evidence with model override and supports JSON output", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const { program, jobsServices, retrievalServices } = createProgram();
     await program.parseAsync(["node", "pke", "jobs", "reason", "job-1", "--model", "override-model", "--json"]);
 
-    expect(retrievalServices.hybridSearch.execute).toHaveBeenCalledWith({ query: evidencePack.query });
-    expect(jobsServices.reasonJobEvidence.execute).toHaveBeenCalledWith({
+    expect(retrievalServices.hybridSearch.execute).toHaveBeenCalledTimes(3);
+    expect(jobsServices.reasonJobEvidence.execute).toHaveBeenCalledWith(expect.objectContaining({
       jobDescriptionId: "job-1",
-      evidencePack,
+      candidatePack: expect.objectContaining({
+        requirements: expect.arrayContaining([expect.objectContaining({ requirementId: "requirement-typescript" })])
+      }),
       model: "override-model"
-    });
+    }));
     expect(JSON.parse(log.mock.calls[0][0]).promptVersion).toBe("evidence-reasoner-v3");
     log.mockRestore();
   });

@@ -20,6 +20,7 @@ import {
   HybridSubjectType,
   RankingConfig,
   RetrievalStrategy,
+  RetrievalDiscardedResult,
   SearchResult
 } from "../types.js";
 
@@ -282,7 +283,25 @@ function mergeCandidate(
 }
 
 function isEligibleCandidate(candidate: HybridSearchCandidate): boolean {
-  return candidate.claimStatus === undefined || eligibleClaimStatuses.has(candidate.claimStatus);
+  return candidate.claimStatus !== undefined && eligibleClaimStatuses.has(candidate.claimStatus);
+}
+
+function discardForCandidate(
+  candidate: HybridSearchCandidate,
+  reasonCode: RetrievalDiscardedResult["reasonCode"],
+  reason: string,
+  finalScore?: number
+): RetrievalDiscardedResult {
+  return {
+    reasonCode,
+    reason,
+    evidenceClaimId: candidate.evidenceClaimId,
+    knowledgeAssetId: candidate.knowledgeAssetId,
+    retrievalStrategies: [...candidate.retrievalStrategies],
+    semanticScore: candidate.semanticScore,
+    structuredScore: candidate.structuredScore,
+    finalScore
+  };
 }
 
 function calculateFinalScore(candidate: HybridSearchCandidate, config: RankingConfig): number {
@@ -378,12 +397,12 @@ export function createHybridSearchUseCase({
       }
 
       const hasExplicitFilters = plan.filters.length > 0;
-      if (plan.strategies.includes("semantic") && (!hasExplicitFilters || structuredCandidates.length > 0)) {
+      if (plan.strategies.includes("semantic")) {
         const embedding = await embeddingProvider.embedQuery(plan.semanticText);
         const results = await vectorStore.search({
           embedding,
           limit: candidateLimit,
-          ...(hasExplicitFilters
+          ...(hasExplicitFilters && structuredCandidates.length > 0
             ? {
               candidateEvidenceClaimIds: structuredCandidates
                 .flatMap((candidate) => candidate.evidenceClaimId ? [candidate.evidenceClaimId] : []),
@@ -400,12 +419,60 @@ export function createHybridSearchUseCase({
         merged.set(candidateKey(candidate), existing ? mergeCandidate(existing, candidate) : candidate);
       }
 
-      const items = Array.from(merged.values())
-        .filter(isEligibleCandidate)
-        .filter((candidate) => input.claimStatus === undefined || candidate.claimStatus === input.claimStatus)
-        .filter((candidate) => input.subjectType === undefined || candidate.subjectType === input.subjectType)
-        .map((candidate) => itemFromCandidate(candidate, config))
-        .filter((item) => minScore === undefined || item.finalScore >= minScore)
+      const mergedCandidates = Array.from(merged.values());
+      const eligibleResults: HybridSearchCandidate[] = [];
+      const discardedResults: RetrievalDiscardedResult[] = [];
+      const scoredItems: EvidenceItem[] = [];
+
+      for (const candidate of mergedCandidates) {
+        if (candidate.claimStatus === undefined) {
+          discardedResults.push(discardForCandidate(
+            candidate,
+            "claim_status_unavailable",
+            "The retrieval projection did not contain a canonical claim status."
+          ));
+          continue;
+        }
+        if (!isEligibleCandidate(candidate)) {
+          discardedResults.push(discardForCandidate(
+            candidate,
+            "ineligible_claim_status",
+            `Canonical claim status ${candidate.claimStatus} is not eligible for trusted retrieval.`
+          ));
+          continue;
+        }
+        if (input.claimStatus !== undefined && candidate.claimStatus !== input.claimStatus) {
+          discardedResults.push(discardForCandidate(
+            candidate,
+            "claim_status_filter_mismatch",
+            `Claim status ${candidate.claimStatus} does not match requested status ${input.claimStatus}.`
+          ));
+          continue;
+        }
+        if (input.subjectType !== undefined && candidate.subjectType !== input.subjectType) {
+          discardedResults.push(discardForCandidate(
+            candidate,
+            "subject_type_filter_mismatch",
+            `Subject type ${candidate.subjectType} does not match requested type ${input.subjectType}.`
+          ));
+          continue;
+        }
+
+        eligibleResults.push(candidate);
+        const item = itemFromCandidate(candidate, config);
+        if (minScore !== undefined && item.finalScore < minScore) {
+          discardedResults.push(discardForCandidate(
+            candidate,
+            "minimum_score_not_met",
+            `Final score ${item.finalScore} is below requested minimum score ${minScore}.`,
+            item.finalScore
+          ));
+          continue;
+        }
+        scoredItems.push(item);
+      }
+
+      const items = scoredItems
         .sort((left, right) => {
           if (right.finalScore !== left.finalScore) {
             return right.finalScore - left.finalScore;
@@ -416,9 +483,18 @@ export function createHybridSearchUseCase({
         .slice(0, limit);
 
       return {
+        requirementId: input.requirementId,
         query: plan.query,
         strategies: plan.strategies,
         items,
+        diagnostics: {
+          requirementId: input.requirementId,
+          rawStructuredResultCount: structuredCandidates.length,
+          rawSemanticResultCount: candidates.length - structuredCandidates.length,
+          rawResults: candidates,
+          eligibleResults,
+          discardedResults
+        },
         generatedAt: now(),
         warnings: [
           ...(items.length === 0 ? ["No relevant eligible evidence was found."] : []),

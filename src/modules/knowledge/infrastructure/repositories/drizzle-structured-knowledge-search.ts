@@ -5,8 +5,6 @@ import {
   StructuredKnowledgeSearchInput
 } from "../../../retrieval/application/ports/structured-knowledge-search.js";
 import {
-  EvidenceClaimStatus,
-  EvidenceClaimType,
   HybridSearchCandidate,
   SearchFilter
 } from "../../../retrieval/application/types.js";
@@ -23,8 +21,6 @@ import {
 interface KnowledgeSearchDatabase {
   select: (...args: any[]) => any;
 }
-
-const eligibleClaimStatuses = new Set<EvidenceClaimStatus>(["confirmed", "single_source"]);
 
 function normalize(value: string | undefined): string {
   return (value ?? "").toLowerCase().replace(/\s+/g, " ").trim();
@@ -129,14 +125,6 @@ function matchesFilters(row: any, filters: SearchFilter[]): boolean {
   return filters.every((filter) => matchesFilter(row, filter));
 }
 
-function subjectTypeMatches(input: StructuredKnowledgeSearchInput, claimType: EvidenceClaimType): boolean {
-  if (input.subjectType === undefined || input.subjectType === "evidence_claim") {
-    return true;
-  }
-
-  return input.subjectType === claimType;
-}
-
 export class DrizzleStructuredKnowledgeSearch implements StructuredKnowledgeSearch {
   constructor(private readonly db: KnowledgeSearchDatabase) {}
 
@@ -193,9 +181,6 @@ export class DrizzleStructuredKnowledgeSearch implements StructuredKnowledgeSear
         score: calculateStructuredScore(row, terms, input.filters.length > 0)
       }))
       .filter(({ row, score }: any) => score > 0)
-      .filter(({ row }: any) => eligibleClaimStatuses.has(row.status))
-      .filter(({ row }: any) => input.claimStatus === undefined || row.status === input.claimStatus)
-      .filter(({ row }: any) => subjectTypeMatches(input, row.claimType))
       .filter(({ score }: any) => input.minStructuredScore === undefined || score >= input.minStructuredScore)
       .sort((left: any, right: any) => {
         if (right.score !== left.score) {

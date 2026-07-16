@@ -32,7 +32,7 @@ Values with spaces must be quoted. For example:
 - `pke retrieve "company:VTEX distributed systems observability"`
 - `pke retrieve "status:confirmed"`
 
-When unquoted text follows a text filter, PKQL returns an advisory warning because the text may be part of a compound value. Quote the full value when that is intended. Mixed queries use both strategies in deterministic order. Explicit PKQL filters are candidate-set constraints even when metadata matches are also present: structured search produces the allowed evidence set, and semantic search ranks only embeddings in that set. Filter-only queries skip semantic embedding. The planner is rule-based and does not use an LLM. It consumes only the Query AST and `MetadataMatch[]`; it does not fetch metadata, inspect database metadata structures, or own hardcoded skill, technology, organization, role, project, product, initiative, stopword, or language dictionaries.
+When unquoted text follows a text filter, PKQL returns an advisory warning because the text may be part of a compound value. Quote the full value when that is intended. Mixed queries use both strategies in deterministic order. When structured candidates exist, they constrain semantic ranking. When structured search returns none, semantic search still runs against the normal corpus so a missing exact predicate cannot erase relevant semantic evidence. Filter-only queries skip semantic embedding. The planner is rule-based and does not use an LLM. It consumes only the Query AST and `MetadataMatch[]`; it does not fetch metadata, inspect database metadata structures, or own hardcoded skill, technology, organization, role, project, product, initiative, stopword, or language dictionaries.
 
 Structured retrieval is accessed through the `StructuredKnowledgeSearch` port. Semantic retrieval reuses the configured embedding provider and `VectorStore`.
 
@@ -45,6 +45,7 @@ An Evidence Pack includes:
 - ranked Evidence Items;
 - generation timestamp;
 - warnings, including empty-result limitations.
+- raw-result and eligibility diagnostics, including traceable discarded identities.
 
 Each Evidence Item includes claim or asset identity, claim text, claim status when available, confidence score, structured score when available, semantic score when available, final score, retrieval strategies, source references, and excerpts.
 
@@ -64,3 +65,5 @@ Evidence Packs only include trusted retrieval output:
 - `single_source`
 
 Claims with `needs_review`, `rejected`, or `superseded` status remain auditable in the knowledge store but are excluded from Evidence Packs.
+
+For requirement-scoped job candidate preparation, a retrieval-owned canonical evidence reader resolves a claim result directly or resolves a knowledge-asset result to its canonical claims. Eligibility is evaluated from the canonical reconciliation status, not embedding text. Unsupported legacy projections and identity mismatches are explicit diagnostics; reindexing cannot repair those canonical-record problems.

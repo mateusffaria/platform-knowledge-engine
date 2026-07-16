@@ -180,14 +180,50 @@ export interface EvidenceItem {
 }
 
 export interface EvidencePack {
+  /** Present when retrieval was issued for one deterministic job requirement. */
+  requirementId?: string;
   query: string;
   strategies: RetrievalStrategy[];
   items: EvidenceItem[];
+  diagnostics: RetrievalDiagnostics;
   generatedAt: Date;
   warnings: string[];
 }
 
+export type RetrievalDiscardReason =
+  | "claim_status_unavailable"
+  | "ineligible_claim_status"
+  | "claim_status_filter_mismatch"
+  | "subject_type_filter_mismatch"
+  | "minimum_score_not_met";
+
+export interface RetrievalDiscardedResult {
+  reasonCode: RetrievalDiscardReason;
+  reason: string;
+  evidenceClaimId?: string;
+  knowledgeAssetId: string;
+  retrievalStrategies: RetrievalStrategy[];
+  semanticScore?: number;
+  structuredScore?: number;
+  finalScore?: number;
+}
+
+/**
+ * Retrieval diagnostics preserve candidates before the final Evidence Pack is
+ * narrowed. Consumers that need canonical hydration must use these records,
+ * not reconstruct candidates from embedding text or final display results.
+ */
+export interface RetrievalDiagnostics {
+  requirementId?: string;
+  rawStructuredResultCount: number;
+  rawSemanticResultCount: number;
+  rawResults: HybridSearchCandidate[];
+  eligibleResults: HybridSearchCandidate[];
+  discardedResults: RetrievalDiscardedResult[];
+}
+
 export interface HybridSearchInput {
+  requirementId?: string;
   query: string;
   limit?: number;
   minScore?: number;

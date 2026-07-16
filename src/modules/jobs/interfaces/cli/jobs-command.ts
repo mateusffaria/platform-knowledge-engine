@@ -1,6 +1,9 @@
 import { Command } from "commander";
 
 import { CuratedEvidencePack, JobAnalysis, JobAnalysisDomainSignal, JobAnalysisSenioritySignal, JobAnalysisSignal, JobDescriptionWithRequirements, JobRetrievalIntent } from "../../domain/model.js";
+import { buildCandidateEvidencePack } from "../../application/candidate-evidence-pack.js";
+import { createPrepareCandidateEvidenceUseCase } from "../../application/use-cases/prepare-candidate-evidence.js";
+import { CanonicalEvidenceReader } from "../../../retrieval/application/ports/canonical-evidence-reader.js";
 import { EvidenceClaimStatus, EvidencePack, HybridSubjectType } from "../../../retrieval/application/types.js";
 
 export interface JobsServices {
@@ -17,7 +20,7 @@ export interface JobsServices {
     execute(command: { jobDescriptionId: string }): Promise<JobRetrievalIntent>;
   };
   reasonJobEvidence: {
-    execute(command: { jobDescriptionId: string; evidencePack: EvidencePack; model?: string }): Promise<CuratedEvidencePack>;
+    execute(command: { jobDescriptionId: string; evidencePack?: EvidencePack; candidatePack?: ReturnType<typeof buildCandidateEvidencePack>; model?: string }): Promise<CuratedEvidencePack>;
   };
   close(): Promise<void>;
 }
@@ -25,6 +28,7 @@ export interface JobsServices {
 export interface JobRetrievalServices {
   hybridSearch: {
     execute(command: {
+      requirementId?: string;
       query: string;
       limit?: number;
       minScore?: number;
@@ -32,6 +36,7 @@ export interface JobRetrievalServices {
       subjectType?: HybridSubjectType;
     }): Promise<EvidencePack>;
   };
+  canonicalEvidenceReader: CanonicalEvidenceReader;
   close(): Promise<void>;
 }
 
@@ -171,19 +176,26 @@ function printEvidencePack(pack: EvidencePack, options: { json?: boolean; verbos
   console.log(`Evidence Pack for "${pack.query}" (${pack.strategies.join(", ")})`);
   if (pack.items.length === 0) {
     console.log(pack.warnings[0] ?? "No relevant eligible evidence was found.");
-    return;
+  } else {
+    for (const [index, item] of pack.items.entries()) {
+      console.log(`${index + 1}. ${item.subjectType} final=${item.finalScore.toFixed(4)} strategies=${item.retrievalStrategies.join(",")}`);
+      console.log(`   ${item.claimText}`);
+      if (options.verbose) {
+        console.log(`   knowledgeAssetId=${item.knowledgeAssetId}`);
+        if (item.evidenceClaimId) {
+          console.log(`   evidenceClaimId=${item.evidenceClaimId}`);
+        }
+        for (const source of item.sources) {
+          console.log(`   source=${source.sourcePath ?? source.sourceDocumentId} ${source.locator ?? ""} ${source.excerpt}`);
+        }
+      }
+    }
   }
-  for (const [index, item] of pack.items.entries()) {
-    console.log(`${index + 1}. ${item.subjectType} final=${item.finalScore.toFixed(4)} strategies=${item.retrievalStrategies.join(",")}`);
-    console.log(`   ${item.claimText}`);
-    if (options.verbose) {
-      console.log(`   knowledgeAssetId=${item.knowledgeAssetId}`);
-      if (item.evidenceClaimId) {
-        console.log(`   evidenceClaimId=${item.evidenceClaimId}`);
-      }
-      for (const source of item.sources) {
-        console.log(`   source=${source.sourcePath ?? source.sourceDocumentId} ${source.locator ?? ""} ${source.excerpt}`);
-      }
+  if (options.verbose) {
+    const diagnostics = pack.diagnostics;
+    console.log(`Pipeline: raw structured=${diagnostics.rawStructuredResultCount} semantic=${diagnostics.rawSemanticResultCount} eligible=${diagnostics.eligibleResults.length}`);
+    for (const discarded of diagnostics.discardedResults) {
+      console.log(`Discarded ${discarded.reasonCode} claim=${discarded.evidenceClaimId ?? "none"} asset=${discarded.knowledgeAssetId}: ${discarded.reason}`);
     }
   }
   for (const warning of pack.warnings) {
@@ -228,6 +240,25 @@ function printCuratedEvidencePack(pack: CuratedEvidencePack, options: { json?: b
   }
   for (const warning of [...pack.warnings, ...pack.limitations]) {
     console.log(`Warning: ${warning}`);
+  }
+}
+
+function printCandidateEvidencePack(pack: ReturnType<typeof buildCandidateEvidencePack>, options: { json?: boolean; verbose?: boolean }): void {
+  if (options.json) {
+    console.log(JSON.stringify(pack, null, 2));
+    return;
+  }
+  console.log(`Candidate Evidence Pack for ${pack.jobDescriptionId}`);
+  for (const requirement of pack.requirements) {
+    const diagnostics = requirement.diagnostics;
+    console.log(`${requirement.candidates.length} candidate(s): ${requirement.requirementText}`);
+    if (options.verbose) {
+      console.log(`   intent=${diagnostics.retrievalIntent}`);
+      console.log(`   raw=${diagnostics.rawRetrievalResultCount} eligible=${diagnostics.eligibleResultCount} hydrated=${diagnostics.canonicalHydrationCount} associated=${diagnostics.requirementAssociationCount}`);
+      for (const discarded of diagnostics.discardedResults) {
+        console.log(`   discarded ${discarded.reasonCode} stage=${discarded.stage} claim=${discarded.evidenceClaimId ?? "none"} asset=${discarded.knowledgeAssetId ?? "none"}: ${discarded.reason}`);
+      }
+    }
   }
 }
 
@@ -311,7 +342,10 @@ export function registerJobsCommands(
       const jobsServices = createJobsServices();
       let retrievalServices: JobRetrievalServices | undefined;
       try {
-        const intent = await jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId });
+        const [jobDescription, intent] = await Promise.all([
+          jobsServices.showJobDescription.execute({ jobDescriptionId }),
+          jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId })
+        ]);
         retrievalServices = createRetrievalServices();
         const pack = await retrievalServices.hybridSearch.execute({
           query: intent.query,
@@ -321,6 +355,16 @@ export function registerJobsCommands(
           subjectType
         });
         printEvidencePack(pack, options);
+        if (options.verbose) {
+          const candidatePack = await createPrepareCandidateEvidenceUseCase().prepare({
+            jobDescription,
+            jobAnalysisId: intent.analysisId,
+            warnings: intent.warnings,
+            retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
+            canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
+          });
+          printCandidateEvidencePack(candidatePack, { verbose: true });
+        }
         if (!options.json) {
           for (const warning of intent.warnings) {
             console.log(`Job intent warning: ${warning}`);
@@ -342,15 +386,52 @@ export function registerJobsCommands(
       const jobsServices = createJobsServices();
       let retrievalServices: JobRetrievalServices | undefined;
       try {
-        const intent = await jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId });
+        const [jobDescription, intent] = await Promise.all([
+          jobsServices.showJobDescription.execute({ jobDescriptionId }),
+          jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId })
+        ]);
         retrievalServices = createRetrievalServices();
-        const evidencePack = await retrievalServices.hybridSearch.execute({ query: intent.query });
+        const candidatePack = await createPrepareCandidateEvidenceUseCase().prepare({
+          jobDescription,
+          jobAnalysisId: intent.analysisId,
+          warnings: intent.warnings,
+          retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
+          canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
+        });
         const curated = await jobsServices.reasonJobEvidence.execute({
           jobDescriptionId,
-          evidencePack: { ...evidencePack, warnings: [...evidencePack.warnings, ...intent.warnings] },
+          candidatePack,
           model: options.model
         });
         printCuratedEvidencePack(curated, options);
+      } finally {
+        await retrievalServices?.close();
+        await jobsServices.close();
+      }
+    });
+
+  jobs.command("candidates")
+    .description("Show the canonical candidate evidence and pipeline diagnostics for a persisted job description")
+    .argument("<job-id>", "job description id")
+    .option("--json", "print machine-readable JSON")
+    .option("--verbose", "include per-requirement pipeline diagnostics and discard reasons")
+    .action(async (jobDescriptionId: string, options: { json?: boolean; verbose?: boolean }) => {
+      const jobsServices = createJobsServices();
+      let retrievalServices: JobRetrievalServices | undefined;
+      try {
+        const [jobDescription, intent] = await Promise.all([
+          jobsServices.showJobDescription.execute({ jobDescriptionId }),
+          jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId })
+        ]);
+        retrievalServices = createRetrievalServices();
+        const candidatePack = await createPrepareCandidateEvidenceUseCase().prepare({
+          jobDescription,
+          jobAnalysisId: intent.analysisId,
+          warnings: intent.warnings,
+          retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
+          canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
+        });
+        printCandidateEvidencePack(candidatePack, options);
       } finally {
         await retrievalServices?.close();
         await jobsServices.close();

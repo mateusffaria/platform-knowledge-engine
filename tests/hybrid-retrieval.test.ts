@@ -307,6 +307,23 @@ describe("Hybrid retrieval", () => {
     expect(pack.items.map((item) => item.evidenceClaimId)).toEqual(["claim-acme"]);
   });
 
+  it("falls back to the semantic corpus when explicit structured filters return no candidates", async () => {
+    const { vectorStore, useCase } = createUseCase({
+      structured: [],
+      semantic: [semanticResult({ evidenceClaimId: "claim-go", knowledgeAssetId: "asset-go" })]
+    });
+
+    const pack = await useCase.execute({ query: 'technology:"Go" production backend services' });
+
+    expect(vectorStore.searches[0].candidateEvidenceClaimIds).toBeUndefined();
+    expect(vectorStore.searches[0].candidateKnowledgeAssetIds).toBeUndefined();
+    expect(pack.items.map((item) => item.evidenceClaimId)).toEqual(["claim-go"]);
+    expect(pack.diagnostics).toMatchObject({
+      rawStructuredResultCount: 0,
+      rawSemanticResultCount: 1
+    });
+  });
+
   it("supports partial company filters while keeping semantic ranking constrained", async () => {
     const acmeCandidate = structuredCandidate({
       evidenceClaimId: "claim-acme",

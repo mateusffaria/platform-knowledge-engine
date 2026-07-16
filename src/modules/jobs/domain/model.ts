@@ -177,6 +177,38 @@ export interface CandidateRequirementEvidence {
   requirementType: JobRequirementType;
   importance: JobRequirementImportance;
   candidates: CandidateEvidence[];
+  diagnostics: RequirementCandidatePipelineDiagnostics;
+}
+
+export type CandidatePipelineStage = "retrieval" | "eligibility" | "hydration" | "association";
+export type CandidateDiscardReason =
+  | "canonical_claim_not_found"
+  | "canonical_identity_mismatch"
+  | "unsupported_legacy_record"
+  | "ineligible_claim_status"
+  | "duplicate_requirement_candidate"
+  | "asset_only_retrieval_result"
+  | "retrieval_projection_ineligible";
+
+export interface DiscardedCandidateResult {
+  stage: CandidatePipelineStage;
+  reasonCode: CandidateDiscardReason;
+  reason: string;
+  evidenceClaimId?: string;
+  knowledgeAssetId?: string;
+  retrievalStrategies?: string[];
+  semanticScore?: number;
+  structuredScore?: number;
+  finalScore?: number;
+}
+
+export interface RequirementCandidatePipelineDiagnostics {
+  retrievalIntent: string;
+  rawRetrievalResultCount: number;
+  eligibleResultCount: number;
+  canonicalHydrationCount: number;
+  requirementAssociationCount: number;
+  discardedResults: DiscardedCandidateResult[];
 }
 
 export interface CandidateEvidencePack {

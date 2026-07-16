@@ -8,6 +8,7 @@ import { createHybridSearchUseCase } from "../application/use-cases/hybrid-searc
 import { createIndexKnowledgeUseCase } from "../application/use-cases/index-knowledge.js";
 import { createSearchKnowledgeUseCase } from "../application/use-cases/search-knowledge.js";
 import { EmbeddingProviderFactory } from "./embedding-providers/embedding-provider-factory.js";
+import { IndexableCanonicalEvidenceReader } from "./canonical-readers/indexable-canonical-evidence-reader.js";
 import { PgvectorStore } from "./vector-stores/pgvector-store.js";
 
 export function createProductionRetrievalServices() {
@@ -41,6 +42,7 @@ export function createProductionRetrievalServices() {
       structuredKnowledgeSearch,
       knowledgeMetadataProvider
     }),
+    canonicalEvidenceReader: new IndexableCanonicalEvidenceReader(knowledgeReader),
     close: database.close
   };
 }

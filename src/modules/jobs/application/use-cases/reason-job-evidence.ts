@@ -1,4 +1,5 @@
 import { EvidencePack } from "../../../retrieval/application/types.js";
+import { CandidateEvidencePack } from "../../domain/model.js";
 import { CandidateEvidencePackBuilder } from "../ports/candidate-evidence-pack-builder.js";
 import { CuratedEvidencePackRepository } from "../ports/curated-evidence-pack-repository.js";
 import { EvidenceReasoner } from "../ports/evidence-reasoner.js";
@@ -13,17 +14,22 @@ export function createReasonJobEvidenceUseCase(dependencies: {
   evidenceReasoner: EvidenceReasoner;
 }) {
   return {
-    async execute(command: { jobDescriptionId: string; evidencePack: EvidencePack; model?: string }) {
+    async execute(command: { jobDescriptionId: string; evidencePack?: EvidencePack; candidatePack?: CandidateEvidencePack; model?: string }) {
       const jobDescription = await dependencies.jobDescriptionRepository.findById(command.jobDescriptionId);
       if (!jobDescription) {
         throw new Error(`Job description not found: ${command.jobDescriptionId}`);
       }
       const analysis = await dependencies.jobAnalysisRepository.findLatestByJobDescriptionId(command.jobDescriptionId);
-      const candidatePack = dependencies.candidateEvidencePackBuilder.build({
-        jobDescription,
-        jobAnalysisId: analysis?.id,
-        evidencePack: command.evidencePack
-      });
+      const candidatePack = command.candidatePack ?? (() => {
+        if (!command.evidencePack) {
+          throw new Error("Reasoning requires an Evidence Pack or a prepared Candidate Evidence Pack.");
+        }
+        return dependencies.candidateEvidencePackBuilder.build({
+          jobDescription,
+          jobAnalysisId: analysis?.id,
+          evidencePack: command.evidencePack
+        });
+      })();
       const run = dependencies.evidenceReasoner.getRunIdentity({ candidatePack, model: command.model });
       const existing = await dependencies.curatedEvidencePackRepository.findByRunIdentity(command.jobDescriptionId, run.runIdentity);
       if (existing) {
