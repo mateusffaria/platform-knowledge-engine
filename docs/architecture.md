@@ -230,11 +230,13 @@ Key concepts:
 - JobSourceLocation
 - JobRetrievalIntent
 
-Jobs owns external job-source provenance, normalized requirement signals, agent-produced job-analysis snapshots, and semantic fallback text. It does not create `KnowledgeAsset` or `EvidenceClaim` records, rank evidence, select retrieval strategies, resolve truth conflicts, or generate Evidence Packs. The CLI composition layer passes a Job Retrieval Intent to retrieval's hybrid-search application contract.
+Jobs owns external job-source provenance, normalized requirement signals, agent-produced job-analysis snapshots, semantic fallback text, and bounded evidence curation. It does not create `KnowledgeAsset` or `EvidenceClaim` records, rank evidence, select retrieval strategies, resolve truth conflicts, or change claim eligibility. The CLI composition layer passes a Job Retrieval Intent to retrieval's hybrid-search application contract, then passes the preselected result to jobs as a Candidate Evidence Pack.
 
 The initial parser supports local Markdown and plain text. It detects common requirements, qualifications, responsibilities, and preferred sections, preserves source excerpts and line locations, and flags any inferred signals. Deterministic extraction remains the authority for explicit source text.
 
 `JobAnalyzerAgent` is a bounded application service. It consumes only an already loaded canonical job through ports, invokes an `LlmProvider` port, validates its structured output, and persists immutable `JobAnalysis` snapshots separately from `JobDescription` and `JobRequirement`. Analysis requirements are always marked inferred. They can enrich semantic retrieval text but cannot alter deterministic PKQL filters or professional evidence. Provider HTTP access, database access, and Langfuse adaptation remain in infrastructure; prompt version, model, provider, and validation outcomes are observable through ports.
+
+`LlmEvidenceReasoner` is a separately bounded application service. It receives only a versioned, claim-addressable Candidate Evidence Pack; it has no retrieval, repository, database, vector-store, search, or tool port. Provider output is referential JSON only and is schema-validated against the supplied requirements and evidence IDs. Jobs reconstructs canonical selections/rejections, deterministically deduplicates cross-requirement evidence, derives any display score from qualitative coverage, and persists immutable Curated Evidence Packs. Qualitative coverage is never proof of hiring fitness.
 
 ### Documents
 

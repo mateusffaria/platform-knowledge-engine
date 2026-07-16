@@ -125,3 +125,123 @@ export interface JobRetrievalIntent {
   semanticText: string;
   warnings: string[];
 }
+
+export type CoverageStatus = "strong" | "partial" | "weak" | "missing";
+export type ExaggerationRisk = "low" | "medium" | "high";
+export type EvidenceRejectionReason =
+  | "irrelevant"
+  | "weak"
+  | "redundant"
+  | "unsupported_scope"
+  | "lower_quality_alternative"
+  | "insufficient_provenance";
+
+export interface CandidateEvidenceSource {
+  sourceDocumentId: string;
+  sourceReferenceId?: string;
+  locator?: string;
+  excerpt: string;
+  sourcePath?: string;
+  sourceLanguage?: string;
+  originalSectionLabel?: string;
+}
+
+export interface CandidateEvidenceObjectiveSignals {
+  confidenceScore: number;
+  finalScore: number;
+  semanticScore?: number;
+  structuredScore?: number;
+  retrievalStrategies: string[];
+}
+
+export interface CandidateEvidence {
+  evidenceClaimId: string;
+  knowledgeAssetId: string;
+  subjectAssetId?: string;
+  subjectType: string;
+  claimType?: string;
+  claimCategory?: string;
+  predicate?: string;
+  claimText: string;
+  relatedAssetId?: string;
+  valueText?: string;
+  valueUnit?: string;
+  claimStatus?: string;
+  sources: CandidateEvidenceSource[];
+  objectiveSignals: CandidateEvidenceObjectiveSignals;
+}
+
+export interface CandidateRequirementEvidence {
+  requirementId: string;
+  requirementText: string;
+  requirementType: JobRequirementType;
+  importance: JobRequirementImportance;
+  candidates: CandidateEvidence[];
+}
+
+export interface CandidateEvidencePack {
+  version: string;
+  hash: string;
+  jobDescriptionId: string;
+  jobAnalysisId?: string;
+  generatedAt: Date;
+  requirements: CandidateRequirementEvidence[];
+  warnings: string[];
+}
+
+export interface EvidenceSelection {
+  evidenceClaimId: string;
+  reason: string;
+  contribution: string;
+  complementaryEvidenceIds?: string[];
+  exaggerationRisk: ExaggerationRisk;
+  evidence: CandidateEvidence;
+}
+
+export interface EvidenceRejection {
+  evidenceClaimId: string;
+  reason: EvidenceRejectionReason;
+  explanation: string;
+  evidence: CandidateEvidence;
+}
+
+export interface RequirementCoverage {
+  requirementId: string;
+  requirementText: string;
+  importance: JobRequirementImportance;
+  coverageStatus: CoverageStatus;
+  selectedEvidenceIds: string[];
+  rejectedCandidateEvidenceIds: string[];
+  selections: EvidenceSelection[];
+  rejections: EvidenceRejection[];
+  strengthFactors: string[];
+  limitations: string[];
+  explanation: string;
+}
+
+export interface MissingEvidence {
+  requirementId: string;
+  requirementText: string;
+  reason: string;
+}
+
+export interface CuratedEvidencePack {
+  id: string;
+  runIdentity: string;
+  jobDescriptionId: string;
+  jobAnalysisId?: string;
+  candidatePackVersion: string;
+  candidatePackHash: string;
+  provider: string;
+  model: string;
+  promptVersion: string;
+  createdAt: Date;
+  overallCoverageSummary: string;
+  requirementCoverage: RequirementCoverage[];
+  recommendedEvidence: EvidenceSelection[];
+  discardedEvidence: EvidenceRejection[];
+  missingEvidence: MissingEvidence[];
+  warnings: string[];
+  limitations: string[];
+  displayScore?: number;
+}

@@ -245,6 +245,24 @@ describe("jobs CLI commands", () => {
     warnings: [],
     items: []
   };
+  const curatedEvidencePack = {
+    id: "curated-1",
+    runIdentity: "run-1",
+    jobDescriptionId: "job-1",
+    candidatePackVersion: "candidate-evidence-pack-v1",
+    candidatePackHash: "pack-hash",
+    provider: "ollama",
+    model: "test-model",
+    promptVersion: "evidence-reasoner-v3",
+    createdAt: new Date("2026-07-16T00:00:00.000Z"),
+    overallCoverageSummary: "Partial coverage.",
+    requirementCoverage: [],
+    recommendedEvidence: [],
+    discardedEvidence: [],
+    missingEvidence: [],
+    warnings: [],
+    limitations: []
+  };
 
   function createProgram() {
     const document = makeJobDescription();
@@ -262,6 +280,7 @@ describe("jobs CLI commands", () => {
         semanticText: "TypeScript",
         warnings: []
       })) },
+      reasonJobEvidence: { execute: vi.fn(async () => curatedEvidencePack) },
       close: vi.fn(async () => undefined)
     };
     const retrievalServices = { hybridSearch: { execute: vi.fn(async () => evidencePack) }, close: vi.fn(async () => undefined) };
@@ -298,5 +317,20 @@ describe("jobs CLI commands", () => {
   it("uses the same validation semantics as retrieve", async () => {
     const { program } = createProgram();
     await expect(program.parseAsync(["node", "pke", "jobs", "retrieve", "job-1", "--claim-status", "rejected"])).rejects.toThrow("Claim status filter must be confirmed or single_source");
+  });
+
+  it("curates retrieved evidence with model override and supports JSON output", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { program, jobsServices, retrievalServices } = createProgram();
+    await program.parseAsync(["node", "pke", "jobs", "reason", "job-1", "--model", "override-model", "--json"]);
+
+    expect(retrievalServices.hybridSearch.execute).toHaveBeenCalledWith({ query: evidencePack.query });
+    expect(jobsServices.reasonJobEvidence.execute).toHaveBeenCalledWith({
+      jobDescriptionId: "job-1",
+      evidencePack,
+      model: "override-model"
+    });
+    expect(JSON.parse(log.mock.calls[0][0]).promptVersion).toBe("evidence-reasoner-v3");
+    log.mockRestore();
   });
 });

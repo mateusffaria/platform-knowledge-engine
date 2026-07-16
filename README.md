@@ -62,7 +62,7 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
    npm run pke -- ingest ./examples/profile.md
    ```
 
-6. Optional: enable semantic retrieval and job analysis with Ollama.
+6. Optional: enable semantic retrieval, job analysis, and evidence reasoning with Ollama.
 
    Install and start Ollama, then pull the local embedding model:
 
@@ -112,9 +112,10 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
    npm run pke -- jobs ingest examples/staff-backend-engineer-job.md --json
    npm run pke -- jobs analyze <job-id> --verbose
    npm run pke -- jobs retrieve <job-id> --verbose
+   npm run pke -- jobs reason <job-id> --verbose
    ```
 
-   Use the `jobDescription.job.id` returned by the ingest JSON output. `analyze` stores a separately validated `JobAnalysis`; it never changes the canonical job description or deterministic requirements. Use `--json` for the complete analysis payload or `--model <model>` to override `LLM_MODEL` for one run.
+   Use the `jobDescription.job.id` returned by the ingest JSON output. `analyze` stores a separately validated `JobAnalysis`; it never changes the canonical job description or deterministic requirements. `reason` retrieves preselected canonical evidence, validates a bounded LLM curation, and persists an immutable Curated Evidence Pack. Use `--json` for the complete payload or `--model <model>` to override `LLM_MODEL` for one run.
 
 8. Run tests:
 
@@ -132,12 +133,12 @@ Environment variables:
 - `LANGFUSE_ENABLED`: reserved for future real Langfuse integration. The current implementation remains no-op without credentials.
 - `EMBEDDING_PROVIDER`: embedding provider for semantic retrieval. Use `ollama`.
 - `EMBEDDING_MODEL`: embedding model name. Use `nomic-embed-text` for the local Ollama setup; the current vector schema expects 768-dimensional embeddings.
-- `LLM_PROVIDER`: text-generation provider for job analysis. The current supported value is `ollama`.
-- `LLM_MODEL`: required Ollama text-generation model for `pke jobs analyze`, for example `qwen3:8b`.
+- `LLM_PROVIDER`: text-generation provider for job analysis and evidence reasoning. The current supported value is `ollama`.
+- `LLM_MODEL`: required Ollama text-generation model for `pke jobs analyze` and `pke jobs reason`, for example `qwen3:8b`.
 - `OLLAMA_BASE_URL`: Ollama API base URL. Defaults to `http://localhost:11434`.
 - `SEMANTIC_SEARCH_MIN_SCORE`: optional minimum similarity score for relevant semantic search evidence. Leave unset to preserve unfiltered ranked search behavior.
 
-`EMBEDDING_*` configuration is used for semantic indexing and retrieval. `LLM_*` configuration is used only for job analysis; ingestion, show, and deterministic retrieval remain usable without LLM configuration.
+`EMBEDDING_*` configuration is used for semantic indexing and retrieval. `LLM_*` configuration is used for bounded job analysis and evidence reasoning; ingestion, show, and deterministic retrieval remain usable without LLM configuration.
 
 ## Job Analysis
 
@@ -147,9 +148,12 @@ Job analysis enriches a persisted canonical job description with conservative in
 npm run pke -- jobs ingest examples/staff-backend-engineer-job.md --json
 npm run pke -- jobs analyze <job-id> --json
 npm run pke -- jobs retrieve <job-id> --verbose
+npm run pke -- jobs reason <job-id> --verbose
 ```
 
 The agent receives only the job source and deterministic requirement provenance. It prefers omission over unsupported competency expansion; a source reference or warning never validates an unsupported claim. Successful analyses are immutable snapshots linked to the job, and an identical v3 request (canonical content, prompt version, provider, and model) reuses its existing snapshot. Malformed model output is rejected without altering the canonical job or previous analyses. Analysis-derived text can enrich semantic retrieval, but deterministic requirements remain authoritative for PKQL filters and no analysis can modify professional EvidenceClaims.
+
+Evidence reasoning is a separate bounded curation step. It receives only a Candidate Evidence Pack of preselected, claim-addressable canonical evidence and returns a validated Curated Evidence Pack with requirement coverage, selections, rejections, warnings, and limitations. It cannot access repositories, PostgreSQL, pgvector, external search, or tools; it cannot create evidence, rewrite canonical claims or objective signals, or change trust status. Coverage is qualitative (`strong`, `partial`, `weak`, or `missing`) and is not proof that a candidate meets a hiring requirement. Repeated runs with the same candidate-pack hash, selected analysis, provider, model, and prompt version reuse the stored curated result.
 
 ## Semantic Search Relevance
 

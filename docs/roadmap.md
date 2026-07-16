@@ -90,16 +90,18 @@ Capabilities:
 - deterministic requirement extraction with provenance and inference flags;
 - job retrieval intent generation with PKQL mapping and semantic fallback;
 - `pke jobs ingest`, `pke jobs show`, `pke jobs analyze`, and `pke jobs retrieve`;
+- `pke jobs reason` with bounded, schema-validated Candidate Evidence Pack curation;
 - validated Job Analyzer snapshots with versioned prompts and Ollama behind an `LlmProvider` port;
 - evidence builder;
 - reviewer;
 - validator.
 
-Status: job description ingestion, Job Analyzer enrichment, and retrieval intent implemented.
+Status: job description ingestion, Job Analyzer enrichment, retrieval intent, and bounded Curated Evidence Pack reasoning implemented.
 
 Current limitations:
 
 - parsing is deterministic and conservative; unknown or ambiguous requirements remain semantic text;
+- qualitative evidence coverage is not a hiring-fit score or proof of qualification;
 - no URL scraping, ATS scoring, resume or cover-letter generation, automatic applications, multi-agent orchestration, or benchmarking;
 - job descriptions are external requirements, never verified professional knowledge or evidence claims.
 

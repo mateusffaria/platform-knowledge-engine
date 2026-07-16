@@ -1,6 +1,6 @@
 import { Command } from "commander";
 
-import { JobAnalysis, JobAnalysisDomainSignal, JobAnalysisSenioritySignal, JobAnalysisSignal, JobDescriptionWithRequirements, JobRetrievalIntent } from "../../domain/model.js";
+import { CuratedEvidencePack, JobAnalysis, JobAnalysisDomainSignal, JobAnalysisSenioritySignal, JobAnalysisSignal, JobDescriptionWithRequirements, JobRetrievalIntent } from "../../domain/model.js";
 import { EvidenceClaimStatus, EvidencePack, HybridSubjectType } from "../../../retrieval/application/types.js";
 
 export interface JobsServices {
@@ -15,6 +15,9 @@ export interface JobsServices {
   };
   buildJobRetrievalIntent: {
     execute(command: { jobDescriptionId: string }): Promise<JobRetrievalIntent>;
+  };
+  reasonJobEvidence: {
+    execute(command: { jobDescriptionId: string; evidencePack: EvidencePack; model?: string }): Promise<CuratedEvidencePack>;
   };
   close(): Promise<void>;
 }
@@ -188,6 +191,46 @@ function printEvidencePack(pack: EvidencePack, options: { json?: boolean; verbos
   }
 }
 
+function printCuratedEvidencePack(pack: CuratedEvidencePack, options: { json?: boolean; verbose?: boolean }): void {
+  if (options.json) {
+    console.log(JSON.stringify(pack, null, 2));
+    return;
+  }
+  console.log(`Curated Evidence Pack for ${pack.jobDescriptionId}`);
+  console.log(`provider=${pack.provider} model=${pack.model} prompt=${pack.promptVersion}`);
+  console.log(`coverage=${pack.overallCoverageSummary}`);
+  if (pack.displayScore !== undefined) {
+    console.log(`displayScore=${pack.displayScore} (qualitative coverage presentation only)`);
+  }
+  for (const coverage of pack.requirementCoverage) {
+    console.log(`${coverage.coverageStatus}: ${coverage.requirementText}`);
+    for (const selection of coverage.selections) {
+      console.log(`   selected ${selection.evidenceClaimId}: ${selection.contribution}`);
+      if (options.verbose) {
+        console.log(`   reason=${selection.reason} exaggerationRisk=${selection.exaggerationRisk}`);
+        console.log(`   canonical=${selection.evidence.claimText}`);
+        for (const source of selection.evidence.sources) {
+          console.log(`   source=${source.sourcePath ?? source.sourceDocumentId} ${source.locator ?? ""} ${source.excerpt}`);
+        }
+      }
+    }
+    if (options.verbose) {
+      for (const rejection of coverage.rejections) {
+        console.log(`   rejected ${rejection.evidenceClaimId} (${rejection.reason}): ${rejection.explanation}`);
+      }
+      for (const factor of coverage.strengthFactors) {
+        console.log(`   strength: ${factor}`);
+      }
+      for (const limitation of coverage.limitations) {
+        console.log(`   limitation: ${limitation}`);
+      }
+    }
+  }
+  for (const warning of [...pack.warnings, ...pack.limitations]) {
+    console.log(`Warning: ${warning}`);
+  }
+}
+
 export function registerJobsCommands(
   program: Command,
   createJobsServices: JobsServicesFactory,
@@ -283,6 +326,31 @@ export function registerJobsCommands(
             console.log(`Job intent warning: ${warning}`);
           }
         }
+      } finally {
+        await retrievalServices?.close();
+        await jobsServices.close();
+      }
+    });
+
+  jobs.command("reason")
+    .description("Curate bounded canonical evidence for a persisted job description")
+    .argument("<job-id>", "job description id")
+    .option("--model <model>", "override the configured LLM model for this reasoning run")
+    .option("--json", "print machine-readable JSON")
+    .option("--verbose", "include canonical evidence provenance, selections, and rejections")
+    .action(async (jobDescriptionId: string, options: { model?: string; json?: boolean; verbose?: boolean }) => {
+      const jobsServices = createJobsServices();
+      let retrievalServices: JobRetrievalServices | undefined;
+      try {
+        const intent = await jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId });
+        retrievalServices = createRetrievalServices();
+        const evidencePack = await retrievalServices.hybridSearch.execute({ query: intent.query });
+        const curated = await jobsServices.reasonJobEvidence.execute({
+          jobDescriptionId,
+          evidencePack: { ...evidencePack, warnings: [...evidencePack.warnings, ...intent.warnings] },
+          model: options.model
+        });
+        printCuratedEvidencePack(curated, options);
       } finally {
         await retrievalServices?.close();
         await jobsServices.close();

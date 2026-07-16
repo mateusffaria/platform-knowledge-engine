@@ -1,0 +1,45 @@
+import { EvidencePack } from "../../../retrieval/application/types.js";
+import { CandidateEvidencePackBuilder } from "../ports/candidate-evidence-pack-builder.js";
+import { CuratedEvidencePackRepository } from "../ports/curated-evidence-pack-repository.js";
+import { EvidenceReasoner } from "../ports/evidence-reasoner.js";
+import { JobAnalysisRepository } from "../ports/job-analysis-repository.js";
+import { JobDescriptionRepository } from "../ports/job-description-repository.js";
+
+export function createReasonJobEvidenceUseCase(dependencies: {
+  jobDescriptionRepository: JobDescriptionRepository;
+  jobAnalysisRepository: JobAnalysisRepository;
+  candidateEvidencePackBuilder: CandidateEvidencePackBuilder;
+  curatedEvidencePackRepository: CuratedEvidencePackRepository;
+  evidenceReasoner: EvidenceReasoner;
+}) {
+  return {
+    async execute(command: { jobDescriptionId: string; evidencePack: EvidencePack; model?: string }) {
+      const jobDescription = await dependencies.jobDescriptionRepository.findById(command.jobDescriptionId);
+      if (!jobDescription) {
+        throw new Error(`Job description not found: ${command.jobDescriptionId}`);
+      }
+      const analysis = await dependencies.jobAnalysisRepository.findLatestByJobDescriptionId(command.jobDescriptionId);
+      const candidatePack = dependencies.candidateEvidencePackBuilder.build({
+        jobDescription,
+        jobAnalysisId: analysis?.id,
+        evidencePack: command.evidencePack
+      });
+      const run = dependencies.evidenceReasoner.getRunIdentity({ candidatePack, model: command.model });
+      const existing = await dependencies.curatedEvidencePackRepository.findByRunIdentity(command.jobDescriptionId, run.runIdentity);
+      if (existing) {
+        return existing;
+      }
+      const curated = await dependencies.evidenceReasoner.reason({ candidatePack, model: command.model });
+      try {
+        await dependencies.curatedEvidencePackRepository.save(curated);
+      } catch (error) {
+        const concurrent = await dependencies.curatedEvidencePackRepository.findByRunIdentity(command.jobDescriptionId, run.runIdentity);
+        if (concurrent) {
+          return concurrent;
+        }
+        throw error;
+      }
+      return curated;
+    }
+  };
+}

@@ -2,24 +2,33 @@ import { createDatabase } from "../../../shared/database/client.js";
 import { loadConfig } from "../../../shared/config/env.js";
 import { createLangfuseClient } from "../../../shared/observability/langfuse.js";
 import { JobAnalyzerAgent } from "../application/services/job-analyzer-agent.js";
+import { LlmEvidenceReasoner } from "../application/services/llm-evidence-reasoner.js";
+import { buildCandidateEvidencePack } from "../application/candidate-evidence-pack.js";
 import { createAnalyzeJobDescriptionUseCase } from "../application/use-cases/analyze-job-description.js";
 import { createBuildJobRetrievalIntentUseCase } from "../application/use-cases/build-job-retrieval-intent.js";
 import { createIngestJobDescriptionUseCase } from "../application/use-cases/ingest-job-description.js";
 import { createShowJobDescriptionUseCase } from "../application/use-cases/show-job-description.js";
+import { createReasonJobEvidenceUseCase } from "../application/use-cases/reason-job-evidence.js";
 import { DrizzleJobDescriptionRepository } from "./repositories/drizzle-job-description-repository.js";
 import { DrizzleJobAnalysisRepository } from "./repositories/drizzle-job-analysis-repository.js";
+import { DrizzleCuratedEvidencePackRepository } from "./repositories/drizzle-curated-evidence-pack-repository.js";
 import { DeterministicJobSourceParser } from "./parsers/deterministic-job-source-parser.js";
 import { LlmProviderFactory } from "./llm-providers/llm-provider-factory.js";
 import { LangfuseJobAnalysisObservability } from "./observability/langfuse-job-analysis-observability.js";
+import { LangfuseEvidenceReasoningObservability } from "./observability/langfuse-evidence-reasoning-observability.js";
 
 export function createProductionJobsServices() {
   const config = loadConfig();
   const database = createDatabase(config.databaseUrl);
   const repository = new DrizzleJobDescriptionRepository(database.db);
   const analysisRepository = new DrizzleJobAnalysisRepository(database.db);
-  const observability = new LangfuseJobAnalysisObservability(createLangfuseClient(config.langfuseEnabled));
+  const curatedEvidencePackRepository = new DrizzleCuratedEvidencePackRepository(database.db);
+  const langfuse = createLangfuseClient(config.langfuseEnabled);
+  const observability = new LangfuseJobAnalysisObservability(langfuse);
   const providerFactory = new LlmProviderFactory();
-  const jobAnalyzer = new JobAnalyzerAgent(providerFactory.create(config), observability);
+  const provider = providerFactory.create(config);
+  const jobAnalyzer = new JobAnalyzerAgent(provider, observability);
+  const evidenceReasoner = new LlmEvidenceReasoner(provider, new LangfuseEvidenceReasoningObservability(langfuse));
 
   return {
     ingestJobDescription: createIngestJobDescriptionUseCase({
@@ -31,6 +40,13 @@ export function createProductionJobsServices() {
       jobDescriptionRepository: repository,
       jobAnalysisRepository: analysisRepository,
       jobAnalyzer
+    }),
+    reasonJobEvidence: createReasonJobEvidenceUseCase({
+      jobDescriptionRepository: repository,
+      jobAnalysisRepository: analysisRepository,
+      candidateEvidencePackBuilder: { build: buildCandidateEvidencePack },
+      curatedEvidencePackRepository,
+      evidenceReasoner
     }),
     buildJobRetrievalIntent: createBuildJobRetrievalIntentUseCase(repository, analysisRepository),
     close: database.close

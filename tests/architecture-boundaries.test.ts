@@ -168,4 +168,28 @@ describe("Architecture boundaries", () => {
       }
     }
   });
+
+  it("keeps evidence-reasoning application code bounded to domain and ports", async () => {
+    const files = await readTypescriptFiles("src/modules/jobs/application");
+    const reasoningFiles = files.filter((file) => /evidence-reason|candidate-evidence|evidence-curation|reason-job-evidence/.test(file.path));
+    const forbiddenImports = [
+      "retrieval/infrastructure",
+      "infrastructure/repositories",
+      "shared/database",
+      "drizzle-orm",
+      "pgvector",
+      "postgres",
+      "llm-providers",
+      "shared/observability"
+    ];
+
+    for (const file of reasoningFiles) {
+      const imports = importedSpecifiers(file.contents);
+      for (const forbiddenImport of forbiddenImports) {
+        for (const importSpecifier of imports) {
+          expect(importSpecifier, `${file.path} imports ${forbiddenImport}`).not.toContain(forbiddenImport);
+        }
+      }
+    }
+  });
 });

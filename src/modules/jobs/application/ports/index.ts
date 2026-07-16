@@ -4,3 +4,7 @@ export * from "./job-analysis-repository.js";
 export * from "./job-analyzer.js";
 export * from "./job-analysis-observability.js";
 export * from "./llm-provider.js";
+export * from "./candidate-evidence-pack-builder.js";
+export * from "./curated-evidence-pack-repository.js";
+export * from "./evidence-reasoner.js";
+export * from "./evidence-reasoning-observability.js";
