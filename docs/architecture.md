@@ -267,7 +267,7 @@ The system should not be coupled to a single LLM provider.
 
 LLM and embedding providers must be accessed through explicit ports.
 
-Initial provider support may use OpenAI. Future support may include Ollama or other providers.
+Initial text-generation and embedding-provider support uses Ollama behind explicit provider ports. Future providers may include OpenAI or other implementations without changing jobs or retrieval application contracts.
 
 ## Observability Strategy
 

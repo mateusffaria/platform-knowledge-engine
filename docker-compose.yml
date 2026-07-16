@@ -55,6 +55,8 @@ services:
       LANGFUSE_ENABLED: "false"
       EMBEDDING_PROVIDER: ollama
       EMBEDDING_MODEL: nomic-embed-text
+      LLM_PROVIDER: ollama
+      LLM_MODEL: qwen3:8b
       OLLAMA_BASE_URL: http://ollama:11434
     depends_on:
       postgres:

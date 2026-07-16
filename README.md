@@ -9,12 +9,13 @@ The core problem is not resume generation. The core problem is transforming hete
 - TypeScript/Node.js CLI with a `pke` executable.
 - Markdown ingestion through `pke ingest ./examples/profile.md`.
 - Trusted-knowledge review through `pke claims review`, `pke claims confirm`, and `pke claims reject`.
+- Canonical job-description ingestion, deterministic requirement extraction, and LLM-assisted job analysis through `pke jobs`.
 - Postgres plus pgvector local infrastructure with Docker Compose.
 - Drizzle ORM schema and initial SQL migration.
 - Canonical career model covering source documents, knowledge assets, evidence claims, source references, skills, experiences, projects, and achievements.
 - Structured logging, OpenTelemetry hooks, and a no-op Langfuse abstraction.
 
-Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion, resume generation, cover letter generation, full agent orchestration, hosted deployment, and LLM benchmarking.
+Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion, resume generation, cover letter generation, multi-agent orchestration, hosted deployment, and LLM benchmarking.
 
 ## Requirements
 
@@ -45,6 +46,8 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
 
    `ollama-pull` downloads `nomic-embed-text` into the `pke-ollama-data` Docker volume. You only need to rerun it after changing models or recreating that volume.
 
+   The supplied Compose configuration reserves all available NVIDIA GPUs for the `ollama` service. Install and configure the NVIDIA Container Toolkit before starting it on an NVIDIA host. On a CPU-only host, remove the `ollama.deploy.resources.reservations.devices` block before running Compose.
+
 4. Apply migrations:
 
    ```bash
@@ -59,7 +62,7 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
    npm run pke -- ingest ./examples/profile.md
    ```
 
-6. Optional: enable semantic retrieval with Ollama.
+6. Optional: enable semantic retrieval and job analysis with Ollama.
 
    Install and start Ollama, then pull the local embedding model:
 
@@ -72,7 +75,15 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
    ```bash
    EMBEDDING_PROVIDER=ollama
    EMBEDDING_MODEL=nomic-embed-text
+   LLM_PROVIDER=ollama
+   LLM_MODEL=qwen3:8b
    OLLAMA_BASE_URL=http://localhost:11434
+   ```
+
+   Pull the Job Analyzer model when using the Compose-managed Ollama service:
+
+   ```bash
+   docker compose exec ollama ollama pull qwen3:8b
    ```
 
    The current embedding table is configured for 768-dimensional vectors, which matches `nomic-embed-text`. Models that return a different vector size will be rejected before indexing or search because pgvector columns cannot mix embedding dimensions.
@@ -95,7 +106,17 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
    docker compose run --rm pke search "retrieval systems"
    ```
 
-7. Run tests:
+7. Analyze a job description with the configured LLM:
+
+   ```bash
+   npm run pke -- jobs ingest examples/staff-backend-engineer-job.md --json
+   npm run pke -- jobs analyze <job-id> --verbose
+   npm run pke -- jobs retrieve <job-id> --verbose
+   ```
+
+   Use the `jobDescription.job.id` returned by the ingest JSON output. `analyze` stores a separately validated `JobAnalysis`; it never changes the canonical job description or deterministic requirements. Use `--json` for the complete analysis payload or `--model <model>` to override `LLM_MODEL` for one run.
+
+8. Run tests:
 
    ```bash
    npm test
@@ -111,8 +132,24 @@ Environment variables:
 - `LANGFUSE_ENABLED`: reserved for future real Langfuse integration. The current implementation remains no-op without credentials.
 - `EMBEDDING_PROVIDER`: embedding provider for semantic retrieval. Use `ollama`.
 - `EMBEDDING_MODEL`: embedding model name. Use `nomic-embed-text` for the local Ollama setup; the current vector schema expects 768-dimensional embeddings.
+- `LLM_PROVIDER`: text-generation provider for job analysis. The current supported value is `ollama`.
+- `LLM_MODEL`: required Ollama text-generation model for `pke jobs analyze`, for example `qwen3:8b`.
 - `OLLAMA_BASE_URL`: Ollama API base URL. Defaults to `http://localhost:11434`.
 - `SEMANTIC_SEARCH_MIN_SCORE`: optional minimum similarity score for relevant semantic search evidence. Leave unset to preserve unfiltered ranked search behavior.
+
+`EMBEDDING_*` configuration is used for semantic indexing and retrieval. `LLM_*` configuration is used only for job analysis; ingestion, show, and deterministic retrieval remain usable without LLM configuration.
+
+## Job Analysis
+
+Job analysis enriches a persisted canonical job description with inferred requirements and seniority, domain, cross-team leadership, architecture, and reliability signals. It is not an LLM replacement for deterministic extraction.
+
+```bash
+npm run pke -- jobs ingest examples/staff-backend-engineer-job.md --json
+npm run pke -- jobs analyze <job-id> --json
+npm run pke -- jobs retrieve <job-id> --verbose
+```
+
+The agent receives only the job source and deterministic requirement provenance. Successful analyses are immutable snapshots linked to the job; malformed model output is rejected without altering the canonical job or previous analyses. Analysis-derived text can enrich semantic retrieval, but deterministic requirements remain authoritative for PKQL filters and no analysis can modify professional EvidenceClaims.
 
 ## Semantic Search Relevance
 

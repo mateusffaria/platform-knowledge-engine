@@ -89,18 +89,18 @@ Capabilities:
 - canonical Markdown and plain-text job description ingestion;
 - deterministic requirement extraction with provenance and inference flags;
 - job retrieval intent generation with PKQL mapping and semantic fallback;
-- `pke jobs ingest`, `pke jobs show`, and `pke jobs retrieve`;
-- future job analyzer;
+- `pke jobs ingest`, `pke jobs show`, `pke jobs analyze`, and `pke jobs retrieve`;
+- validated Job Analyzer snapshots with versioned prompts and Ollama behind an `LlmProvider` port;
 - evidence builder;
 - reviewer;
 - validator.
 
-Status: job description ingestion and retrieval intent implemented.
+Status: job description ingestion, Job Analyzer enrichment, and retrieval intent implemented.
 
 Current limitations:
 
 - parsing is deterministic and conservative; unknown or ambiguous requirements remain semantic text;
-- no LLM analysis, URL scraping, ATS scoring, resume or cover-letter generation, automatic applications, or benchmarking;
+- no URL scraping, ATS scoring, resume or cover-letter generation, automatic applications, multi-agent orchestration, or benchmarking;
 - job descriptions are external requirements, never verified professional knowledge or evidence claims.
 
 ## AEM-007 — Knowledge Products
