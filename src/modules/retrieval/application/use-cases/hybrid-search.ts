@@ -337,7 +337,7 @@ function itemFromCandidate(candidate: HybridSearchCandidate, config: RankingConf
     confidenceScore: candidate.confidenceScore,
     semanticScore: candidate.semanticScore,
     structuredScore: candidate.structuredScore,
-    finalScore: calculateFinalScore(candidate, config),
+    finalScore: candidate.finalScore ?? calculateFinalScore(candidate, config),
     sources: candidate.sources,
     retrievalStrategies: candidate.retrievalStrategies
   };
@@ -419,7 +419,10 @@ export function createHybridSearchUseCase({
         merged.set(candidateKey(candidate), existing ? mergeCandidate(existing, candidate) : candidate);
       }
 
-      const mergedCandidates = Array.from(merged.values());
+      const mergedCandidates = Array.from(merged.values()).map((candidate) => ({
+        ...candidate,
+        finalScore: calculateFinalScore(candidate, config)
+      }));
       const eligibleResults: HybridSearchCandidate[] = [];
       const discardedResults: RetrievalDiscardedResult[] = [];
       const scoredItems: EvidenceItem[] = [];

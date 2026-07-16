@@ -38,6 +38,7 @@ describe("canonical evidence reader", () => {
       evidenceClaimId: "claim-go",
       knowledgeAssetId: "asset-go",
       retrievalStrategies: ["semantic"],
+      finalScore: 0.88,
       semanticScore: 0.77
     });
 
@@ -47,6 +48,7 @@ describe("canonical evidence reader", () => {
         evidenceClaimId: "claim-go",
         knowledgeAssetId: "asset-go",
         claimStatus: "single_source",
+        finalScore: 0.88,
         semanticScore: 0.77,
         sources: [expect.objectContaining({ id: "reference-claim-go" })]
       })]

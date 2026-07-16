@@ -4,6 +4,7 @@ export interface CanonicalEvidenceReadInput {
   evidenceClaimId?: string;
   knowledgeAssetId: string;
   retrievalStrategies: RetrievalStrategy[];
+  finalScore?: number;
   semanticScore?: number;
   structuredScore?: number;
 }

@@ -273,6 +273,11 @@ export interface HybridSearchCandidate {
   valueUnit?: string;
   claimStatus?: EvidenceClaimStatus;
   confidenceScore: number;
+  /**
+   * Calculated by hybrid retrieval before diagnostics are exposed. This score
+   * travels unchanged through canonical hydration; it is not a truth score.
+   */
+  finalScore?: number;
   semanticScore?: number;
   structuredScore?: number;
   sources: EvidenceSourceReference[];

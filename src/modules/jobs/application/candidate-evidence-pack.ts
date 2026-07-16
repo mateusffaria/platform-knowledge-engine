@@ -4,11 +4,17 @@ import { EvidencePack } from "../../retrieval/application/types.js";
 import {
   CandidateEvidence,
   CandidateEvidencePack,
+  CandidateSelectionConfig,
   CandidateRequirementEvidence,
   JobDescriptionWithRequirements
 } from "../domain/model.js";
+import {
+  compareCandidateEvidence,
+  defaultCandidateSelectionConfig,
+  selectCandidatesForReasoner
+} from "./candidate-evidence-selection.js";
 
-export const candidateEvidencePackVersion = "candidate-evidence-pack-v2";
+export const candidateEvidencePackVersion = "candidate-evidence-pack-v3";
 
 export function toCandidateEvidence(item: EvidencePack["items"][number]): CandidateEvidence | undefined {
   if (!item.evidenceClaimId) {
@@ -68,13 +74,15 @@ export function buildCandidateEvidencePack(input: {
   evidencePack: EvidencePack;
   retrievalIntent?: string;
   preparedRequirements?: CandidateRequirementEvidence[];
+  selection?: CandidateSelectionConfig;
 }): CandidateEvidencePack {
+  const selection = input.selection ?? defaultCandidateSelectionConfig;
   const candidates = input.evidencePack.items.flatMap((item) => {
     const candidate = toCandidateEvidence(item);
     return candidate ? [candidate] : [];
-  }).sort((left, right) => left.evidenceClaimId.localeCompare(right.evidenceClaimId));
+  }).sort(compareCandidateEvidence);
   const assetOnly = input.evidencePack.items.filter((item) => !item.evidenceClaimId);
-  const requirements: CandidateRequirementEvidence[] = input.preparedRequirements ?? input.jobDescription.requirements
+  const unselectedRequirements: CandidateRequirementEvidence[] = input.preparedRequirements ?? input.jobDescription.requirements
     .filter((requirement) => !requirement.inferred)
     .map((requirement) => ({
       requirementId: requirement.id,
@@ -82,12 +90,15 @@ export function buildCandidateEvidencePack(input: {
       requirementType: requirement.requirementType,
       importance: requirement.importance,
       candidates: candidates.map((candidate) => ({ ...candidate, sources: candidate.sources.map((source) => ({ ...source })), objectiveSignals: { ...candidate.objectiveSignals, retrievalStrategies: [...candidate.objectiveSignals.retrievalStrategies] } })),
+      reasonerCandidateIds: [],
       diagnostics: {
         retrievalIntent: input.retrievalIntent ?? input.evidencePack.query,
         rawRetrievalResultCount: input.evidencePack.items.length,
         eligibleResultCount: candidates.length,
         canonicalHydrationCount: candidates.length,
         requirementAssociationCount: candidates.length,
+        selectedForReasonerCount: 0,
+        selectionExclusions: [],
         discardedResults: assetOnly.map((item) => ({
           stage: "hydration" as const,
           reasonCode: "asset_only_retrieval_result" as const,
@@ -98,6 +109,20 @@ export function buildCandidateEvidencePack(input: {
         }))
       }
     }));
+  const requirements = unselectedRequirements.map((requirement) => {
+    const rankedCandidates = [...requirement.candidates].sort(compareCandidateEvidence);
+    const selected = selectCandidatesForReasoner(rankedCandidates, selection);
+    return {
+      ...requirement,
+      candidates: rankedCandidates,
+      reasonerCandidateIds: selected.reasonerCandidateIds,
+      diagnostics: {
+        ...requirement.diagnostics,
+        selectedForReasonerCount: selected.reasonerCandidateIds.length,
+        selectionExclusions: selected.selectionExclusions
+      }
+    };
+  });
   const warnings = [...input.evidencePack.warnings];
   if (assetOnly.length > 0) {
     warnings.push(`${assetOnly.length} retrieval result(s) without canonical evidence-claim identities were excluded from evidence reasoning.`);
@@ -106,6 +131,7 @@ export function buildCandidateEvidencePack(input: {
     version: candidateEvidencePackVersion,
     jobDescriptionId: input.jobDescription.job.id,
     jobAnalysisId: input.jobAnalysisId,
+    selection,
     requirements,
     warnings
   };

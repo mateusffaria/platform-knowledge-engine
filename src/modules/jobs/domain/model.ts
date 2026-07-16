@@ -177,7 +177,23 @@ export interface CandidateRequirementEvidence {
   requirementType: JobRequirementType;
   importance: JobRequirementImportance;
   candidates: CandidateEvidence[];
+  /** Ordered references into candidates that are supplied to the reasoner. */
+  reasonerCandidateIds: string[];
   diagnostics: RequirementCandidatePipelineDiagnostics;
+}
+
+export interface CandidateSelectionConfig {
+  limitPerRequirement: number;
+  minCandidateScore?: number;
+}
+
+export type CandidateSelectionExclusionReason = "minimum_candidate_score_not_met" | "limit_per_requirement";
+
+export interface CandidateSelectionExclusion {
+  evidenceClaimId: string;
+  reasonCode: CandidateSelectionExclusionReason;
+  reason: string;
+  finalScore: number;
 }
 
 export type CandidatePipelineStage = "retrieval" | "eligibility" | "hydration" | "association";
@@ -204,10 +220,18 @@ export interface DiscardedCandidateResult {
 
 export interface RequirementCandidatePipelineDiagnostics {
   retrievalIntent: string;
+  /** Number of retrieval subjects returned before canonical hydration. */
   rawRetrievalResultCount: number;
+  /** Number of hydrated canonical claims with an eligible canonical status. */
   eligibleResultCount: number;
+  /** Number of canonical claims emitted by hydration before eligibility filtering. */
   canonicalHydrationCount: number;
+  /** Number of unique eligible canonical claims retained in candidates. */
   requirementAssociationCount: number;
+  /** Number of associated candidates selected for the bounded reasoner context. */
+  selectedForReasonerCount: number;
+  /** Valid candidates omitted only from reasoner context, never from candidates. */
+  selectionExclusions: CandidateSelectionExclusion[];
   discardedResults: DiscardedCandidateResult[];
 }
 
@@ -216,6 +240,7 @@ export interface CandidateEvidencePack {
   hash: string;
   jobDescriptionId: string;
   jobAnalysisId?: string;
+  selection: CandidateSelectionConfig;
   generatedAt: Date;
   requirements: CandidateRequirementEvidence[];
   warnings: string[];

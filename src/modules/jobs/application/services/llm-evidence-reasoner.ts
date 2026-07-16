@@ -40,7 +40,7 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
       runIdentity: run.runIdentity
     });
     try {
-      if (!command.candidatePack.requirements.some((requirement) => requirement.candidates.length > 0)) {
+      if (!command.candidatePack.requirements.some((requirement) => requirement.reasonerCandidateIds.length > 0)) {
         const finalized = finalizeCuratedEvidencePack({
           id: randomUUID(),
           runIdentity: run.runIdentity,

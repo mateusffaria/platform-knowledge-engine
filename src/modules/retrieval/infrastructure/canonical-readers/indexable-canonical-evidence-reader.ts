@@ -24,6 +24,7 @@ function toCandidate(
     valueUnit: claim.valueUnit,
     claimStatus: claim.status,
     confidenceScore: claim.confidenceScore,
+    finalScore: input.finalScore,
     semanticScore: input.semanticScore,
     structuredScore: input.structuredScore,
     sources: [{

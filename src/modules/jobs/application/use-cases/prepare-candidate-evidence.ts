@@ -1,6 +1,6 @@
 import { isClaimIndexableStatus } from "../../../reconciliation/domain/eligibility.js";
 import { CanonicalEvidenceReader } from "../../../retrieval/application/ports/canonical-evidence-reader.js";
-import { EvidenceItem, EvidencePack, HybridSearchCandidate } from "../../../retrieval/application/types.js";
+import { EvidenceItem, EvidencePack, HybridSearchCandidate, RetrievalStrategy } from "../../../retrieval/application/types.js";
 import { buildCandidateEvidencePack, toCandidateEvidence } from "../candidate-evidence-pack.js";
 import { RequirementCandidatePreparation, RequirementEvidenceRetriever } from "../ports/requirement-candidate-preparation.js";
 import {
@@ -17,11 +17,8 @@ function requirementQuery(requirement: JobDescriptionWithRequirements["requireme
 }
 
 function evidenceItemFromCanonical(
-  candidate: HybridSearchCandidate,
-  retrieved: EvidencePack
+  candidate: HybridSearchCandidate
 ): EvidenceItem {
-  const prior = retrieved.items.find((item) => item.evidenceClaimId === candidate.evidenceClaimId);
-  const finalScore = prior?.finalScore ?? Math.max(candidate.semanticScore ?? 0, candidate.structuredScore ?? 0);
   return {
     evidenceClaimId: candidate.evidenceClaimId,
     knowledgeAssetId: candidate.knowledgeAssetId,
@@ -38,9 +35,52 @@ function evidenceItemFromCanonical(
     confidenceScore: candidate.confidenceScore,
     semanticScore: candidate.semanticScore,
     structuredScore: candidate.structuredScore,
-    finalScore,
+    finalScore: candidate.finalScore ?? 0,
     sources: candidate.sources,
     retrievalStrategies: candidate.retrievalStrategies
+  };
+}
+
+function mergeStrategies(left: RetrievalStrategy[], right: RetrievalStrategy[]): RetrievalStrategy[] {
+  return (["structured", "semantic"] as const).filter((strategy) => left.includes(strategy) || right.includes(strategy));
+}
+
+function mergeCandidateEvidence(current: CandidateEvidence, next: CandidateEvidence): CandidateEvidence {
+  const preferred = next.objectiveSignals.finalScore > current.objectiveSignals.finalScore ? next : current;
+  const other = preferred === next ? current : next;
+  return {
+    ...preferred,
+    sources: [...preferred.sources, ...other.sources.filter((source) => !preferred.sources.some((existing) => (
+      existing.sourceDocumentId === source.sourceDocumentId && existing.sourceReferenceId === source.sourceReferenceId
+    )))],
+    objectiveSignals: {
+      ...preferred.objectiveSignals,
+      retrievalStrategies: mergeStrategies(
+        preferred.objectiveSignals.retrievalStrategies as RetrievalStrategy[],
+        other.objectiveSignals.retrievalStrategies as RetrievalStrategy[]
+      )
+    }
+  };
+}
+
+function discardKey(discarded: CandidateRequirementEvidence["diagnostics"]["discardedResults"][number]): string {
+  return [discarded.stage, discarded.reasonCode, discarded.evidenceClaimId ?? "", discarded.knowledgeAssetId ?? ""].join("|");
+}
+
+function mergeDiscard(
+  current: CandidateRequirementEvidence["diagnostics"]["discardedResults"][number],
+  next: CandidateRequirementEvidence["diagnostics"]["discardedResults"][number]
+): CandidateRequirementEvidence["diagnostics"]["discardedResults"][number] {
+  const currentScore = current.finalScore ?? Number.NEGATIVE_INFINITY;
+  const nextScore = next.finalScore ?? Number.NEGATIVE_INFINITY;
+  const preferred = nextScore > currentScore ? next : current;
+  const other = preferred === next ? current : next;
+  return {
+    ...preferred,
+    retrievalStrategies: mergeStrategies(
+      (preferred.retrievalStrategies ?? []) as RetrievalStrategy[],
+      (other.retrievalStrategies ?? []) as RetrievalStrategy[]
+    )
   };
 }
 
@@ -58,26 +98,34 @@ async function prepareRequirement(input: {
     throw new Error(`Retrieval result requirement identity ${retrieved.requirementId} does not match ${input.requirement.id}.`);
   }
   const rawResults = retrieved.diagnostics.rawResults;
-  const candidates: CandidateEvidence[] = [];
-  const discardedResults: CandidateRequirementEvidence["diagnostics"]["discardedResults"] = [];
-  const associatedClaimIds = new Set<string>();
+  const associatedCandidates = new Map<string, CandidateEvidence>();
+  const discards = new Map<string, CandidateRequirementEvidence["diagnostics"]["discardedResults"][number]>();
+  let canonicalHydrationCount = 0;
+  let eligibleResultCount = 0;
+  const recordDiscard = (discarded: CandidateRequirementEvidence["diagnostics"]["discardedResults"][number]): void => {
+    const key = discardKey(discarded);
+    const existing = discards.get(key);
+    discards.set(key, existing ? mergeDiscard(existing, discarded) : discarded);
+  };
 
   for (const raw of rawResults) {
     const hydrated = await input.canonicalEvidenceReader.read({
       evidenceClaimId: raw.evidenceClaimId,
       knowledgeAssetId: raw.knowledgeAssetId,
       retrievalStrategies: raw.retrievalStrategies,
+      finalScore: raw.finalScore,
       semanticScore: raw.semanticScore,
       structuredScore: raw.structuredScore
     });
     if (hydrated.kind === "discarded") {
-      discardedResults.push({
+      recordDiscard({
         stage: "hydration",
         reasonCode: hydrated.reasonCode,
         reason: hydrated.reason,
         evidenceClaimId: raw.evidenceClaimId,
         knowledgeAssetId: raw.knowledgeAssetId,
         retrievalStrategies: [...raw.retrievalStrategies],
+        finalScore: raw.finalScore,
         semanticScore: raw.semanticScore,
         structuredScore: raw.structuredScore
       });
@@ -88,9 +136,11 @@ async function prepareRequirement(input: {
       throw new Error(`Canonical hydration returned no terminal candidate or diagnostic for retrieval asset ${raw.knowledgeAssetId}.`);
     }
 
+    canonicalHydrationCount += hydrated.candidates.length;
+
     for (const canonical of hydrated.candidates) {
       if (!canonical.claimStatus || !isClaimIndexableStatus(canonical.claimStatus)) {
-        discardedResults.push({
+        recordDiscard({
           stage: "eligibility",
           reasonCode: "ineligible_claim_status",
           reason: canonical.claimStatus
@@ -99,32 +149,54 @@ async function prepareRequirement(input: {
           evidenceClaimId: canonical.evidenceClaimId,
           knowledgeAssetId: canonical.knowledgeAssetId,
           retrievalStrategies: [...canonical.retrievalStrategies],
+          finalScore: canonical.finalScore,
           semanticScore: canonical.semanticScore,
           structuredScore: canonical.structuredScore
         });
         continue;
       }
-      if (!canonical.evidenceClaimId || associatedClaimIds.has(canonical.evidenceClaimId)) {
-        discardedResults.push({
+      eligibleResultCount += 1;
+      if (!canonical.evidenceClaimId) {
+        recordDiscard({
           stage: "association",
           reasonCode: "duplicate_requirement_candidate",
           reason: "This canonical claim was already associated with the requirement through another retrieval strategy.",
           evidenceClaimId: canonical.evidenceClaimId,
           knowledgeAssetId: canonical.knowledgeAssetId,
           retrievalStrategies: [...canonical.retrievalStrategies],
+          finalScore: canonical.finalScore,
           semanticScore: canonical.semanticScore,
           structuredScore: canonical.structuredScore
         });
         continue;
       }
-      const evidence = toCandidateEvidence(evidenceItemFromCanonical(canonical, retrieved));
+      const evidence = toCandidateEvidence(evidenceItemFromCanonical(canonical));
       if (!evidence) {
         throw new Error(`Canonical hydration returned claim ${canonical.evidenceClaimId ?? "without identity"} that cannot be associated.`);
       }
-      associatedClaimIds.add(evidence.evidenceClaimId);
-      candidates.push(evidence);
+      const existing = associatedCandidates.get(evidence.evidenceClaimId);
+      if (existing) {
+        const mergedEvidence = mergeCandidateEvidence(existing, evidence);
+        recordDiscard({
+          stage: "association",
+          reasonCode: "duplicate_requirement_candidate",
+          reason: "This canonical claim was already associated with the requirement through another retrieval strategy.",
+          evidenceClaimId: evidence.evidenceClaimId,
+          knowledgeAssetId: evidence.knowledgeAssetId,
+          retrievalStrategies: [...mergedEvidence.objectiveSignals.retrievalStrategies],
+          semanticScore: mergedEvidence.objectiveSignals.semanticScore,
+          structuredScore: mergedEvidence.objectiveSignals.structuredScore,
+          finalScore: mergedEvidence.objectiveSignals.finalScore
+        });
+        associatedCandidates.set(evidence.evidenceClaimId, mergedEvidence);
+        continue;
+      }
+      associatedCandidates.set(evidence.evidenceClaimId, evidence);
     }
   }
+
+  const candidates = Array.from(associatedCandidates.values());
+  const discardedResults = Array.from(discards.values());
 
   for (const raw of rawResults) {
     const hasTerminalOutcome = discardedResults.some((discarded) => (
@@ -139,21 +211,21 @@ async function prepareRequirement(input: {
     }
   }
 
-  const duplicateAssociationCount = discardedResults.filter((item) => item.reasonCode === "duplicate_requirement_candidate").length;
-  const ineligibleCanonicalCount = discardedResults.filter((item) => item.reasonCode === "ineligible_claim_status").length;
-
   return {
     requirementId: input.requirement.id,
     requirementText: input.requirement.originalText,
     requirementType: input.requirement.requirementType,
     importance: input.requirement.importance,
-    candidates: candidates.sort((left, right) => left.evidenceClaimId.localeCompare(right.evidenceClaimId)),
+    candidates,
+    reasonerCandidateIds: [],
     diagnostics: {
       retrievalIntent,
       rawRetrievalResultCount: rawResults.length,
-      eligibleResultCount: candidates.length + duplicateAssociationCount,
-      canonicalHydrationCount: candidates.length + duplicateAssociationCount + ineligibleCanonicalCount,
+      eligibleResultCount,
+      canonicalHydrationCount,
       requirementAssociationCount: candidates.length,
+      selectedForReasonerCount: 0,
+      selectionExclusions: [],
       discardedResults
     }
   };
@@ -188,7 +260,8 @@ export function createPrepareCandidateEvidenceUseCase(): RequirementCandidatePre
         jobDescription: input.jobDescription,
         jobAnalysisId: input.jobAnalysisId,
         evidencePack: representativeEvidencePack,
-        preparedRequirements
+        preparedRequirements,
+        selection: input.selection
       });
     }
   };

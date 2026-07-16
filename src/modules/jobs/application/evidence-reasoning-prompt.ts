@@ -18,7 +18,9 @@ export function buildEvidenceReasoningUserPrompt(pack: CandidateEvidencePack): s
       requirementId: requirement.requirementId,
       requirementText: requirement.requirementText,
       importance: requirement.importance,
-      candidates: requirement.candidates.map((candidate) => ({
+      candidates: requirement.candidates
+        .filter((candidate) => requirement.reasonerCandidateIds.includes(candidate.evidenceClaimId))
+        .map((candidate) => ({
         evidenceClaimId: candidate.evidenceClaimId,
         claimText: candidate.claimText,
         claimType: candidate.claimType,
@@ -26,7 +28,7 @@ export function buildEvidenceReasoningUserPrompt(pack: CandidateEvidencePack): s
         claimStatus: candidate.claimStatus,
         valueText: candidate.valueText,
         valueUnit: candidate.valueUnit
-      }))
+        }))
     })),
     responseShape: {
       overallCoverageSummary: "string",

@@ -88,8 +88,11 @@ function normalizeComplementaryEvidenceIds(
   });
 }
 
-function candidateById(candidates: CandidateEvidence[], id: string): CandidateEvidence {
-  const candidate = candidates.find((value) => value.evidenceClaimId === id);
+function candidateById(requirement: CandidateEvidencePack["requirements"][number], id: string): CandidateEvidence {
+  if (!requirement.reasonerCandidateIds.includes(id)) {
+    throw new Error(`Evidence reasoner referenced an unknown or out-of-scope evidence claim: ${id}`);
+  }
+  const candidate = requirement.candidates.find((value) => value.evidenceClaimId === id);
   if (!candidate) {
     throw new Error(`Evidence reasoner referenced an unknown or out-of-scope evidence claim: ${id}`);
   }
@@ -132,7 +135,7 @@ function validateCoverage(
   for (const requirement of pack.requirements) {
     const draft = coverageByRequirement.get(requirement.requirementId);
     if (!draft) {
-      if (requirement.candidates.length === 0) {
+      if (requirement.reasonerCandidateIds.length === 0) {
         result.push(missingCoverage(requirement));
         continue;
       }
@@ -158,13 +161,13 @@ function validateCoverage(
         requirement.requirementId,
         validationWarnings
       );
-      return { ...selection, complementaryEvidenceIds: complementaryEvidenceIds.length ? complementaryEvidenceIds : undefined, evidence: candidateById(requirement.candidates, selection.evidenceClaimId) };
+      return { ...selection, complementaryEvidenceIds: complementaryEvidenceIds.length ? complementaryEvidenceIds : undefined, evidence: candidateById(requirement, selection.evidenceClaimId) };
     });
     const rejections: EvidenceRejection[] = normalizedRejections.map((rejection) => ({
       evidenceClaimId: rejection.evidenceClaimId,
       reason: rejection.reason === "missing" ? "unsupported_scope" : rejection.reason,
       explanation: rejection.explanation,
-      evidence: candidateById(requirement.candidates, rejection.evidenceClaimId)
+      evidence: candidateById(requirement, rejection.evidenceClaimId)
     }));
     const onlySkillSelection = selections.length === 1 && selections[0].evidence.claimType === "skill";
     if (draft.coverageStatus === "strong" && onlySkillSelection) {

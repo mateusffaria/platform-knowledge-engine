@@ -86,6 +86,31 @@ describe("Candidate Evidence Pack", () => {
     expect(first.warnings).toContain("1 retrieval result(s) without canonical evidence-claim identities were excluded from evidence reasoning.");
   });
 
+  it("keeps complete candidates while selecting a ranked, exact-structured-safe reasoner view", () => {
+    const pack = buildCandidateEvidencePack({
+      jobDescription: jobDescription(),
+      evidencePack: {
+        ...evidencePack(),
+        items: [
+          { evidenceClaimId: "semantic-high", knowledgeAssetId: "asset-high", subjectType: "experience", claimText: "High ranked semantic evidence", claimStatus: "confirmed", confidenceScore: 90, finalScore: 0.9, semanticScore: 0.9, sources: [], retrievalStrategies: ["semantic"] },
+          { evidenceClaimId: "semantic-limited", knowledgeAssetId: "asset-limited", subjectType: "experience", claimText: "Limited semantic evidence", claimStatus: "confirmed", confidenceScore: 90, finalScore: 0.8, semanticScore: 0.8, sources: [], retrievalStrategies: ["semantic"] },
+          { evidenceClaimId: "exact-low", knowledgeAssetId: "asset-exact", subjectType: "experience", claimText: "Exact structured evidence", claimStatus: "confirmed", confidenceScore: 60, finalScore: 0.2, semanticScore: 0.1, structuredScore: 1, sources: [], retrievalStrategies: ["structured"] },
+          { evidenceClaimId: "semantic-low", knowledgeAssetId: "asset-low", subjectType: "experience", claimText: "Below threshold evidence", claimStatus: "confirmed", confidenceScore: 60, finalScore: 0.1, semanticScore: 0.1, sources: [], retrievalStrategies: ["semantic"] }
+        ]
+      },
+      selection: { limitPerRequirement: 1, minCandidateScore: 0.5 }
+    });
+
+    for (const requirement of pack.requirements) {
+      expect(requirement.candidates.map((candidate) => candidate.evidenceClaimId)).toEqual(["semantic-high", "semantic-limited", "exact-low", "semantic-low"]);
+      expect(requirement.reasonerCandidateIds).toEqual(["semantic-high", "exact-low"]);
+      expect(requirement.diagnostics.selectedForReasonerCount).toBe(2);
+      expect(requirement.diagnostics.selectionExclusions.map((item) => item.reasonCode)).toEqual(["limit_per_requirement", "minimum_candidate_score_not_met"]);
+    }
+    const prompt = JSON.parse(buildEvidenceReasoningUserPrompt(pack));
+    expect(prompt.requirements[0].candidates.map((candidate: { evidenceClaimId: string }) => candidate.evidenceClaimId)).toEqual(["semantic-high", "exact-low"]);
+  });
+
   it("makes missing coverage and display scores deterministic", () => {
     const missing = missingCoverage(candidatePack().requirements[0]);
     expect(missing.coverageStatus).toBe("missing");

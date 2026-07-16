@@ -1,6 +1,6 @@
 import { Command } from "commander";
 
-import { CuratedEvidencePack, JobAnalysis, JobAnalysisDomainSignal, JobAnalysisSenioritySignal, JobAnalysisSignal, JobDescriptionWithRequirements, JobRetrievalIntent } from "../../domain/model.js";
+import { CandidateSelectionConfig, CuratedEvidencePack, JobAnalysis, JobAnalysisDomainSignal, JobAnalysisSenioritySignal, JobAnalysisSignal, JobDescriptionWithRequirements, JobRetrievalIntent } from "../../domain/model.js";
 import { buildCandidateEvidencePack } from "../../application/candidate-evidence-pack.js";
 import { createPrepareCandidateEvidenceUseCase } from "../../application/use-cases/prepare-candidate-evidence.js";
 import { CanonicalEvidenceReader } from "../../../retrieval/application/ports/canonical-evidence-reader.js";
@@ -60,6 +60,13 @@ function parseOptionalScore(value: string | undefined): number | undefined {
     throw new Error("Minimum score must be a finite number.");
   }
   return parsed;
+}
+
+function parseCandidateSelection(options: { limitPerRequirement: string; minCandidateScore?: string }): CandidateSelectionConfig {
+  return {
+    limitPerRequirement: parsePositiveInteger(options.limitPerRequirement, "Candidate limit per requirement"),
+    minCandidateScore: parseOptionalScore(options.minCandidateScore)
+  };
 }
 
 function parseOptionalClaimStatus(value: string | undefined): EvidenceClaimStatus | undefined {
@@ -249,12 +256,21 @@ function printCandidateEvidencePack(pack: ReturnType<typeof buildCandidateEviden
     return;
   }
   console.log(`Candidate Evidence Pack for ${pack.jobDescriptionId}`);
+  console.log(`reasoner selection: non-exact limit=${pack.selection.limitPerRequirement}${pack.selection.minCandidateScore === undefined ? "" : ` min-final-score=${pack.selection.minCandidateScore}`}`);
   for (const requirement of pack.requirements) {
     const diagnostics = requirement.diagnostics;
-    console.log(`${requirement.candidates.length} evidence candidate(s): ${requirement.requirementText}`);
+    console.log(`${requirement.requirementText}: raw=${diagnostics.rawRetrievalResultCount} eligible=${diagnostics.eligibleResultCount} hydrated=${diagnostics.canonicalHydrationCount} associated=${diagnostics.requirementAssociationCount} selected-for-reasoner=${diagnostics.selectedForReasonerCount}`);
     if (options.verbose) {
       console.log(`   intent=${diagnostics.retrievalIntent}`);
-      console.log(`   raw=${diagnostics.rawRetrievalResultCount} eligible=${diagnostics.eligibleResultCount} hydrated=${diagnostics.canonicalHydrationCount} associated=${diagnostics.requirementAssociationCount}`);
+      console.log("   counts: raw=retrieval subjects; hydrated/eligible=canonical claims; associated=unique canonical claims; selected-for-reasoner=bounded context candidates");
+      for (const candidate of requirement.candidates) {
+        const selected = requirement.reasonerCandidateIds.includes(candidate.evidenceClaimId);
+        const exact = (candidate.objectiveSignals.structuredScore ?? 0) >= 1;
+        console.log(`   ${selected ? "selected" : "available"} ${candidate.evidenceClaimId} final=${candidate.objectiveSignals.finalScore.toFixed(4)}${exact ? " exact-structured" : ""}: ${candidate.claimText}`);
+      }
+      for (const exclusion of diagnostics.selectionExclusions) {
+        console.log(`   not-selected ${exclusion.evidenceClaimId} (${exclusion.reasonCode}): ${exclusion.reason}`);
+      }
       for (const discarded of diagnostics.discardedResults) {
         console.log(`   discarded ${discarded.reasonCode} stage=${discarded.stage} claim=${discarded.evidenceClaimId ?? "none"} asset=${discarded.knowledgeAssetId ?? "none"}: ${discarded.reason}`);
       }
@@ -380,9 +396,12 @@ export function registerJobsCommands(
     .description("Curate bounded canonical evidence for a persisted job description")
     .argument("<job-id>", "job description id")
     .option("--model <model>", "override the configured LLM model for this reasoning run")
+    .option("--limit-per-requirement <number>", "maximum non-exact candidates sent to the reasoner per requirement", "10")
+    .option("--min-candidate-score <number>", "minimum final score for non-exact candidates sent to the reasoner")
     .option("--json", "print machine-readable JSON")
     .option("--verbose", "include canonical evidence provenance, selections, and rejections")
-    .action(async (jobDescriptionId: string, options: { model?: string; json?: boolean; verbose?: boolean }) => {
+    .action(async (jobDescriptionId: string, options: { model?: string; limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean }) => {
+      const selection = parseCandidateSelection(options);
       const jobsServices = createJobsServices();
       let retrievalServices: JobRetrievalServices | undefined;
       try {
@@ -395,6 +414,7 @@ export function registerJobsCommands(
           jobDescription,
           jobAnalysisId: intent.analysisId,
           warnings: intent.warnings,
+          selection,
           retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
           canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
         });
@@ -415,7 +435,10 @@ export function registerJobsCommands(
     .argument("<job-id>", "job description id")
     .option("--json", "print machine-readable JSON")
     .option("--verbose", "include per-requirement pipeline diagnostics and discard reasons")
-    .action(async (jobDescriptionId: string, options: { json?: boolean; verbose?: boolean }) => {
+    .option("--limit-per-requirement <number>", "maximum non-exact candidates selected for the reasoner per requirement", "10")
+    .option("--min-candidate-score <number>", "minimum final score for non-exact candidates selected for the reasoner")
+    .action(async (jobDescriptionId: string, options: { limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean }) => {
+      const selection = parseCandidateSelection(options);
       const jobsServices = createJobsServices();
       let retrievalServices: JobRetrievalServices | undefined;
       try {
@@ -428,6 +451,7 @@ export function registerJobsCommands(
           jobDescription,
           jobAnalysisId: intent.analysisId,
           warnings: intent.warnings,
+          selection,
           retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
           canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
         });

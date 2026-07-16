@@ -38,7 +38,7 @@ function jobDescription(): JobDescriptionWithRequirements {
   };
 }
 
-function rawCandidate(id: string, asset: string): HybridSearchCandidate {
+function rawCandidate(id: string, asset: string, overrides: Partial<HybridSearchCandidate> = {}): HybridSearchCandidate {
   return {
     evidenceClaimId: id,
     knowledgeAssetId: asset,
@@ -47,7 +47,8 @@ function rawCandidate(id: string, asset: string): HybridSearchCandidate {
     confidenceScore: 0,
     semanticScore: 0.55,
     sources: [],
-    retrievalStrategies: ["semantic"]
+    retrievalStrategies: ["semantic"],
+    ...overrides
   };
 }
 
@@ -143,5 +144,80 @@ describe("candidate evidence pipeline", () => {
       evidenceClaimId: "claim-missing",
       knowledgeAssetId: "asset-missing"
     })]);
+  });
+
+  it("preserves final score through canonical fan-out and normalizes duplicate association diagnostics", async () => {
+    const rawResults: HybridSearchCandidate[] = [
+      {
+        knowledgeAssetId: "asset-fan-out",
+        subjectType: "knowledge_asset",
+        claimText: "asset projection",
+        confidenceScore: 80,
+        finalScore: 0.61,
+        semanticScore: 0.4,
+        sources: [],
+        retrievalStrategies: ["semantic"]
+      },
+      {
+        knowledgeAssetId: "asset-fan-out",
+        subjectType: "knowledge_asset",
+        claimText: "asset projection",
+        confidenceScore: 80,
+        finalScore: 0.91,
+        structuredScore: 1,
+        sources: [],
+        retrievalStrategies: ["structured"]
+      }
+    ];
+    const pack = await createPrepareCandidateEvidenceUseCase().prepare({
+      jobDescription: { ...jobDescription(), requirements: [jobDescription().requirements[0]] },
+      retriever: { execute: async ({ query }) => evidencePack(query, rawResults) },
+      canonicalEvidenceReader: {
+        async read(input) {
+          return {
+            kind: "hydrated",
+            candidates: ["claim-a", "claim-b"].map((evidenceClaimId) => ({
+              evidenceClaimId,
+              knowledgeAssetId: input.knowledgeAssetId,
+              subjectType: "experience" as const,
+              claimText: `${evidenceClaimId} canonical claim`,
+              claimStatus: "confirmed" as const,
+              confidenceScore: 80,
+              finalScore: input.finalScore,
+              semanticScore: input.semanticScore,
+              structuredScore: input.structuredScore,
+              sources: [],
+              retrievalStrategies: input.retrievalStrategies
+            }))
+          };
+        }
+      }
+    });
+
+    const requirement = pack.requirements[0];
+    expect(requirement.diagnostics).toMatchObject({
+      rawRetrievalResultCount: 2,
+      canonicalHydrationCount: 4,
+      eligibleResultCount: 4,
+      requirementAssociationCount: 2
+    });
+    expect(requirement.candidates.map((candidate) => [candidate.evidenceClaimId, candidate.objectiveSignals.finalScore])).toEqual([
+      ["claim-a", 0.91],
+      ["claim-b", 0.91]
+    ]);
+    expect(requirement.diagnostics.discardedResults).toEqual([
+      expect.objectContaining({
+        stage: "association",
+        reasonCode: "duplicate_requirement_candidate",
+        finalScore: 0.91,
+        retrievalStrategies: ["structured", "semantic"]
+      }),
+      expect.objectContaining({
+        stage: "association",
+        reasonCode: "duplicate_requirement_candidate",
+        finalScore: 0.91,
+        retrievalStrategies: ["structured", "semantic"]
+      })
+    ]);
   });
 });

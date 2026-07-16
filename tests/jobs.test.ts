@@ -256,7 +256,7 @@ describe("jobs CLI commands", () => {
     id: "curated-1",
     runIdentity: "run-1",
     jobDescriptionId: "job-1",
-    candidatePackVersion: "candidate-evidence-pack-v2",
+    candidatePackVersion: "candidate-evidence-pack-v3",
     candidatePackHash: "pack-hash",
     provider: "ollama",
     model: "test-model",
@@ -330,19 +330,37 @@ describe("jobs CLI commands", () => {
     await expect(program.parseAsync(["node", "pke", "jobs", "retrieve", "job-1", "--claim-status", "rejected"])).rejects.toThrow("Claim status filter must be confirmed or single_source");
   });
 
-  it("prints requirement-scoped candidate diagnostics as JSON and verbose output", async () => {
+  it("prints concise candidate summaries by default and retains full diagnostics in JSON or verbose output", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const { program } = createProgram();
     await program.parseAsync(["node", "pke", "jobs", "candidates", "job-1", "--json"]);
     const pack = JSON.parse(log.mock.calls[0][0]);
+    expect(pack.selection).toEqual({ limitPerRequirement: 10 });
     expect(pack.requirements).toEqual(expect.arrayContaining([
       expect.objectContaining({
         requirementId: "requirement-typescript",
         diagnostics: expect.objectContaining({ rawRetrievalResultCount: 0, requirementAssociationCount: 0 })
       })
     ]));
+    log.mockClear();
+    await program.parseAsync(["node", "pke", "jobs", "candidates", "job-1"]);
+    const concise = log.mock.calls.flat().join("\n");
+    expect(concise).toContain("selected-for-reasoner=0");
+    expect(concise).not.toContain("counts: raw=retrieval subjects");
+    log.mockClear();
     await program.parseAsync(["node", "pke", "jobs", "candidates", "job-1", "--verbose"]);
-    expect(log.mock.calls.flat().join("\n")).toContain("raw=0 eligible=0 hydrated=0 associated=0");
+    expect(log.mock.calls.flat().join("\n")).toContain("counts: raw=retrieval subjects");
+    log.mockRestore();
+  });
+
+  it("validates candidate selection options and passes the same selection to reasoning", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const { program, jobsServices } = createProgram();
+    await expect(program.parseAsync(["node", "pke", "jobs", "candidates", "job-1", "--limit-per-requirement", "0"])).rejects.toThrow("Candidate limit per requirement must be a positive integer");
+    await program.parseAsync(["node", "pke", "jobs", "reason", "job-1", "--limit-per-requirement", "3", "--min-candidate-score", "0.7"]);
+    expect(jobsServices.reasonJobEvidence.execute).toHaveBeenCalledWith(expect.objectContaining({
+      candidatePack: expect.objectContaining({ selection: { limitPerRequirement: 3, minCandidateScore: 0.7 } })
+    }));
     log.mockRestore();
   });
 

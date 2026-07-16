@@ -1,5 +1,5 @@
 import { EvidencePack } from "../../../retrieval/application/types.js";
-import { CandidateEvidencePack, CandidateRequirementEvidence, JobDescriptionWithRequirements } from "../../domain/model.js";
+import { CandidateEvidencePack, CandidateRequirementEvidence, CandidateSelectionConfig, JobDescriptionWithRequirements } from "../../domain/model.js";
 
 export interface CandidateEvidencePackBuilder {
   build(input: {
@@ -7,5 +7,6 @@ export interface CandidateEvidencePackBuilder {
     jobAnalysisId?: string;
     evidencePack: EvidencePack;
     preparedRequirements?: CandidateRequirementEvidence[];
+    selection?: CandidateSelectionConfig;
   }): CandidateEvidencePack;
 }
