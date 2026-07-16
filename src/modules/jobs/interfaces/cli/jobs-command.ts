@@ -251,7 +251,7 @@ function printCandidateEvidencePack(pack: ReturnType<typeof buildCandidateEviden
   console.log(`Candidate Evidence Pack for ${pack.jobDescriptionId}`);
   for (const requirement of pack.requirements) {
     const diagnostics = requirement.diagnostics;
-    console.log(`${requirement.candidates.length} candidate(s): ${requirement.requirementText}`);
+    console.log(`${requirement.candidates.length} evidence candidate(s): ${requirement.requirementText}`);
     if (options.verbose) {
       console.log(`   intent=${diagnostics.retrievalIntent}`);
       console.log(`   raw=${diagnostics.rawRetrievalResultCount} eligible=${diagnostics.eligibleResultCount} hydrated=${diagnostics.canonicalHydrationCount} associated=${diagnostics.requirementAssociationCount}`);
