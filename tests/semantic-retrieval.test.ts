@@ -113,13 +113,15 @@ class RecordingEmbeddingProvider implements EmbeddingProvider {
 
 class InMemoryVectorStore implements VectorStore {
   public upserts: VectorUpsertInput[][] = [];
+  public upsertOptions: Array<{ force?: boolean } | undefined> = [];
   public searches: VectorSearchInput[] = [];
   private readonly rows = new Map<string, VectorUpsertInput>();
 
   constructor(private readonly searchResults?: SearchResult[]) {}
 
-  async upsertEmbeddings(inputs: VectorUpsertInput[]): Promise<{ inserted: number; updated: number; unchanged: number }> {
+  async upsertEmbeddings(inputs: VectorUpsertInput[], options?: { force?: boolean }): Promise<{ inserted: number; updated: number; unchanged: number }> {
     this.upserts.push(inputs);
+    this.upsertOptions.push(options);
     let inserted = 0;
     let updated = 0;
     let unchanged = 0;
@@ -133,7 +135,7 @@ class InMemoryVectorStore implements VectorStore {
         continue;
       }
 
-      if (existing.document.textHash === input.document.textHash) {
+      if (!options?.force && existing.document.textHash === input.document.textHash) {
         unchanged += 1;
         continue;
       }
@@ -225,6 +227,23 @@ describe("Semantic retrieval", () => {
     expect(second).toEqual({ indexed: 0, skipped: 2 });
     expect(vectorStore.upserts).toHaveLength(2);
     expect(vectorStore.upserts[0]).toHaveLength(2);
+  });
+
+  it("forces unchanged candidate embeddings to be updated", async () => {
+    const embeddingProvider = new RecordingEmbeddingProvider();
+    const vectorStore = new InMemoryVectorStore();
+    const useCase = createIndexKnowledgeUseCase({
+      knowledgeReader: new FakeKnowledgeReader([asset], [claim]),
+      embeddingProvider,
+      vectorStore,
+      claimEligibilityPolicy: reconciliationClaimEligibilityPolicy
+    });
+
+    await useCase.execute();
+    const forced = await useCase.execute({ force: true });
+
+    expect(forced).toEqual({ indexed: 2, skipped: 0 });
+    expect(vectorStore.upsertOptions.at(-1)).toEqual({ force: true });
   });
 
   it("searches through embedding and vector store ports and returns evidence identifiers", async () => {

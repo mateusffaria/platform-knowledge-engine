@@ -88,12 +88,13 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
 
    The current embedding table is configured for 768-dimensional vectors, which matches `nomic-embed-text`. Models that return a different vector size will be rejected before indexing or search because pgvector columns cannot mix embedding dimensions.
 
-   Ingestion and indexing are separate steps. Run `npm run pke -- index` after ingesting a new or updated profile so semantic search can see the latest persisted knowledge. Indexing is idempotent: unchanged embeddings are skipped.
+   Ingestion and indexing are separate steps. Run `npm run pke -- index` after ingesting a new or updated profile so semantic search can see the latest persisted knowledge. Indexing is idempotent: unchanged embeddings are skipped. Use `npm run pke -- index --force` to regenerate and update every eligible candidate embedding with the configured provider/model.
 
    Then index and search verified knowledge:
 
    ```bash
    npm run pke -- index
+   npm run pke -- index --force
    npm run pke -- search "retrieval systems"
    npm run pke -- search "retrieval systems" --min-score 0.7 --limit 5
    ```

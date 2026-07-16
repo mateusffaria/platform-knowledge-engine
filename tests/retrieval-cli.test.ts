@@ -165,6 +165,18 @@ describe("retrieval CLI commands", () => {
     expect(log).toHaveBeenCalled();
   });
 
+  it("forces indexing when requested", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const services = createSearchServices(rankedSearchResult);
+    services.indexKnowledge.execute.mockResolvedValue({ indexed: 2, skipped: 0 });
+    const program = createProgram(() => services);
+
+    await program.parseAsync(["node", "pke", "index", "--force"]);
+
+    expect(services.indexKnowledge.execute).toHaveBeenCalledWith({ force: true });
+    expect(log).toHaveBeenCalledWith("Indexed 2 embeddings; skipped 0 unchanged embeddings.");
+  });
+
   it("prints verbose search metadata when requested", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const services = createSearchServices(rankedSearchResult);

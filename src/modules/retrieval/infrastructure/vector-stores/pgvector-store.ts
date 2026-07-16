@@ -45,7 +45,7 @@ function candidateConstraint(input: VectorSearchInput) {
 export class PgvectorStore implements VectorStore {
   constructor(private readonly db: VectorDatabase) {}
 
-  async upsertEmbeddings(inputs: VectorUpsertInput[]): Promise<{ inserted: number; updated: number; unchanged: number }> {
+  async upsertEmbeddings(inputs: VectorUpsertInput[], options: { force?: boolean } = {}): Promise<{ inserted: number; updated: number; unchanged: number }> {
     let inserted = 0;
     let updated = 0;
     let unchanged = 0;
@@ -96,7 +96,7 @@ export class PgvectorStore implements VectorStore {
         continue;
       }
 
-      if (existing[0].embeddingTextHash === input.document.textHash) {
+      if (!options.force && existing[0].embeddingTextHash === input.document.textHash) {
         unchanged += 1;
         continue;
       }

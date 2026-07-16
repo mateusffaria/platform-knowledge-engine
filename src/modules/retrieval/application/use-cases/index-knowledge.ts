@@ -25,7 +25,7 @@ export function createIndexKnowledgeUseCase({
   claimEligibilityPolicy
 }: IndexKnowledgeDependencies) {
   return {
-    async execute(): Promise<IndexSummary> {
+    async execute(input: { force?: boolean } = {}): Promise<IndexSummary> {
       const [assets, claims] = await Promise.all([
         knowledgeReader.listIndexableKnowledgeAssets(),
         knowledgeReader.listIndexableEvidenceClaims()
@@ -49,7 +49,8 @@ export function createIndexKnowledgeUseCase({
         documents.map((document, index) => ({
           document,
           embedding: embeddings[index]
-        }))
+        })),
+        { force: input.force }
       );
 
       return {

@@ -212,11 +212,12 @@ export function registerRetrievalCommands(
   program
     .command("index")
     .description("Index persisted professional knowledge for semantic retrieval")
-    .action(async () => {
+    .option("--force", "regenerate and update embeddings even when indexed text is unchanged")
+    .action(async (options: { force?: boolean }) => {
       let services: ReturnType<RetrievalServicesFactory> | undefined;
       try {
         services = createServices();
-        const result = await services.indexKnowledge.execute();
+        const result = await services.indexKnowledge.execute({ force: options.force });
         console.log(`Indexed ${result.indexed} embeddings; skipped ${result.skipped} unchanged embeddings.`);
       } catch (error) {
         if (!reportMissingEmbeddingProvider(error) && !reportPkqlParseError(error)) {

@@ -13,7 +13,7 @@ export interface VectorSearchInput {
 }
 
 export interface VectorStore {
-  upsertEmbeddings(inputs: VectorUpsertInput[]): Promise<{ inserted: number; updated: number; unchanged: number }>;
+  upsertEmbeddings(inputs: VectorUpsertInput[], options?: { force?: boolean }): Promise<{ inserted: number; updated: number; unchanged: number }>;
   search(input: VectorSearchInput): Promise<SearchResult[]>;
   deleteEmbeddingsForSubject(input: { subjectType: "knowledge_asset" | "evidence_claim"; subjectId: string }): Promise<number>;
 }
