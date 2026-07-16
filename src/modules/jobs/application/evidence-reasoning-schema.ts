@@ -50,6 +50,44 @@ function unique(values: string[], label: string): void {
   }
 }
 
+function deduplicateRejections(
+  rejections: EvidenceReasoningOutput["coverage"][number]["rejections"],
+  requirementId: string,
+  validationWarnings: string[]
+): EvidenceReasoningOutput["coverage"][number]["rejections"] {
+  const seen = new Set<string>();
+  return rejections.filter((rejection) => {
+    if (seen.has(rejection.evidenceClaimId)) {
+      validationWarnings.push(`Evidence Reasoner repeated rejected evidence ${rejection.evidenceClaimId} for requirement ${requirementId}; the first rejection was retained.`);
+      return false;
+    }
+    seen.add(rejection.evidenceClaimId);
+    return true;
+  });
+}
+
+function normalizeComplementaryEvidenceIds(
+  complementaryEvidenceIds: string[],
+  selectionId: string,
+  selectedIds: string[],
+  requirementId: string,
+  validationWarnings: string[]
+): string[] {
+  const seen = new Set<string>();
+  return complementaryEvidenceIds.filter((id) => {
+    if (seen.has(id)) {
+      validationWarnings.push(`Evidence Reasoner repeated complementary evidence ${id} for requirement ${requirementId}; the duplicate reference was removed.`);
+      return false;
+    }
+    seen.add(id);
+    if (id === selectionId || !selectedIds.includes(id)) {
+      validationWarnings.push(`Evidence Reasoner referenced non-selected or self-referential complementary evidence ${id} for requirement ${requirementId}; the invalid optional reference was removed.`);
+      return false;
+    }
+    return true;
+  });
+}
+
 function candidateById(candidates: CandidateEvidence[], id: string): CandidateEvidence {
   const candidate = candidates.find((value) => value.evidenceClaimId === id);
   if (!candidate) {
@@ -58,9 +96,37 @@ function candidateById(candidates: CandidateEvidence[], id: string): CandidateEv
   return candidate;
 }
 
-function validateCoverage(output: EvidenceReasoningOutput, pack: CandidateEvidencePack): RequirementCoverage[] {
-  unique(output.coverage.map((entry) => entry.requirementId), "requirement coverage entries");
-  const coverageByRequirement = new Map(output.coverage.map((entry) => [entry.requirementId, entry]));
+function omittedCoverage(requirement: CandidateEvidencePack["requirements"][number]): RequirementCoverage {
+  return {
+    requirementId: requirement.requirementId,
+    requirementText: requirement.requirementText,
+    importance: requirement.importance,
+    coverageStatus: "missing",
+    selectedEvidenceIds: [],
+    rejectedCandidateEvidenceIds: [],
+    selections: [],
+    rejections: [],
+    strengthFactors: [],
+    limitations: ["The Evidence Reasoner omitted a coverage decision even though canonical candidate evidence was available."],
+    explanation: "The supplied canonical candidates were retained, but no bounded coverage decision was returned for this requirement."
+  };
+}
+
+function validateCoverage(
+  output: EvidenceReasoningOutput,
+  pack: CandidateEvidencePack,
+  validationWarnings: string[]
+): RequirementCoverage[] {
+  const requirementIds = new Set(pack.requirements.map((requirement) => requirement.requirementId));
+  const knownCoverage = output.coverage.filter((entry) => {
+    if (!requirementIds.has(entry.requirementId)) {
+      validationWarnings.push(`Evidence Reasoner returned unknown requirement ${entry.requirementId}; the out-of-scope coverage entry was ignored.`);
+      return false;
+    }
+    return true;
+  });
+  unique(knownCoverage.map((entry) => entry.requirementId), "requirement coverage entries");
+  const coverageByRequirement = new Map(knownCoverage.map((entry) => [entry.requirementId, entry]));
   const result: RequirementCoverage[] = [];
 
   for (const requirement of pack.requirements) {
@@ -70,12 +136,14 @@ function validateCoverage(output: EvidenceReasoningOutput, pack: CandidateEviden
         result.push(missingCoverage(requirement));
         continue;
       }
-      throw new Error(`Evidence reasoner omitted requirement coverage: ${requirement.requirementId}`);
+      result.push(omittedCoverage(requirement));
+      validationWarnings.push(`Evidence Reasoner omitted coverage for requirement ${requirement.requirementId}; it was recorded as missing without discarding its canonical candidates.`);
+      continue;
     }
+    const normalizedRejections = deduplicateRejections(draft.rejections, requirement.requirementId, validationWarnings);
     const selectedIds = draft.selections.map((selection) => selection.evidenceClaimId);
-    const rejectedIds = draft.rejections.map((rejection) => rejection.evidenceClaimId);
+    const rejectedIds = normalizedRejections.map((rejection) => rejection.evidenceClaimId);
     unique(selectedIds, `selected evidence for ${requirement.requirementId}`);
-    unique(rejectedIds, `rejected evidence for ${requirement.requirementId}`);
     if (selectedIds.some((id) => rejectedIds.includes(id))) {
       throw new Error(`Evidence reasoner both selected and rejected the same evidence for ${requirement.requirementId}.`);
     }
@@ -83,14 +151,16 @@ function validateCoverage(output: EvidenceReasoningOutput, pack: CandidateEviden
       throw new Error(`Evidence reasoner selected evidence for missing coverage: ${requirement.requirementId}`);
     }
     const selections: EvidenceSelection[] = draft.selections.map((selection) => {
-      const complementaryEvidenceIds = selection.complementaryEvidenceIds ?? [];
-      unique(complementaryEvidenceIds, `complementary evidence for ${requirement.requirementId}`);
-      if (complementaryEvidenceIds.some((id) => !selectedIds.includes(id) || id === selection.evidenceClaimId)) {
-        throw new Error(`Evidence reasoner referenced non-selected complementary evidence for ${requirement.requirementId}.`);
-      }
+      const complementaryEvidenceIds = normalizeComplementaryEvidenceIds(
+        selection.complementaryEvidenceIds ?? [],
+        selection.evidenceClaimId,
+        selectedIds,
+        requirement.requirementId,
+        validationWarnings
+      );
       return { ...selection, complementaryEvidenceIds: complementaryEvidenceIds.length ? complementaryEvidenceIds : undefined, evidence: candidateById(requirement.candidates, selection.evidenceClaimId) };
     });
-    const rejections: EvidenceRejection[] = draft.rejections.map((rejection) => ({
+    const rejections: EvidenceRejection[] = normalizedRejections.map((rejection) => ({
       evidenceClaimId: rejection.evidenceClaimId,
       reason: rejection.reason === "missing" ? "unsupported_scope" : rejection.reason,
       explanation: rejection.explanation,
@@ -114,20 +184,21 @@ function validateCoverage(output: EvidenceReasoningOutput, pack: CandidateEviden
       explanation: draft.explanation
     });
   }
-  for (const requirementId of coverageByRequirement.keys()) {
-    if (!pack.requirements.some((requirement) => requirement.requirementId === requirementId)) {
-      throw new Error(`Evidence reasoner referenced an unknown requirement: ${requirementId}`);
-    }
-  }
   return result;
+}
+
+function normalizeJsonEnvelope(content: string): string {
+  const trimmed = content.trim();
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/i.exec(trimmed);
+  return (fenced?.[1] ?? trimmed).trim();
 }
 
 export function parseEvidenceReasoningOutput(content: string, pack: CandidateEvidencePack): Omit<EvidenceReasoningOutput, "coverage"> & { coverage: RequirementCoverage[] } {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(content);
+    parsed = JSON.parse(normalizeJsonEnvelope(content));
   } catch (error) {
-    throw new Error("Evidence Reasoner returned output that was not valid JSON.", { cause: error });
+    throw new Error(`Evidence Reasoner returned output that was not valid JSON (received ${content.length} characters).`, { cause: error });
   }
   // Ollama models sometimes mirror known prompt-envelope fields. Strip only
   // those fields because the application never reads them from the response;
@@ -148,5 +219,11 @@ export function parseEvidenceReasoningOutput(content: string, pack: CandidateEvi
   if (!output.success) {
     throw new Error(`Evidence Reasoner returned invalid structured output: ${output.error.issues.map((issue) => issue.message).join("; ")}`);
   }
-  return { ...output.data, coverage: validateCoverage(output.data, pack) };
+  const validationWarnings: string[] = [];
+  const coverage = validateCoverage(output.data, pack, validationWarnings);
+  return {
+    ...output.data,
+    warnings: [...output.data.warnings, ...validationWarnings],
+    coverage
+  };
 }

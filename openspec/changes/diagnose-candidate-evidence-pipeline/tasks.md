@@ -35,3 +35,6 @@
 - [x] 5.3 Verify Go, PostgreSQL, AWS, technical leadership, and Pismo requirements receive traceable candidates; verify Kubernetes stays explicit missing with diagnostic evidence.
 - [x] 5.4 Update jobs/retrieval documentation and architecture guidance with candidate pipeline stages, diagnostic output, canonical hydration ownership, and the rule that reindexing is not a hydration fix.
 - [x] 5.5 Run `npm run typecheck` and `npm test`, resolve failures, and validate the OpenSpec change before implementation handoff.
+- [x] 5.6 Keep bounded reasoner output compact, tolerate fenced JSON envelopes, and configure sufficient local-model generation capacity to avoid truncated JSON.
+- [x] 5.7 Convert a model-omitted requirement decision into explicit missing coverage and a warning while preserving its canonical candidate evidence.
+- [x] 5.8 Normalize repeated rejection decisions and invalid optional/out-of-scope model references into explicit warnings while preserving strict canonical selection validation.

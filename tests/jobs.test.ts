@@ -260,7 +260,7 @@ describe("jobs CLI commands", () => {
     candidatePackHash: "pack-hash",
     provider: "ollama",
     model: "test-model",
-    promptVersion: "evidence-reasoner-v3",
+    promptVersion: "evidence-reasoner-v6",
     createdAt: new Date("2026-07-16T00:00:00.000Z"),
     overallCoverageSummary: "Partial coverage.",
     requirementCoverage: [],
@@ -359,7 +359,7 @@ describe("jobs CLI commands", () => {
       }),
       model: "override-model"
     }));
-    expect(JSON.parse(log.mock.calls[0][0]).promptVersion).toBe("evidence-reasoner-v3");
+    expect(JSON.parse(log.mock.calls[0][0]).promptVersion).toBe("evidence-reasoner-v6");
     log.mockRestore();
   });
 });

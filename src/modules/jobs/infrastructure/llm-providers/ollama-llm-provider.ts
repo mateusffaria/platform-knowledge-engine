@@ -38,6 +38,10 @@ export class OllamaLlmProvider implements LlmProvider {
         system: request.systemPrompt,
         prompt: request.userPrompt,
         format: request.responseFormat,
+        options: {
+          temperature: 0,
+          num_predict: 4096
+        },
         stream: false
       })
     });

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { buildCandidateEvidencePack } from "../src/modules/jobs/application/candidate-evidence-pack.js";
+import { buildEvidenceReasoningUserPrompt } from "../src/modules/jobs/application/evidence-reasoning-prompt.js";
 import { deduplicateCrossRequirementSelections, displayScore, missingCoverage } from "../src/modules/jobs/application/evidence-curation.js";
 import { EvidenceReasoner } from "../src/modules/jobs/application/ports/evidence-reasoner.js";
 import { EvidenceReasoningObservability, EvidenceReasoningTrace } from "../src/modules/jobs/application/ports/evidence-reasoning-observability.js";
@@ -129,6 +130,61 @@ describe("LlmEvidenceReasoner", () => {
 
     const result = await new LlmEvidenceReasoner(provider(JSON.stringify(output)), new RecordingObservability()).reason({ candidatePack: candidatePack() });
     expect(result.requirementCoverage[0].rejections[0].reason).toBe("unsupported_scope");
+  });
+
+  it("retains the first repeated rejection and records a warning", async () => {
+    const duplicateOutput = JSON.parse(validOutput());
+    duplicateOutput.coverage.push({
+      ...duplicateOutput.coverage[0],
+      requirementId: "invented-requirement"
+    });
+    duplicateOutput.coverage[0].selections[0].complementaryEvidenceIds = ["claim-b", "claim-b", "claim-a"];
+    duplicateOutput.coverage[0].rejections.push({
+      ...duplicateOutput.coverage[0].rejections[0],
+      reason: "weak",
+      explanation: "A second model-generated rationale that must not replace the first."
+    });
+    const llm = provider(JSON.stringify(duplicateOutput));
+    const result = await new LlmEvidenceReasoner(llm, new RecordingObservability()).reason({ candidatePack: candidatePack() });
+
+    expect(result.requirementCoverage[0].rejections).toHaveLength(1);
+    expect(result.requirementCoverage[0].rejections[0].reason).toBe("irrelevant");
+    expect(result.requirementCoverage[0].selections[0].complementaryEvidenceIds).toBeUndefined();
+    expect(result.warnings.join(" ")).toContain("repeated rejected evidence claim-b for requirement leadership");
+    expect(result.warnings.join(" ")).toContain("invalid optional reference was removed");
+    expect(result.warnings.join(" ")).toContain("unknown requirement invented-requirement");
+    expect(llm.generate).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the model prompt compact and accepts a fenced JSON object", async () => {
+    const pack = candidatePack();
+    const prompt = JSON.parse(buildEvidenceReasoningUserPrompt(pack));
+    expect(prompt.requirements[0].candidates[0]).not.toHaveProperty("sources");
+    expect(prompt.requirements[0].candidates[0]).not.toHaveProperty("objectiveSignals");
+
+    const result = await new LlmEvidenceReasoner(
+      provider(`\`\`\`json\n${validOutput()}\n\`\`\``),
+      new RecordingObservability()
+    ).reason({ candidatePack: pack });
+    expect(result.requirementCoverage).toHaveLength(2);
+  });
+
+  it("records an explicit missing decision when the model omits a requirement with candidates", async () => {
+    const output = JSON.parse(validOutput());
+    output.coverage = [output.coverage[0]];
+
+    const result = await new LlmEvidenceReasoner(
+      provider(JSON.stringify(output)),
+      new RecordingObservability()
+    ).reason({ candidatePack: candidatePack() });
+
+    expect(result.requirementCoverage).toHaveLength(2);
+    expect(result.requirementCoverage.find((coverage) => coverage.requirementId === "typescript")).toMatchObject({
+      coverageStatus: "missing",
+      selectedEvidenceIds: [],
+      limitations: [expect.stringContaining("omitted a coverage decision")]
+    });
+    expect(result.warnings.join(" ")).toContain("omitted coverage for requirement typescript");
   });
 
   it("marks an empty Candidate Evidence Pack missing without calling the provider", async () => {
