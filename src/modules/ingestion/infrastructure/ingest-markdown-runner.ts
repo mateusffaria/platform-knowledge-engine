@@ -15,8 +15,18 @@ export function createProductionIngestMarkdownRunner(): IngestCommandRunner {
     async run(sourcePath: string): Promise<void> {
       const config = loadConfig();
       const logger = createLogger(config.logLevel);
-      const telemetry = createTelemetry(config.otelEnabled);
-      const langfuse = createLangfuseClient(config.langfuseEnabled);
+      const telemetry = createTelemetry({
+        enabled: config.otelEnabled,
+        endpoint: config.otelExporterOtlpEndpoint,
+        serviceName: config.otelServiceName,
+        sampleRatio: config.otelSampleRatio
+      });
+      const langfuse = createLangfuseClient({
+        baseUrl: config.langfuseBaseUrl,
+        publicKey: config.langfusePublicKey,
+        secretKey: config.langfuseSecretKey,
+        captureContent: config.langfuseCaptureContent
+      });
       const trace = langfuse.trace("markdown-ingestion", { sourcePath });
 
       try {

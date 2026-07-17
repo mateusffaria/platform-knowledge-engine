@@ -126,7 +126,6 @@ function appConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     databaseUrl: "postgres://localhost/pke",
     logLevel: "info",
     otelEnabled: false,
-    langfuseEnabled: false,
     ollamaBaseUrl: "http://localhost:11434",
     llmProvider: "ollama",
     llmModel: "llama3.2",
@@ -220,7 +219,7 @@ describe("Job Analyzer", () => {
 
   it("works with the no-op Langfuse implementation", async () => {
     const provider = providerWith(validAnalysisOutput());
-    const analyzer = new JobAnalyzerAgent(provider, new LangfuseJobAnalysisObservability(createLangfuseClient(false)));
+    const analyzer = new JobAnalyzerAgent(provider, new LangfuseJobAnalysisObservability(createLangfuseClient({ captureContent: false })));
 
     await expect(analyzer.analyze({ jobDescription: jobDescription() })).resolves.toMatchObject({ promptVersion: "job-analyzer-v3" });
   });

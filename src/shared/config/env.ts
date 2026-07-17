@@ -7,7 +7,6 @@ export interface AppConfig {
   otelExporterOtlpEndpoint?: string;
   otelServiceName: string;
   otelSampleRatio: number;
-  langfuseEnabled: boolean;
   langfuseBaseUrl?: string;
   langfusePublicKey?: string;
   langfuseSecretKey?: string;
@@ -58,7 +57,6 @@ export function loadConfig(): AppConfig {
     otelExporterOtlpEndpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || undefined,
     otelServiceName: process.env.OTEL_SERVICE_NAME ?? "professional-knowledge-engine",
     otelSampleRatio: readRatio("OTEL_SAMPLE_RATIO", 1),
-    langfuseEnabled: readBoolean("LANGFUSE_ENABLED", false),
     langfuseBaseUrl: process.env.LANGFUSE_BASE_URL || undefined,
     langfusePublicKey: process.env.LANGFUSE_PUBLIC_KEY || undefined,
     langfuseSecretKey: process.env.LANGFUSE_SECRET_KEY || undefined,

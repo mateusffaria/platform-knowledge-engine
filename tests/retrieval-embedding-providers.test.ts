@@ -10,7 +10,6 @@ function config(overrides: Partial<AppConfig> = {}): AppConfig {
     databaseUrl: "postgres://pke:pke@localhost:5432/pke",
     logLevel: "info",
     otelEnabled: false,
-    langfuseEnabled: false,
     ollamaBaseUrl: "http://localhost:11434",
     ...overrides
   };

@@ -134,8 +134,7 @@ Environment variables:
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: HTTP OTLP collector endpoint. Defaults to the SDK endpoint when unset; use `http://localhost:4318` for the local stack.
 - `OTEL_SERVICE_NAME`: telemetry service name. Defaults to `professional-knowledge-engine`.
 - `OTEL_SAMPLE_RATIO`: trace sampling ratio from `0` through `1`. Defaults to `1` for local diagnosis.
-- `LANGFUSE_ENABLED`: enables Langfuse only when its public and secret keys are also configured.
-- `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`: local Langfuse connection settings.
+- `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`: Langfuse is enabled automatically when both keys are configured; otherwise PKE uses the no-op client.
 - `LANGFUSE_CAPTURE_CONTENT`: defaults to `false`; prompts, canonical evidence, and model responses are never sent by the reasoning instrumentation unless a future adapter explicitly opts in to content capture.
 - `EMBEDDING_PROVIDER`: embedding provider for semantic retrieval. Use `ollama`.
 - `EMBEDDING_MODEL`: embedding model name. Use `nomic-embed-text` for the local Ollama setup; the current vector schema expects 768-dimensional embeddings.

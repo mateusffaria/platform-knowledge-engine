@@ -27,7 +27,6 @@ export function createProductionJobsServices() {
   const curatedEvidencePackRepository = new DrizzleCuratedEvidencePackRepository(database.db);
   const telemetry = createTelemetry({ enabled: config.otelEnabled, endpoint: config.otelExporterOtlpEndpoint, serviceName: config.otelServiceName, sampleRatio: config.otelSampleRatio });
   const langfuse = createLangfuseClient({
-    enabled: config.langfuseEnabled,
     baseUrl: config.langfuseBaseUrl,
     publicKey: config.langfusePublicKey,
     secretKey: config.langfuseSecretKey,

@@ -11,7 +11,6 @@ export interface LangfuseClient {
 }
 
 export interface LangfuseOptions {
-  enabled: boolean;
   baseUrl?: string;
   publicKey?: string;
   secretKey?: string;
@@ -60,9 +59,8 @@ class ConfiguredLangfuseClient implements LangfuseClient {
   }
 }
 
-export function createLangfuseClient(options: boolean | LangfuseOptions): LangfuseClient {
-  if (typeof options === "boolean") return new NoopLangfuseClient();
-  if (!options.enabled || !options.publicKey || !options.secretKey) return new NoopLangfuseClient();
+export function createLangfuseClient(options: LangfuseOptions): LangfuseClient {
+  if (!options.publicKey || !options.secretKey) return new NoopLangfuseClient();
   try {
     return new ConfiguredLangfuseClient(new Langfuse({
       publicKey: options.publicKey,
