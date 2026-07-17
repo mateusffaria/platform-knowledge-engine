@@ -1,0 +1,16 @@
+{
+  "title": "PKE Reasoning Performance",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    { "title": "Jobs reason total duration", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_duration" }] },
+    { "title": "Ollama inference duration", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_llm_duration" }] },
+    { "title": "Prompt and completion tokens", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_llm_prompt_tokens" }, { "expr": "pke_jobs_reason_llm_completion_tokens" }] },
+    { "title": "Candidate-pack size", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_candidate_pack_bytes" }] },
+    { "title": "Candidates per requirement", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_candidate_evidence" }] },
+    { "title": "Evidence sent to reasoner", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_evidence_per_requirement" }] },
+    { "title": "Schema-validation failures", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_validation_failures" }] },
+    { "title": "Reasoning failures", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_failures" }] },
+    { "title": "Latency by model and prompt version", "type": "timeseries", "targets": [{ "expr": "sum by (model, prompt_version) (pke_jobs_reason_llm_duration)" }] }
+  ]
+}

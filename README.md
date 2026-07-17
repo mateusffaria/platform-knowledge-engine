@@ -130,8 +130,13 @@ Environment variables:
 
 - `DATABASE_URL`: Postgres connection string. Defaults to `postgres://pke:pke@localhost:5432/pke`.
 - `LOG_LEVEL`: structured log level. Defaults to `info`.
-- `OTEL_ENABLED`: enables OpenTelemetry span creation when set to `true`.
-- `LANGFUSE_ENABLED`: reserved for future real Langfuse integration. The current implementation remains no-op without credentials.
+- `OTEL_ENABLED`: enables optional OpenTelemetry tracing and metrics when set to `true`.
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: HTTP OTLP collector endpoint. Defaults to the SDK endpoint when unset; use `http://localhost:4318` for the local stack.
+- `OTEL_SERVICE_NAME`: telemetry service name. Defaults to `professional-knowledge-engine`.
+- `OTEL_SAMPLE_RATIO`: trace sampling ratio from `0` through `1`. Defaults to `1` for local diagnosis.
+- `LANGFUSE_ENABLED`: enables Langfuse only when its public and secret keys are also configured.
+- `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`: local Langfuse connection settings.
+- `LANGFUSE_CAPTURE_CONTENT`: defaults to `false`; prompts, canonical evidence, and model responses are never sent by the reasoning instrumentation unless a future adapter explicitly opts in to content capture.
 - `EMBEDDING_PROVIDER`: embedding provider for semantic retrieval. Use `ollama`.
 - `EMBEDDING_MODEL`: embedding model name. Use `nomic-embed-text` for the local Ollama setup; the current vector schema expects 768-dimensional embeddings.
 - `LLM_PROVIDER`: text-generation provider for job analysis and evidence reasoning. The current supported value is `ollama`.
@@ -140,6 +145,19 @@ Environment variables:
 - `SEMANTIC_SEARCH_MIN_SCORE`: optional minimum similarity score for relevant semantic search evidence. Leave unset to preserve unfiltered ranked search behavior.
 
 `EMBEDDING_*` configuration is used for semantic indexing and retrieval. `LLM_*` configuration is used for bounded job analysis and evidence reasoning; ingestion, show, and deterministic retrieval remain usable without LLM configuration.
+
+## Local reasoning observability
+
+Start the local metrics, logs, and dashboard stack without changing normal CLI operation:
+
+```bash
+docker compose --profile observability-lite up -d
+OTEL_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 npm run pke -- jobs reason <job-id>
+```
+
+Grafana is available at `http://localhost:3000` (`admin` / `pke`). Its provisioned **PKE / PKE Reasoning Performance** dashboard shows total command and Ollama inference latency, tokens when Ollama provides them, candidate-pack size, evidence volume, validation/reasoning failures, and model/prompt-version latency. VictoriaMetrics is exposed on port `8428`; VictoriaLogs is exposed on port `9428` for trace-correlated structured logs.
+
+For Langfuse, start `docker compose --profile observability-full up -d`, create local project keys in `http://localhost:3001`, and configure the `LANGFUSE_*` variables above. The default integration sends safe metadata and outcomes only. Retention is seven days in the local Victoria services; adjust the Compose `-retentionPeriod` settings and `OTEL_SAMPLE_RATIO` for longer or lower-volume local investigations. All telemetry integrations are optional and exporter failures are isolated from the CLI workflow.
 
 ## Job Analysis
 

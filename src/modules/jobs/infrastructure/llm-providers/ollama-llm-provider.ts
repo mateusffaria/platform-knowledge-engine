@@ -11,6 +11,8 @@ interface OllamaLlmProviderOptions {
 interface OllamaGenerateResponse {
   response?: unknown;
   model?: unknown;
+  prompt_eval_count?: unknown;
+  eval_count?: unknown;
 }
 
 export class OllamaLlmProvider implements LlmProvider {
@@ -61,10 +63,16 @@ export class OllamaLlmProvider implements LlmProvider {
       throw new Error("Ollama LLM response did not include generated content.");
     }
 
+    const usage = {
+      ...(typeof body.prompt_eval_count === "number" ? { promptTokens: body.prompt_eval_count } : {}),
+      ...(typeof body.eval_count === "number" ? { completionTokens: body.eval_count } : {})
+    };
+
     return {
       content: body.response,
       provider: "ollama",
-      model: typeof body.model === "string" && body.model.trim() ? body.model : model
+      model: typeof body.model === "string" && body.model.trim() ? body.model : model,
+      ...(Object.keys(usage).length > 0 ? { usage } : {})
     };
   }
 }

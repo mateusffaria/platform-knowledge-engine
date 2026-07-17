@@ -9,6 +9,10 @@ export interface LlmGenerationResponse {
   content: string;
   provider: string;
   model: string;
+  usage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+  };
 }
 
 export interface LlmProviderIdentity {

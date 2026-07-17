@@ -1,6 +1,7 @@
 import { createDatabase } from "../../../shared/database/client.js";
 import { loadConfig } from "../../../shared/config/env.js";
 import { createLangfuseClient } from "../../../shared/observability/langfuse.js";
+import { createTelemetry } from "../../../shared/observability/tracing.js";
 import { JobAnalyzerAgent } from "../application/services/job-analyzer-agent.js";
 import { LlmEvidenceReasoner } from "../application/services/llm-evidence-reasoner.js";
 import { buildCandidateEvidencePack } from "../application/candidate-evidence-pack.js";
@@ -16,6 +17,7 @@ import { DeterministicJobSourceParser } from "./parsers/deterministic-job-source
 import { LlmProviderFactory } from "./llm-providers/llm-provider-factory.js";
 import { LangfuseJobAnalysisObservability } from "./observability/langfuse-job-analysis-observability.js";
 import { LangfuseEvidenceReasoningObservability } from "./observability/langfuse-evidence-reasoning-observability.js";
+import { OpenTelemetryReasoningWorkflowTelemetry } from "./observability/open-telemetry-reasoning-workflow-telemetry.js";
 
 export function createProductionJobsServices() {
   const config = loadConfig();
@@ -23,12 +25,20 @@ export function createProductionJobsServices() {
   const repository = new DrizzleJobDescriptionRepository(database.db);
   const analysisRepository = new DrizzleJobAnalysisRepository(database.db);
   const curatedEvidencePackRepository = new DrizzleCuratedEvidencePackRepository(database.db);
-  const langfuse = createLangfuseClient(config.langfuseEnabled);
+  const telemetry = createTelemetry({ enabled: config.otelEnabled, endpoint: config.otelExporterOtlpEndpoint, serviceName: config.otelServiceName, sampleRatio: config.otelSampleRatio });
+  const langfuse = createLangfuseClient({
+    enabled: config.langfuseEnabled,
+    baseUrl: config.langfuseBaseUrl,
+    publicKey: config.langfusePublicKey,
+    secretKey: config.langfuseSecretKey,
+    captureContent: config.langfuseCaptureContent
+  });
   const observability = new LangfuseJobAnalysisObservability(langfuse);
   const providerFactory = new LlmProviderFactory();
   const provider = providerFactory.create(config);
   const jobAnalyzer = new JobAnalyzerAgent(provider, observability);
-  const evidenceReasoner = new LlmEvidenceReasoner(provider, new LangfuseEvidenceReasoningObservability(langfuse));
+  const reasoningTelemetry = new OpenTelemetryReasoningWorkflowTelemetry(telemetry);
+  const evidenceReasoner = new LlmEvidenceReasoner(provider, new LangfuseEvidenceReasoningObservability(langfuse), reasoningTelemetry);
 
   return {
     ingestJobDescription: createIngestJobDescriptionUseCase({
@@ -46,9 +56,13 @@ export function createProductionJobsServices() {
       jobAnalysisRepository: analysisRepository,
       candidateEvidencePackBuilder: { build: buildCandidateEvidencePack },
       curatedEvidencePackRepository,
-      evidenceReasoner
+      evidenceReasoner,
+      telemetry: reasoningTelemetry
     }),
     buildJobRetrievalIntent: createBuildJobRetrievalIntentUseCase(repository, analysisRepository),
-    close: database.close
+    close: async () => {
+      await database.close();
+      await telemetry.shutdown();
+    }
   };
 }

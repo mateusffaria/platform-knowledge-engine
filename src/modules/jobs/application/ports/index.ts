@@ -8,3 +8,4 @@ export * from "./candidate-evidence-pack-builder.js";
 export * from "./curated-evidence-pack-repository.js";
 export * from "./evidence-reasoner.js";
 export * from "./evidence-reasoning-observability.js";
+export * from "./reasoning-workflow-telemetry.js";

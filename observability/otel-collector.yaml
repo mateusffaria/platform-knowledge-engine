@@ -1,0 +1,29 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  batch:
+
+exporters:
+  prometheusremotewrite:
+    endpoint: http://victoriametrics:8428/api/v1/write
+  otlphttp/victoria-logs:
+    endpoint: http://victoria-logs:9428/insert/opentelemetry/v1/logs
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/victoria-logs]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [prometheusremotewrite]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/victoria-logs]

@@ -7,11 +7,13 @@ import { parseEvidenceReasoningOutput } from "../evidence-reasoning-schema.js";
 import { EvidenceReasoner, EvidenceReasoningRunIdentity } from "../ports/evidence-reasoner.js";
 import { EvidenceReasoningObservability } from "../ports/evidence-reasoning-observability.js";
 import { LlmProvider } from "../ports/llm-provider.js";
+import { NoopReasoningWorkflowTelemetry, ReasoningWorkflowTelemetry } from "../ports/reasoning-workflow-telemetry.js";
 
 export class LlmEvidenceReasoner implements EvidenceReasoner {
   constructor(
     private readonly provider: LlmProvider,
-    private readonly observability: EvidenceReasoningObservability
+    private readonly observability: EvidenceReasoningObservability,
+    private readonly telemetry: ReasoningWorkflowTelemetry = new NoopReasoningWorkflowTelemetry()
   ) {}
 
   getRunIdentity(command: Parameters<EvidenceReasoner["reason"]>[0]): EvidenceReasoningRunIdentity {
@@ -38,6 +40,7 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
       promptVersion: run.promptVersion,
       requestedModel: command.model,
       runIdentity: run.runIdentity
+      , traceId: this.telemetry.traceId()
     });
     try {
       if (!command.candidatePack.requirements.some((requirement) => requirement.reasonerCandidateIds.length > 0)) {
@@ -65,11 +68,22 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
       }
       let generated;
       try {
-        generated = await this.provider.generate({
+        const payload = await this.telemetry.run("build_llm_payload", { runIdentity: run.runIdentity, candidatePackHash: command.candidatePack.hash }, async () => ({
           systemPrompt: evidenceReasoningSystemPrompt,
           userPrompt: buildEvidenceReasoningUserPrompt(command.candidatePack),
           model: command.model,
-          responseFormat: "json"
+          responseFormat: "json" as const
+        }));
+        const startedAt = performance.now();
+        generated = await this.telemetry.run("ollama_inference", { runIdentity: run.runIdentity, candidatePackHash: command.candidatePack.hash }, () => this.provider.generate(payload));
+        this.telemetry.record("inferenceDuration", performance.now() - startedAt, { provider: generated.provider, model: generated.model, prompt_version: run.promptVersion, outcome: "success" });
+        if (generated.usage?.promptTokens !== undefined) this.telemetry.record("promptTokens", generated.usage.promptTokens, { provider: generated.provider, model: generated.model, prompt_version: run.promptVersion, outcome: "success" });
+        if (generated.usage?.completionTokens !== undefined) this.telemetry.record("completionTokens", generated.usage.completionTokens, { provider: generated.provider, model: generated.model, prompt_version: run.promptVersion, outcome: "success" });
+        await trace.generation?.({
+          name: "ollama_inference",
+          model: generated.model,
+          metadata: { provider: generated.provider, promptVersion: run.promptVersion },
+          usage: generated.usage
         });
         await trace.event("provider_completed", { provider: generated.provider, model: generated.model });
       } catch (error) {
@@ -77,8 +91,9 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
         throw error;
       }
       try {
-        const content = parseEvidenceReasoningOutput(generated.content, command.candidatePack);
-        const finalized = finalizeCuratedEvidencePack({
+        const finalized = await this.telemetry.run("schema_validation", { runIdentity: run.runIdentity, candidatePackHash: command.candidatePack.hash }, async () => {
+          const content = parseEvidenceReasoningOutput(generated.content, command.candidatePack);
+          return finalizeCuratedEvidencePack({
           id: randomUUID(),
           runIdentity: run.runIdentity,
           jobDescriptionId: command.candidatePack.jobDescriptionId,
@@ -96,10 +111,12 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
           missingEvidence: [],
           warnings: [...command.candidatePack.warnings, ...content.warnings],
           limitations: content.limitations
+          });
         });
         await trace.event("validation_succeeded");
         return finalized;
       } catch (error) {
+        this.telemetry.count("validationFailures", { outcome: "failure", failure_class: "validation_error" });
         await trace.event("validation_failed", { message: error instanceof Error ? error.message : String(error) });
         throw error;
       }

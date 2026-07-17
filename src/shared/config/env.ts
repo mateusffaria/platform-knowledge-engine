@@ -4,7 +4,14 @@ export interface AppConfig {
   databaseUrl: string;
   logLevel: string;
   otelEnabled: boolean;
+  otelExporterOtlpEndpoint?: string;
+  otelServiceName: string;
+  otelSampleRatio: number;
   langfuseEnabled: boolean;
+  langfuseBaseUrl?: string;
+  langfusePublicKey?: string;
+  langfuseSecretKey?: string;
+  langfuseCaptureContent: boolean;
   embeddingProvider?: string;
   embeddingModel?: string;
   llmProvider?: string;
@@ -36,12 +43,26 @@ function readOptionalNumber(name: string): number | undefined {
   return parsed;
 }
 
+function readRatio(name: string, fallback: number): number {
+  const value = readOptionalNumber(name);
+  if (value === undefined) return fallback;
+  if (value < 0 || value > 1) throw new Error(`${name} must be between 0 and 1.`);
+  return value;
+}
+
 export function loadConfig(): AppConfig {
   return {
     databaseUrl: process.env.DATABASE_URL ?? "postgres://pke:pke@localhost:5432/pke",
     logLevel: process.env.LOG_LEVEL ?? "info",
     otelEnabled: readBoolean("OTEL_ENABLED", false),
+    otelExporterOtlpEndpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || undefined,
+    otelServiceName: process.env.OTEL_SERVICE_NAME ?? "professional-knowledge-engine",
+    otelSampleRatio: readRatio("OTEL_SAMPLE_RATIO", 1),
     langfuseEnabled: readBoolean("LANGFUSE_ENABLED", false),
+    langfuseBaseUrl: process.env.LANGFUSE_BASE_URL || undefined,
+    langfusePublicKey: process.env.LANGFUSE_PUBLIC_KEY || undefined,
+    langfuseSecretKey: process.env.LANGFUSE_SECRET_KEY || undefined,
+    langfuseCaptureContent: readBoolean("LANGFUSE_CAPTURE_CONTENT", false),
     embeddingProvider: process.env.EMBEDDING_PROVIDER || undefined,
     embeddingModel: process.env.EMBEDDING_MODEL || undefined,
     llmProvider: process.env.LLM_PROVIDER || undefined,
