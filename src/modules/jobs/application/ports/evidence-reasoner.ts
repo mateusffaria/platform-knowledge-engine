@@ -1,4 +1,4 @@
-import { CandidateEvidencePack, CuratedEvidencePack } from "../../domain/model.js";
+import { CandidateEvidencePack, EvidenceReasoningResult } from "../../domain/model.js";
 
 export interface EvidenceReasoningRunIdentity {
   runIdentity: string;
@@ -9,5 +9,5 @@ export interface EvidenceReasoningRunIdentity {
 
 export interface EvidenceReasoner {
   getRunIdentity(command: { candidatePack: CandidateEvidencePack; model?: string }): EvidenceReasoningRunIdentity;
-  reason(command: { candidatePack: CandidateEvidencePack; model?: string }): Promise<CuratedEvidencePack>;
+  reason(command: { candidatePack: CandidateEvidencePack; model?: string }): Promise<EvidenceReasoningResult>;
 }

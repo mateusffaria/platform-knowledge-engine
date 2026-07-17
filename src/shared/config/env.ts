@@ -1,8 +1,25 @@
 import "dotenv/config";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
+
+function readPackageVersion(): string {
+  const version = (require("../../../package.json") as { version?: unknown }).version;
+  if (typeof version !== "string" || version.length === 0) {
+    throw new Error("package.json must define a non-empty version.");
+  }
+  return version;
+}
+
+const packageVersion = readPackageVersion();
 
 export interface AppConfig {
   databaseUrl: string;
   logLevel: string;
+  appEnvironment: string;
+  appVersion: string;
+  gitSha?: string;
+  deploymentRegion?: string;
   otelEnabled: boolean;
   otelExporterOtlpEndpoint?: string;
   otelServiceName: string;
@@ -62,6 +79,10 @@ export function loadConfig(): AppConfig {
   return {
     databaseUrl: process.env.DATABASE_URL ?? "postgres://pke:pke@localhost:5432/pke",
     logLevel: process.env.LOG_LEVEL ?? "info",
+    appEnvironment: process.env.APP_ENV ?? "development",
+    appVersion: packageVersion,
+    gitSha: process.env.GIT_SHA || undefined,
+    deploymentRegion: process.env.DEPLOYMENT_REGION || undefined,
     otelEnabled: readBoolean("OTEL_ENABLED", false),
     otelExporterOtlpEndpoint: process.env.OTEL_EXPORTER_OTLP_ENDPOINT || undefined,
     otelServiceName: process.env.OTEL_SERVICE_NAME ?? "professional-knowledge-engine",

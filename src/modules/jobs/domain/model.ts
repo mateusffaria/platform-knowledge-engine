@@ -301,6 +301,23 @@ export interface CuratedEvidencePack {
   warnings: string[];
   limitations: string[];
   displayScore?: number;
-  /** A conservative, non-persisted result returned only after bounded recovery fails. */
-  isFallback?: true;
+}
+
+/** Non-persisted execution outcome returned when bounded LLM recovery is exhausted. */
+export interface DegradedEvidenceReasoningResult {
+  curatedEvidencePack: CuratedEvidencePack;
+  fallbackDiagnostic: {
+    errorCode: string;
+    errorSummary: string;
+    validationIssueCount?: number;
+    validationIssues?: string;
+    errorStack?: string;
+    attempts: number;
+  };
+}
+
+export type EvidenceReasoningResult = CuratedEvidencePack | DegradedEvidenceReasoningResult;
+
+export function isDegradedEvidenceReasoningResult(result: EvidenceReasoningResult): result is DegradedEvidenceReasoningResult {
+  return "fallbackDiagnostic" in result;
 }

@@ -51,6 +51,9 @@ services:
     environment:
       DATABASE_URL: postgres://pke:pke@postgres:5432/pke
       LOG_LEVEL: info
+      APP_ENV: ${APP_ENV:-development}
+      GIT_SHA: ${GIT_SHA:-}
+      DEPLOYMENT_REGION: ${DEPLOYMENT_REGION:-}
       OTEL_ENABLED: ${OTEL_ENABLED:-false}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
       OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-professional-knowledge-engine}
@@ -78,7 +81,13 @@ services:
     environment:
       DATABASE_URL: postgres://pke:pke@postgres:5432/pke
       LOG_LEVEL: info
-      OTEL_ENABLED: "false"
+      APP_ENV: ${APP_ENV:-development}
+      GIT_SHA: ${GIT_SHA:-}
+      DEPLOYMENT_REGION: ${DEPLOYMENT_REGION:-}
+      OTEL_ENABLED: ${OTEL_ENABLED:-false}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://otel-collector:4318}
+      OTEL_SERVICE_NAME: ${OTEL_SERVICE_NAME:-professional-knowledge-engine}
+      OTEL_SAMPLE_RATIO: ${OTEL_SAMPLE_RATIO:-1}
     depends_on:
       postgres:
         condition: service_healthy

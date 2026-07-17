@@ -1,5 +1,6 @@
 import { createDatabase } from "../../../shared/database/client.js";
 import { loadConfig } from "../../../shared/config/env.js";
+import { configureLogger, errorLogFields, logEvent, shutdownLogger } from "../../../shared/logging/logger.js";
 import { createLangfuseClient } from "../../../shared/observability/langfuse.js";
 import { createTelemetry } from "../../../shared/observability/tracing.js";
 import { JobAnalyzerAgent } from "../application/services/job-analyzer-agent.js";
@@ -25,18 +26,23 @@ export function createProductionJobsServices() {
   const repository = new DrizzleJobDescriptionRepository(database.db);
   const analysisRepository = new DrizzleJobAnalysisRepository(database.db);
   const curatedEvidencePackRepository = new DrizzleCuratedEvidencePackRepository(database.db);
+  const logger = configureLogger(config);
   const telemetry = createTelemetry({ enabled: config.otelEnabled, endpoint: config.otelExporterOtlpEndpoint, serviceName: config.otelServiceName, sampleRatio: config.otelSampleRatio });
   const langfuse = createLangfuseClient({
     baseUrl: config.langfuseBaseUrl,
     publicKey: config.langfusePublicKey,
     secretKey: config.langfuseSecretKey,
     captureContent: config.langfuseCaptureContent
-  });
+  }, (operation, error) => logEvent(logger, "observability.langfuse.failed", {
+    component: "langfuse",
+    operation,
+    ...errorLogFields(error)
+  }, "error"));
   const observability = new LangfuseJobAnalysisObservability(langfuse);
   const providerFactory = new LlmProviderFactory();
   const provider = providerFactory.create(config);
   const jobAnalyzer = new JobAnalyzerAgent(provider, observability);
-  const reasoningTelemetry = new OpenTelemetryReasoningWorkflowTelemetry(telemetry);
+  const reasoningTelemetry = new OpenTelemetryReasoningWorkflowTelemetry(telemetry, logger);
   const evidenceReasoner = new LlmEvidenceReasoner(provider, new LangfuseEvidenceReasoningObservability(langfuse), reasoningTelemetry);
 
   return {
@@ -60,8 +66,15 @@ export function createProductionJobsServices() {
     }),
     buildJobRetrievalIntent: createBuildJobRetrievalIntentUseCase(repository, analysisRepository),
     close: async () => {
-      await database.close();
-      await telemetry.shutdown();
+      try {
+        await telemetry.shutdown();
+      } finally {
+        try {
+          await database.close();
+        } finally {
+          await shutdownLogger();
+        }
+      }
     }
   };
 }

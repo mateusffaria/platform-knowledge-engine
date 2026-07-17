@@ -4,11 +4,13 @@ import path from "node:path";
 import postgres from "postgres";
 
 import { loadConfig } from "../config/env.js";
+import { configureLogger, errorLogFields, logEvent, shutdownLogger } from "../logging/logger.js";
 
 const migrationsDir = path.resolve("drizzle");
 
 async function main(): Promise<void> {
   const config = loadConfig();
+  const logger = configureLogger(config);
   const sql = postgres(config.databaseUrl, { max: 1 });
 
   try {
@@ -28,7 +30,7 @@ async function main(): Promise<void> {
         SELECT name FROM pke_migrations WHERE name = ${file}
       `;
       if (existing.length > 0) {
-        console.log(`Skipping applied migration ${file}`);
+        logEvent(logger, "database.migration", { migration_name: file, outcome: "skipped" });
         continue;
       }
 
@@ -48,14 +50,21 @@ async function main(): Promise<void> {
         `;
       });
 
-      console.log(`Applied migration ${file}`);
+      logEvent(logger, "database.migration", { migration_name: file, outcome: "applied" });
     }
   } finally {
     await sql.end();
   }
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+main()
+  .then(() => shutdownLogger())
+  .catch(async (error: unknown) => {
+    const config = loadConfig();
+    logEvent(configureLogger(config), "database.migration", { outcome: "failure", ...errorLogFields(error) }, "error");
+    try {
+      await shutdownLogger();
+    } finally {
+      process.exitCode = 1;
+    }
+  });

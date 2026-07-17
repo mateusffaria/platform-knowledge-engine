@@ -26,12 +26,9 @@
   "license": "MIT",
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/api-logs": "^0.220.0",
-    "@opentelemetry/exporter-logs-otlp-http": "^0.220.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.220.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.220.0",
     "@opentelemetry/resources": "^2.9.0",
-    "@opentelemetry/sdk-logs": "^0.220.0",
     "@opentelemetry/sdk-node": "^0.220.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "commander": "^14.0.0",
@@ -39,6 +36,7 @@
     "drizzle-orm": "^0.44.0",
     "langfuse": "^3.38.20",
     "pino": "^9.7.0",
+    "pino-opentelemetry-transport": "^1.1.0",
     "postgres": "^3.4.7",
     "zod": "^3.25.76"
   },

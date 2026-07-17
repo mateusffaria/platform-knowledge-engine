@@ -130,6 +130,9 @@ Environment variables:
 
 - `DATABASE_URL`: Postgres connection string. Defaults to `postgres://pke:pke@localhost:5432/pke`.
 - `LOG_LEVEL`: structured log level. Defaults to `info`.
+- `APP_ENV`: deployment environment attached to every log. Defaults to `development`.
+- The application version attached to logs and telemetry is read from `package.json`.
+- `GIT_SHA`, `DEPLOYMENT_REGION`: optional deployment identifiers attached to logs and OTLP resources.
 - `OTEL_ENABLED`: enables optional OpenTelemetry tracing and metrics when set to `true`.
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: HTTP OTLP collector endpoint. Defaults to the SDK endpoint when unset; use `http://localhost:4318` for the local stack.
 - `OTEL_SERVICE_NAME`: telemetry service name. Defaults to `professional-knowledge-engine`.
@@ -154,9 +157,9 @@ docker compose --profile observability-lite up -d
 OTEL_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 npm run pke -- jobs reason <job-id>
 ```
 
-Grafana is available at `http://localhost:3000` (`admin` / `pke`). Its provisioned **PKE / PKE Reasoning Performance** dashboard shows total command and Ollama inference latency, tokens when Ollama provides them, candidate-pack size, evidence volume, validation/reasoning failures, and model/prompt-version latency. In **Explore**, select **VictoriaLogs** and run `*`; use `severity:Error` to focus on failures. **Stream filters** intentionally lists only stable stream/resource fields such as `service.name` and `host.name`; per-record application fields such as `error_code`, `error_summary`, `runIdentity`, and `trace_id` remain queryable but do not appear in that picker. In Code mode, run `* | field_names` to discover every field in the selected time range, then use queries such as `_msg:jobs.reason.validation_fallback`, `error_code:invalid_structured_output`, or `trace_id:<trace-id>`. VictoriaMetrics is exposed on port `8428`; VictoriaLogs is exposed on port `9428` for trace-correlated structured logs.
+Grafana is available at `http://localhost:3000` (`admin` / `pke`). Its provisioned **PKE / PKE Reasoning Performance** dashboard shows total command and Ollama inference latency, tokens when Ollama provides them, candidate-pack size, evidence volume, validation/reasoning failures, and model/prompt-version latency. PKE emits canonical JSON events with Pino to stderr and, when `OTEL_ENABLED=true`, to the OTLP collector. In **Explore**, select **VictoriaLogs** and run `*`; use `severity:Error` to focus on failures. **Stream filters** intentionally lists only stable stream/resource fields such as `service.name` and `host.name`; per-record application fields such as `event_name`, `error_code`, `error_message`, `error_stack`, and `trace_id` remain queryable but do not appear in that picker. In Code mode, run `* | field_names` to discover every field in the selected time range, then use queries such as `event_name:jobs.reason.command`, `outcome:failure`, `error_code:invalid_structured_output`, or `trace_id:<trace-id>`. VictoriaMetrics is exposed on port `8428`; VictoriaLogs is exposed on port `9428` for trace-correlated structured logs.
 
-For Langfuse, start `docker compose --profile observability-full up -d`, create local project keys in `http://localhost:3001`, and configure the `LANGFUSE_*` variables above. The default integration sends safe metadata and outcomes only. Retention is seven days in the local Victoria services; adjust the Compose `-retentionPeriod` settings and `OTEL_SAMPLE_RATIO` for longer or lower-volume local investigations. All telemetry integrations are optional and exporter failures are isolated from the CLI workflow.
+For Langfuse, start `docker compose --profile observability-full up -d`, create local project keys in `http://localhost:3001`, and configure the `LANGFUSE_*` variables above. The default integration sends safe metadata and outcomes only. Retention is seven days in the local Victoria services; adjust the Compose `-retentionPeriod` settings and `OTEL_SAMPLE_RATIO` for longer or lower-volume local investigations. All telemetry integrations are optional; when enabled, PKE does not silently discard instrumentation setup or shutdown failures.
 
 ## Job Analysis
 

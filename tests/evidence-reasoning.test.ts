@@ -7,9 +7,10 @@ import { describeEvidenceReasoningValidationError, parseEvidenceReasoningOutput 
 import { EvidenceReasoner } from "../src/modules/jobs/application/ports/evidence-reasoner.js";
 import { EvidenceReasoningObservability, EvidenceReasoningTrace } from "../src/modules/jobs/application/ports/evidence-reasoning-observability.js";
 import { LlmProvider } from "../src/modules/jobs/application/ports/llm-provider.js";
+import { ReasoningWorkflowTelemetry } from "../src/modules/jobs/application/ports/reasoning-workflow-telemetry.js";
 import { LlmEvidenceReasoner } from "../src/modules/jobs/application/services/llm-evidence-reasoner.js";
 import { createReasonJobEvidenceUseCase } from "../src/modules/jobs/application/use-cases/reason-job-evidence.js";
-import { CandidateEvidencePack, CuratedEvidencePack, JobDescriptionWithRequirements } from "../src/modules/jobs/domain/model.js";
+import { CandidateEvidencePack, CuratedEvidencePack, isDegradedEvidenceReasoningResult, JobDescriptionWithRequirements } from "../src/modules/jobs/domain/model.js";
 import { DrizzleCuratedEvidencePackRepository } from "../src/modules/jobs/infrastructure/repositories/drizzle-curated-evidence-pack-repository.js";
 import { EvidencePack } from "../src/modules/retrieval/application/types.js";
 
@@ -55,6 +56,17 @@ class RecordingObservability implements EvidenceReasoningObservability {
     this.traces.push(trace);
     return trace;
   }
+}
+
+class RecordingWorkflowTelemetry implements ReasoningWorkflowTelemetry {
+  events: Array<{ name: string; attributes: Record<string, string | number | boolean | undefined>; severity: "info" | "error" }> = [];
+  async run<T>(_stage: string, _attributes: Record<string, string | undefined>, operation: () => Promise<T>): Promise<T> { return operation(); }
+  record(): void {}
+  count(): void {}
+  event(name: string, attributes: Record<string, string | number | boolean | undefined> = {}, severity: "info" | "error" = "info"): void {
+    this.events.push({ name, attributes, severity });
+  }
+  traceId(): string | undefined { return undefined; }
 }
 
 function provider(content: string): LlmProvider {
@@ -139,19 +151,20 @@ describe("LlmEvidenceReasoner", () => {
     const invalid = JSON.stringify({ ...JSON.parse(validOutput()), coverage: [{ ...JSON.parse(validOutput()).coverage[0], selections: [{ evidenceClaimId: "unknown", reason: "x", contribution: "x", exaggerationRisk: "low" }], rejections: [] }, JSON.parse(validOutput()).coverage[1] ] });
     const llm = provider(invalid);
     const fallback = await new LlmEvidenceReasoner(llm, observability).reason({ candidatePack: pack });
-    expect(fallback).toMatchObject({
-      isFallback: true,
+    expect(isDegradedEvidenceReasoningResult(fallback)).toBe(true);
+    if (!isDegradedEvidenceReasoningResult(fallback)) throw new Error("Expected a degraded reasoning result.");
+    expect(fallback.curatedEvidencePack).toMatchObject({
       overallCoverageSummary: expect.stringContaining("No model-derived evidence"),
       recommendedEvidence: []
     });
-    expect(fallback.requirementCoverage.every((coverage) => coverage.coverageStatus === "missing")).toBe(true);
+    expect(fallback.curatedEvidencePack.requirementCoverage.every((coverage) => coverage.coverageStatus === "missing")).toBe(true);
     expect(llm.generate).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(pack)).toBe(snapshot);
     expect(observability.traces[0].events).toEqual(["provider_completed", "reasoning_retrying", "provider_completed", "reasoning_fallback"]);
     expect(observability.traces[0].flushed).toBe(true);
     const malformed = provider("not json");
     const malformedFallback = await new LlmEvidenceReasoner(malformed, new RecordingObservability()).reason({ candidatePack: candidatePack() });
-    expect(malformedFallback.isFallback).toBe(true);
+    expect(isDegradedEvidenceReasoningResult(malformedFallback)).toBe(true);
     expect(malformed.generate).toHaveBeenCalledTimes(2);
   });
 
@@ -317,18 +330,34 @@ describe("ReasonJobEvidence", () => {
     const document = jobDescription();
     const persisted: CuratedEvidencePack[] = [];
     const llm = provider("not json");
+    const telemetry = new RecordingWorkflowTelemetry();
     const execute = createReasonJobEvidenceUseCase({
       jobDescriptionRepository: { hasJobDescriptionVersion: async () => false, findByVersion: async () => undefined, save: async () => undefined, findById: async () => document, list: async () => [document.job] },
       jobAnalysisRepository: { save: async () => undefined, findLatestByJobDescriptionId: async () => undefined, findByAnalysisIdentity: async () => undefined },
       candidateEvidencePackBuilder: { build: buildCandidateEvidencePack },
       curatedEvidencePackRepository: { save: async (pack) => { persisted.push(pack); }, findByRunIdentity: async (_jobId, runIdentity) => persisted.find((pack) => pack.runIdentity === runIdentity) },
-      evidenceReasoner: new LlmEvidenceReasoner(llm, new RecordingObservability())
+      evidenceReasoner: new LlmEvidenceReasoner(llm, new RecordingObservability(), telemetry),
+      telemetry
     }).execute;
 
     const fallback = await execute({ jobDescriptionId: "job-1", evidencePack: evidencePack() });
-    expect(fallback.isFallback).toBe(true);
+    expect(fallback.requirementCoverage.every((coverage) => coverage.coverageStatus === "missing")).toBe(true);
     expect(persisted).toHaveLength(0);
     expect(llm.generate).toHaveBeenCalledTimes(2);
+    expect(telemetry.events).toHaveLength(1);
+    expect(telemetry.events[0]).toMatchObject({
+      name: "jobs.reason.command",
+      severity: "error",
+      attributes: expect.objectContaining({
+        command: "jobs.reason",
+        outcome: "degraded",
+        degraded: true,
+        error_code: "invalid_json",
+        error_summary: "The model response was not valid JSON.",
+        reasoning_attempts: 2,
+        error_stack: expect.any(String)
+      })
+    });
   });
 
   it("round-trips validated immutable curated content through the persistence adapter", async () => {
@@ -351,15 +380,12 @@ describe("ReasonJobEvidence", () => {
     expect(values).toHaveBeenCalledWith(expect.objectContaining({ candidatePackHash: curated.candidatePackHash, curatedEvidence }));
   });
 
-  it("refuses to persist a conservative fallback outside the use-case guard", async () => {
-    const values = vi.fn(async () => undefined);
-    const repository = new DrizzleCuratedEvidencePackRepository({
-      insert: vi.fn(() => ({ values })),
-      select: vi.fn()
-    } as never);
+  it("keeps a conservative fallback separate from the curated evidence domain", async () => {
     const fallback = await new LlmEvidenceReasoner(provider("not json"), new RecordingObservability()).reason({ candidatePack: candidatePack() });
 
-    await expect(repository.save(fallback)).rejects.toThrow("must not be persisted");
-    expect(values).not.toHaveBeenCalled();
+    expect(isDegradedEvidenceReasoningResult(fallback)).toBe(true);
+    if (!isDegradedEvidenceReasoningResult(fallback)) throw new Error("Expected a degraded reasoning result.");
+    expect(fallback.fallbackDiagnostic.errorCode).toBe("invalid_json");
+    expect(fallback.curatedEvidencePack).not.toHaveProperty("fallbackDiagnostic");
   });
 });

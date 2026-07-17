@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 
-import { CandidateEvidencePack, CuratedEvidencePack, RequirementCoverage } from "../../domain/model.js";
+import { CandidateEvidencePack, CuratedEvidencePack, DegradedEvidenceReasoningResult, EvidenceReasoningResult, RequirementCoverage } from "../../domain/model.js";
 import { finalizeCuratedEvidencePack, missingCoverage } from "../evidence-curation.js";
 import { buildEvidenceReasoningUserPrompt, evidenceReasoningPromptVersion, evidenceReasoningSystemPrompt } from "../evidence-reasoning-prompt.js";
 import { describeEvidenceReasoningValidationError, evidenceReasoningOutputJsonSchema, parseEvidenceReasoningOutput, type EvidenceReasoningValidationDiagnostic } from "../evidence-reasoning-schema.js";
@@ -17,13 +17,8 @@ type ReasoningFailureDiagnostic = {
   errorSummary: string;
   validationIssueCount?: number;
   validationIssues?: string;
+  errorStack?: string;
 };
-
-function stackFrames(error: unknown): string | undefined {
-  if (!(error instanceof Error) || !error.stack) return undefined;
-  const frames = error.stack.split("\n").slice(1, 9).map((frame) => frame.trim()).filter((frame) => frame.startsWith("at "));
-  return frames.length ? frames.join("\n") : undefined;
-}
 
 function isValidationFailure(error: unknown): boolean {
   return error instanceof Error && (
@@ -33,11 +28,12 @@ function isValidationFailure(error: unknown): boolean {
 }
 
 function describeReasoningFailure(error: unknown): ReasoningFailureDiagnostic {
-  if (isValidationFailure(error)) return describeEvidenceReasoningValidationError(error);
+  const errorStack = error instanceof Error ? error.stack : undefined;
+  if (isValidationFailure(error)) return { ...describeEvidenceReasoningValidationError(error), errorStack };
   if (error instanceof Error && error.message === "Ollama stopped generation because the output-token limit was reached.") {
-    return { errorCode: "output_truncated", errorSummary: "The model reached its output-token limit before completing the schema-bound response." };
+    return { errorCode: "output_truncated", errorSummary: "The model reached its output-token limit before completing the schema-bound response.", errorStack };
   }
-  return { errorCode: "provider_error", errorSummary: "The configured LLM provider did not produce a usable response." };
+  return { errorCode: "provider_error", errorSummary: "The configured LLM provider did not produce a usable response.", errorStack };
 }
 
 function fallbackCoverage(requirement: CandidateEvidencePack["requirements"][number]): RequirementCoverage {
@@ -56,30 +52,35 @@ function fallbackCoverage(requirement: CandidateEvidencePack["requirements"][num
   };
 }
 
-function fallbackCuratedEvidencePack(command: Parameters<EvidenceReasoner["reason"]>[0], run: EvidenceReasoningRunIdentity, diagnostic: ReasoningFailureDiagnostic): CuratedEvidencePack {
-  return finalizeCuratedEvidencePack({
-    id: randomUUID(),
-    runIdentity: run.runIdentity,
-    jobDescriptionId: command.candidatePack.jobDescriptionId,
-    jobAnalysisId: command.candidatePack.jobAnalysisId,
-    candidatePackVersion: command.candidatePack.version,
-    candidatePackHash: command.candidatePack.hash,
-    provider: run.provider,
-    model: run.model,
-    promptVersion: evidenceReasoningPromptVersion,
-    createdAt: new Date(),
-    overallCoverageSummary: "No model-derived evidence was selected because the structured reasoning response could not be validated.",
-    requirementCoverage: command.candidatePack.requirements.map(fallbackCoverage),
-    recommendedEvidence: [],
-    discardedEvidence: [],
-    missingEvidence: [],
-    warnings: [
-      ...command.candidatePack.warnings,
-      `The evidence reasoner exhausted ${maxGenerationAttempts} schema-bound attempt(s) (${diagnostic.errorCode}). This degraded result was not persisted; retry once the LLM is ready or choose a model that supports Ollama structured output.`
-    ],
-    limitations: ["No LLM-derived curation was accepted because every response failed local validation."],
-    isFallback: true
-  });
+function fallbackCuratedEvidencePack(command: Parameters<EvidenceReasoner["reason"]>[0], run: EvidenceReasoningRunIdentity, diagnostic: ReasoningFailureDiagnostic): DegradedEvidenceReasoningResult {
+  return {
+    curatedEvidencePack: finalizeCuratedEvidencePack({
+      id: randomUUID(),
+      runIdentity: run.runIdentity,
+      jobDescriptionId: command.candidatePack.jobDescriptionId,
+      jobAnalysisId: command.candidatePack.jobAnalysisId,
+      candidatePackVersion: command.candidatePack.version,
+      candidatePackHash: command.candidatePack.hash,
+      provider: run.provider,
+      model: run.model,
+      promptVersion: evidenceReasoningPromptVersion,
+      createdAt: new Date(),
+      overallCoverageSummary: "No model-derived evidence was selected because the structured reasoning response could not be validated.",
+      requirementCoverage: command.candidatePack.requirements.map(fallbackCoverage),
+      recommendedEvidence: [],
+      discardedEvidence: [],
+      missingEvidence: [],
+      warnings: [
+        ...command.candidatePack.warnings,
+        `The evidence reasoner exhausted ${maxGenerationAttempts} schema-bound attempt(s) (${diagnostic.errorCode}). This degraded result was not persisted; retry once the LLM is ready or choose a model that supports Ollama structured output.`
+      ],
+      limitations: ["No LLM-derived curation was accepted because every response failed local validation."]
+    }),
+    fallbackDiagnostic: {
+      ...diagnostic,
+      attempts: maxGenerationAttempts
+    }
+  };
 }
 
 function sleep(milliseconds: number): Promise<void> {
@@ -107,7 +108,7 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
     return { ...identity, runIdentity, promptVersion: evidenceReasoningPromptVersion };
   }
 
-  async reason(command: Parameters<EvidenceReasoner["reason"]>[0]): Promise<CuratedEvidencePack> {
+  async reason(command: Parameters<EvidenceReasoner["reason"]>[0]): Promise<EvidenceReasoningResult> {
     const run = this.getRunIdentity(command);
     const trace = this.observability.trace("evidence-reasoning", {
       jobDescriptionId: command.candidatePack.jobDescriptionId,
@@ -213,22 +214,6 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
           if (isValidationFailure(error) || diagnostic.errorCode === "output_truncated") {
             this.telemetry.count("validationFailures", { outcome: willRetry ? "retry" : "fallback", failure_class: diagnostic.errorCode });
           }
-          const logName = diagnostic.errorCode === "provider_error"
-            ? (willRetry ? "jobs.reason.provider_retrying" : "jobs.reason.provider_fallback")
-            : (willRetry ? "jobs.reason.validation_retrying" : "jobs.reason.validation_fallback");
-          this.telemetry.log(logName, {
-            ...attemptAttributes,
-            provider: generated?.provider ?? run.provider,
-            model: generated?.model ?? run.model,
-            promptVersion: run.promptVersion,
-            failure_class: diagnostic.errorCode,
-            error_code: diagnostic.errorCode,
-            error_summary: diagnostic.errorSummary,
-            validation_issue_count: diagnostic.validationIssueCount?.toString(),
-            validation_issues: diagnostic.validationIssues,
-            error_stack: stackFrames(error),
-            recovery: willRetry ? "retry" : "fallback"
-          }, "error");
           await trace.event(willRetry ? "reasoning_retrying" : "reasoning_fallback", {
             attempt,
             errorCode: diagnostic.errorCode,
