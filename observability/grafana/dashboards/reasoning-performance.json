@@ -1,14 +1,14 @@
 {
   "title": "PKE Reasoning Performance",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "panels": [
     { "title": "Jobs reason total duration (ms)", "type": "timeseries", "targets": [{ "expr": "sum by (outcome) (pke_jobs_reason_duration_milliseconds_sum)" }] },
     { "title": "Ollama inference duration (ms)", "type": "timeseries", "targets": [{ "expr": "sum by (provider, model, outcome) (pke_jobs_reason_llm_duration_milliseconds_sum)" }] },
     { "title": "Prompt and completion tokens", "type": "timeseries", "targets": [{ "expr": "sum by (provider, model, outcome) (pke_jobs_reason_llm_prompt_tokens_sum)" }, { "expr": "sum by (provider, model, outcome) (pke_jobs_reason_llm_completion_tokens_sum)" }] },
     { "title": "Candidate-pack size (bytes)", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_candidate_pack_bytes_sum / pke_jobs_reason_candidate_pack_bytes_count" }] },
-    { "title": "Candidates per requirement", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_candidate_evidence_sum / pke_jobs_reason_candidate_evidence_count" }] },
-    { "title": "Evidence sent to reasoner", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_evidence_per_requirement_sum / pke_jobs_reason_evidence_per_requirement_count" }] },
+    { "title": "Candidate evidence in pack", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_candidate_evidence_sum / pke_jobs_reason_candidate_evidence_count" }] },
+    { "title": "Candidates sent to reasoner per requirement", "type": "timeseries", "targets": [{ "expr": "pke_jobs_reason_evidence_per_requirement_sum / pke_jobs_reason_evidence_per_requirement_count" }] },
     { "title": "Schema-validation failures", "type": "timeseries", "targets": [{ "expr": "sum by (outcome, failure_class) (pke_jobs_reason_validation_failures_total)" }] },
     { "title": "Reasoning failures", "type": "timeseries", "targets": [{ "expr": "sum by (outcome, failure_class) (pke_jobs_reason_failures_total)" }] },
     { "title": "Latency by model and prompt version (ms)", "type": "timeseries", "targets": [{ "expr": "sum by (model, prompt_version, outcome) (pke_jobs_reason_llm_duration_milliseconds_sum)" }] }

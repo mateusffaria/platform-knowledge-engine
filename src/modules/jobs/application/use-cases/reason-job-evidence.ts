@@ -75,7 +75,7 @@ export function createReasonJobEvidenceUseCase(dependencies: {
             outcome: "failure"
           });
           telemetry.count("failures", { outcome: "failure", failure_class: "reasoning_error" });
-          telemetry.log("jobs.reason.failed", { jobDescriptionId: command.jobDescriptionId, failure_class: "reasoning_error",  "abc": 123}, "error");
+          telemetry.log("jobs.reason.failed", { jobDescriptionId: command.jobDescriptionId, failure_class: "reasoning_error" }, "error");
           throw error;
         }
       });

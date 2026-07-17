@@ -350,4 +350,16 @@ describe("ReasonJobEvidence", () => {
     await expect(repository.findByRunIdentity(curated.jobDescriptionId, curated.runIdentity)).resolves.toEqual(curated);
     expect(values).toHaveBeenCalledWith(expect.objectContaining({ candidatePackHash: curated.candidatePackHash, curatedEvidence }));
   });
+
+  it("refuses to persist a conservative fallback outside the use-case guard", async () => {
+    const values = vi.fn(async () => undefined);
+    const repository = new DrizzleCuratedEvidencePackRepository({
+      insert: vi.fn(() => ({ values })),
+      select: vi.fn()
+    } as never);
+    const fallback = await new LlmEvidenceReasoner(provider("not json"), new RecordingObservability()).reason({ candidatePack: candidatePack() });
+
+    await expect(repository.save(fallback)).rejects.toThrow("must not be persisted");
+    expect(values).not.toHaveBeenCalled();
+  });
 });

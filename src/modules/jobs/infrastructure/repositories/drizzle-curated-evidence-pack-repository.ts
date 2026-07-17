@@ -29,6 +29,9 @@ export class DrizzleCuratedEvidencePackRepository implements CuratedEvidencePack
   constructor(private readonly db: CuratedEvidenceDatabase) {}
 
   async save(pack: CuratedEvidencePack): Promise<void> {
+    if (pack.isFallback) {
+      throw new Error("Conservative fallback curated evidence packs must not be persisted.");
+    }
     const {
       id,
       runIdentity,
