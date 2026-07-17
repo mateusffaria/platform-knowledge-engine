@@ -161,6 +161,21 @@ function deduplicateRejections(
   });
 }
 
+function deduplicateCoverage(
+  coverage: EvidenceReasoningOutput["coverage"],
+  validationWarnings: string[]
+): EvidenceReasoningOutput["coverage"] {
+  const seen = new Set<string>();
+  return coverage.filter((entry) => {
+    if (seen.has(entry.requirementId)) {
+      validationWarnings.push(`Evidence Reasoner repeated coverage for requirement ${entry.requirementId}; the first coverage decision was retained.`);
+      return false;
+    }
+    seen.add(entry.requirementId);
+    return true;
+  });
+}
+
 function normalizeComplementaryEvidenceIds(
   complementaryEvidenceIds: string[],
   selectionId: string,
@@ -223,8 +238,9 @@ function validateCoverage(
     }
     return true;
   });
-  unique(knownCoverage.map((entry) => entry.requirementId), "requirement coverage entries");
-  const coverageByRequirement = new Map(knownCoverage.map((entry) => [entry.requirementId, entry]));
+  const coverageByRequirement = new Map(
+    deduplicateCoverage(knownCoverage, validationWarnings).map((entry) => [entry.requirementId, entry])
+  );
   const result: RequirementCoverage[] = [];
 
   for (const requirement of pack.requirements) {

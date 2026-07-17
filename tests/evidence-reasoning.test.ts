@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildCandidateEvidencePack } from "../src/modules/jobs/application/candidate-evidence-pack.js";
+import { buildCandidateEvidencePack, hashCandidateEvidencePack } from "../src/modules/jobs/application/candidate-evidence-pack.js";
 import { buildEvidenceReasoningUserPrompt } from "../src/modules/jobs/application/evidence-reasoning-prompt.js";
 import { deduplicateCrossRequirementSelections, displayScore, missingCoverage } from "../src/modules/jobs/application/evidence-curation.js";
 import { describeEvidenceReasoningValidationError, parseEvidenceReasoningOutput } from "../src/modules/jobs/application/evidence-reasoning-schema.js";
@@ -99,6 +99,21 @@ describe("Candidate Evidence Pack", () => {
     expect(first.warnings).toContain("1 retrieval result(s) without canonical evidence-claim identities were excluded from evidence reasoning.");
   });
 
+  it("hashes only deterministic bounded reasoner input", () => {
+    const first = candidatePack();
+    const changedRetrievalMetadata = structuredClone(first);
+    changedRetrievalMetadata.requirements[0].candidates[0].sources.reverse();
+    changedRetrievalMetadata.requirements[0].candidates[0].objectiveSignals.semanticScore = 0.123456;
+    changedRetrievalMetadata.requirements[0].diagnostics.rawRetrievalResultCount += 10;
+    const { hash: _hash, generatedAt: _generatedAt, ...hashInput } = changedRetrievalMetadata;
+
+    expect(hashCandidateEvidencePack(hashInput)).toBe(first.hash);
+
+    changedRetrievalMetadata.requirements[0].candidates[0].claimText = "Changed reasoner-visible claim";
+    const { hash: _changedHash, generatedAt: _changedAt, ...changedHashInput } = changedRetrievalMetadata;
+    expect(hashCandidateEvidencePack(changedHashInput)).not.toBe(first.hash);
+  });
+
   it("keeps complete candidates while selecting a ranked, exact-structured-safe reasoner view", () => {
     const pack = buildCandidateEvidencePack({
       jobDescription: jobDescription(),
@@ -144,7 +159,7 @@ describe("LlmEvidenceReasoner", () => {
     expect(observability.traces[0].flushed).toBe(true);
   });
 
-  it("falls back conservatively after malformed, unknown, or contradictory output without mutating the candidate pack", async () => {
+  it("falls back conservatively without repeating deterministic validation failures or mutating the candidate pack", async () => {
     const pack = candidatePack();
     const snapshot = JSON.stringify(pack);
     const observability = new RecordingObservability();
@@ -158,18 +173,21 @@ describe("LlmEvidenceReasoner", () => {
       recommendedEvidence: []
     });
     expect(fallback.curatedEvidencePack.requirementCoverage.every((coverage) => coverage.coverageStatus === "missing")).toBe(true);
-    expect(llm.generate).toHaveBeenCalledTimes(2);
+    expect(llm.generate).toHaveBeenCalledOnce();
     expect(JSON.stringify(pack)).toBe(snapshot);
-    expect(observability.traces[0].events).toEqual(["provider_completed", "reasoning_retrying", "provider_completed", "reasoning_fallback"]);
+    expect(observability.traces[0].events).toEqual(["provider_completed", "reasoning_fallback"]);
     expect(observability.traces[0].flushed).toBe(true);
     const malformed = provider("not json");
     const malformedFallback = await new LlmEvidenceReasoner(malformed, new RecordingObservability()).reason({ candidatePack: candidatePack() });
     expect(isDegradedEvidenceReasoningResult(malformedFallback)).toBe(true);
-    expect(malformed.generate).toHaveBeenCalledTimes(2);
+    expect(malformed.generate).toHaveBeenCalledOnce();
   });
 
-  it("uses Ollama JSON Schema mode and expands the completion budget only for the recovery attempt", async () => {
-    const llm = provider("not json");
+  it("uses Ollama JSON Schema mode and expands the completion budget only after truncation", async () => {
+    const llm = provider(validOutput());
+    vi.mocked(llm.generate)
+      .mockResolvedValueOnce({ content: validOutput(), provider: "ollama", model: "test-model", finishReason: "length" })
+      .mockResolvedValueOnce({ content: validOutput(), provider: "ollama", model: "test-model" });
     await new LlmEvidenceReasoner(llm, new RecordingObservability()).reason({ candidatePack: candidatePack() });
 
     expect(llm.generate).toHaveBeenNthCalledWith(1, expect.objectContaining({
@@ -235,6 +253,23 @@ describe("LlmEvidenceReasoner", () => {
     expect(result.warnings.join(" ")).toContain("repeated rejected evidence claim-b for requirement leadership");
     expect(result.warnings.join(" ")).toContain("invalid optional reference was removed");
     expect(result.warnings.join(" ")).toContain("unknown requirement invented-requirement");
+    expect(llm.generate).toHaveBeenCalledOnce();
+  });
+
+  it("retains the first repeated requirement coverage and records a warning", async () => {
+    const duplicateOutput = JSON.parse(validOutput());
+    duplicateOutput.coverage.splice(1, 0, {
+      ...duplicateOutput.coverage[0],
+      coverageStatus: "weak",
+      explanation: "A repeated decision that must not replace the first."
+    });
+    const llm = provider(JSON.stringify(duplicateOutput));
+
+    const result = await new LlmEvidenceReasoner(llm, new RecordingObservability()).reason({ candidatePack: candidatePack() });
+
+    expect(result.requirementCoverage).toHaveLength(2);
+    expect(result.requirementCoverage[0].coverageStatus).toBe("partial");
+    expect(result.warnings.join(" ")).toContain("repeated coverage for requirement leadership");
     expect(llm.generate).toHaveBeenCalledOnce();
   });
 
@@ -343,7 +378,7 @@ describe("ReasonJobEvidence", () => {
     const fallback = await execute({ jobDescriptionId: "job-1", evidencePack: evidencePack() });
     expect(fallback.requirementCoverage.every((coverage) => coverage.coverageStatus === "missing")).toBe(true);
     expect(persisted).toHaveLength(0);
-    expect(llm.generate).toHaveBeenCalledTimes(2);
+    expect(llm.generate).toHaveBeenCalledOnce();
     expect(telemetry.events).toHaveLength(1);
     expect(telemetry.events[0]).toMatchObject({
       name: "jobs.reason.command",
@@ -354,7 +389,7 @@ describe("ReasonJobEvidence", () => {
         degraded: true,
         error_code: "invalid_json",
         error_summary: "The model response was not valid JSON.",
-        reasoning_attempts: 2,
+        reasoning_attempts: 1,
         error_stack: expect.any(String)
       })
     });

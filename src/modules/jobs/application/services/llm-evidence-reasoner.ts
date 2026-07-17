@@ -52,7 +52,12 @@ function fallbackCoverage(requirement: CandidateEvidencePack["requirements"][num
   };
 }
 
-function fallbackCuratedEvidencePack(command: Parameters<EvidenceReasoner["reason"]>[0], run: EvidenceReasoningRunIdentity, diagnostic: ReasoningFailureDiagnostic): DegradedEvidenceReasoningResult {
+function fallbackCuratedEvidencePack(
+  command: Parameters<EvidenceReasoner["reason"]>[0],
+  run: EvidenceReasoningRunIdentity,
+  diagnostic: ReasoningFailureDiagnostic,
+  attempts: number
+): DegradedEvidenceReasoningResult {
   return {
     curatedEvidencePack: finalizeCuratedEvidencePack({
       id: randomUUID(),
@@ -72,13 +77,13 @@ function fallbackCuratedEvidencePack(command: Parameters<EvidenceReasoner["reaso
       missingEvidence: [],
       warnings: [
         ...command.candidatePack.warnings,
-        `The evidence reasoner exhausted ${maxGenerationAttempts} schema-bound attempt(s) (${diagnostic.errorCode}). This degraded result was not persisted; retry once the LLM is ready or choose a model that supports Ollama structured output.`
+        `The evidence reasoner ended after ${attempts} schema-bound attempt(s) (${diagnostic.errorCode}). This degraded result was not persisted; retry once the LLM is ready or choose a model that supports Ollama structured output.`
       ],
       limitations: ["No LLM-derived curation was accepted because every response failed local validation."]
     }),
     fallbackDiagnostic: {
       ...diagnostic,
-      attempts: maxGenerationAttempts
+      attempts
     }
   };
 }
@@ -154,7 +159,9 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
       }));
 
       let lastDiagnostic: ReasoningFailureDiagnostic = { errorCode: "provider_error", errorSummary: "The configured LLM provider did not produce a usable response." };
+      let attemptsMade = 0;
       for (let attempt = 1; attempt <= maxGenerationAttempts; attempt += 1) {
+        attemptsMade = attempt;
         const attemptAttributes = { runIdentity: run.runIdentity, candidatePackHash: command.candidatePack.hash, attempt: String(attempt) };
         const startedAt = performance.now();
         let generated: LlmGenerationResponse | undefined;
@@ -205,7 +212,9 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
         } catch (error) {
           const diagnostic = describeReasoningFailure(error);
           lastDiagnostic = diagnostic;
-          const willRetry = attempt < maxGenerationAttempts;
+          const willRetry = attempt < maxGenerationAttempts && (
+            diagnostic.errorCode === "provider_error" || diagnostic.errorCode === "output_truncated"
+          );
           const outcome = diagnostic.errorCode === "provider_error" ? "provider_error" : "validation_error";
           const attributes = { provider: generated?.provider ?? run.provider, model: generated?.model ?? run.model, prompt_version: run.promptVersion, outcome };
           this.telemetry.record("inferenceDuration", performance.now() - startedAt, attributes);
@@ -225,11 +234,12 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
             if (diagnostic.errorCode === "provider_error") await sleep(750);
             continue;
           }
+          break;
         }
       }
 
       this.telemetry.count("failures", { outcome: "degraded", failure_class: lastDiagnostic.errorCode });
-      return fallbackCuratedEvidencePack(command, run, lastDiagnostic);
+      return fallbackCuratedEvidencePack(command, run, lastDiagnostic, attemptsMade);
     } finally {
       await trace.flush();
     }

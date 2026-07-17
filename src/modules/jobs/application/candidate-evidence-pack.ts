@@ -14,7 +14,7 @@ import {
   selectCandidatesForReasoner
 } from "./candidate-evidence-selection.js";
 
-export const candidateEvidencePackVersion = "candidate-evidence-pack-v3";
+export const candidateEvidencePackVersion = "candidate-evidence-pack-v4";
 
 export function toCandidateEvidence(item: EvidencePack["items"][number]): CandidateEvidence | undefined {
   if (!item.evidenceClaimId) {
@@ -55,10 +55,25 @@ export function toCandidateEvidence(item: EvidencePack["items"][number]): Candid
 
 function stablePackContent(pack: Omit<CandidateEvidencePack, "hash" | "generatedAt">): string {
   return JSON.stringify({
-    ...pack,
+    version: pack.version,
+    jobDescriptionId: pack.jobDescriptionId,
+    jobAnalysisId: pack.jobAnalysisId,
+    selection: pack.selection,
     requirements: pack.requirements.map((requirement) => ({
-      ...requirement,
-      candidates: [...requirement.candidates].sort((left, right) => left.evidenceClaimId.localeCompare(right.evidenceClaimId))
+      requirementId: requirement.requirementId,
+      requirementText: requirement.requirementText,
+      importance: requirement.importance,
+      candidates: requirement.candidates
+        .filter((candidate) => requirement.reasonerCandidateIds.includes(candidate.evidenceClaimId))
+        .map((candidate) => ({
+          evidenceClaimId: candidate.evidenceClaimId,
+          claimText: candidate.claimText,
+          claimType: candidate.claimType,
+          claimCategory: candidate.claimCategory,
+          claimStatus: candidate.claimStatus,
+          valueText: candidate.valueText,
+          valueUnit: candidate.valueUnit
+        }))
     })).sort((left, right) => left.requirementId.localeCompare(right.requirementId)),
     warnings: [...pack.warnings].sort()
   });

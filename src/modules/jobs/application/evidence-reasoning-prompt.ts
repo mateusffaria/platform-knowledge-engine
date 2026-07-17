@@ -13,21 +13,21 @@ export function buildEvidenceReasoningUserPrompt(pack: CandidateEvidencePack): s
     contractVersion: evidenceReasoningPromptVersion,
     jobDescriptionId: pack.jobDescriptionId,
     jobAnalysisId: pack.jobAnalysisId,
-    candidatePack: { version: pack.version, hash: pack.hash, warnings: pack.warnings },
-    requirements: pack.requirements.map((requirement) => ({
+    candidatePack: { version: pack.version, hash: pack.hash, warnings: [...pack.warnings].sort() },
+    requirements: [...pack.requirements].sort((left, right) => left.requirementId.localeCompare(right.requirementId)).map((requirement) => ({
       requirementId: requirement.requirementId,
       requirementText: requirement.requirementText,
       importance: requirement.importance,
       candidates: requirement.candidates
         .filter((candidate) => requirement.reasonerCandidateIds.includes(candidate.evidenceClaimId))
         .map((candidate) => ({
-        evidenceClaimId: candidate.evidenceClaimId,
-        claimText: candidate.claimText,
-        claimType: candidate.claimType,
-        claimCategory: candidate.claimCategory,
-        claimStatus: candidate.claimStatus,
-        valueText: candidate.valueText,
-        valueUnit: candidate.valueUnit
+          evidenceClaimId: candidate.evidenceClaimId,
+          claimText: candidate.claimText,
+          claimType: candidate.claimType,
+          claimCategory: candidate.claimCategory,
+          claimStatus: candidate.claimStatus,
+          valueText: candidate.valueText,
+          valueUnit: candidate.valueUnit
         }))
     })),
     responseShape: {
