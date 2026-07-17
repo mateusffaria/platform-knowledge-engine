@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { buildCandidateEvidencePack } from "../src/modules/jobs/application/candidate-evidence-pack.js";
 import { buildEvidenceReasoningUserPrompt } from "../src/modules/jobs/application/evidence-reasoning-prompt.js";
 import { deduplicateCrossRequirementSelections, displayScore, missingCoverage } from "../src/modules/jobs/application/evidence-curation.js";
+import { describeEvidenceReasoningValidationError, parseEvidenceReasoningOutput } from "../src/modules/jobs/application/evidence-reasoning-schema.js";
 import { EvidenceReasoner } from "../src/modules/jobs/application/ports/evidence-reasoner.js";
 import { EvidenceReasoningObservability, EvidenceReasoningTrace } from "../src/modules/jobs/application/ports/evidence-reasoning-observability.js";
 import { LlmProvider } from "../src/modules/jobs/application/ports/llm-provider.js";
@@ -131,16 +132,59 @@ describe("LlmEvidenceReasoner", () => {
     expect(observability.traces[0].flushed).toBe(true);
   });
 
-  it("rejects malformed, unknown, and contradictory output without mutating the candidate pack", async () => {
+  it("falls back conservatively after malformed, unknown, or contradictory output without mutating the candidate pack", async () => {
     const pack = candidatePack();
     const snapshot = JSON.stringify(pack);
     const observability = new RecordingObservability();
     const invalid = JSON.stringify({ ...JSON.parse(validOutput()), coverage: [{ ...JSON.parse(validOutput()).coverage[0], selections: [{ evidenceClaimId: "unknown", reason: "x", contribution: "x", exaggerationRisk: "low" }], rejections: [] }, JSON.parse(validOutput()).coverage[1] ] });
-    await expect(new LlmEvidenceReasoner(provider(invalid), observability).reason({ candidatePack: pack })).rejects.toThrow("unknown or out-of-scope");
+    const llm = provider(invalid);
+    const fallback = await new LlmEvidenceReasoner(llm, observability).reason({ candidatePack: pack });
+    expect(fallback).toMatchObject({
+      isFallback: true,
+      overallCoverageSummary: expect.stringContaining("No model-derived evidence"),
+      recommendedEvidence: []
+    });
+    expect(fallback.requirementCoverage.every((coverage) => coverage.coverageStatus === "missing")).toBe(true);
+    expect(llm.generate).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(pack)).toBe(snapshot);
-    expect(observability.traces[0].events).toEqual(["provider_completed", "validation_failed"]);
+    expect(observability.traces[0].events).toEqual(["provider_completed", "reasoning_retrying", "provider_completed", "reasoning_fallback"]);
     expect(observability.traces[0].flushed).toBe(true);
-    await expect(new LlmEvidenceReasoner(provider("not json"), new RecordingObservability()).reason({ candidatePack: candidatePack() })).rejects.toThrow("not valid JSON");
+    const malformed = provider("not json");
+    const malformedFallback = await new LlmEvidenceReasoner(malformed, new RecordingObservability()).reason({ candidatePack: candidatePack() });
+    expect(malformedFallback.isFallback).toBe(true);
+    expect(malformed.generate).toHaveBeenCalledTimes(2);
+  });
+
+  it("uses Ollama JSON Schema mode and expands the completion budget only for the recovery attempt", async () => {
+    const llm = provider("not json");
+    await new LlmEvidenceReasoner(llm, new RecordingObservability()).reason({ candidatePack: candidatePack() });
+
+    expect(llm.generate).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      responseFormat: expect.objectContaining({ type: "object", additionalProperties: false }),
+      disableThinking: true
+    }));
+    expect(llm.generate).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      maxPredict: 8192,
+      disableThinking: true
+    }));
+  });
+
+  it("summarizes structured-output errors without retaining model-provided values", () => {
+    const invalid = JSON.stringify({ ...JSON.parse(validOutput()), coverage: [{ ...JSON.parse(validOutput()).coverage[0], rejections: [{ evidenceClaimId: "claim-b", reason: "Not a valid rejection reason", explanation: "The model-provided value must not enter telemetry." }] }] });
+    let error: unknown;
+    try {
+      parseEvidenceReasoningOutput(invalid, candidatePack());
+    } catch (caught) {
+      error = caught;
+    }
+
+    const diagnostic = describeEvidenceReasoningValidationError(error);
+    expect(diagnostic).toMatchObject({
+      errorCode: "invalid_structured_output",
+      validationIssueCount: 1,
+      validationIssues: "coverage[0].rejections[0].reason:invalid_enum_value"
+    });
+    expect(JSON.stringify(diagnostic)).not.toContain("Not a valid rejection reason");
   });
 
   it("accepts safe mirrored envelope fields and normalizes a missing scope alias", async () => {
@@ -267,6 +311,24 @@ describe("ReasonJobEvidence", () => {
     await execute({ jobDescriptionId: "job-1", evidencePack: evidencePack() });
     expect(persisted).toHaveLength(1);
     expect(llm.generate).toHaveBeenCalledOnce();
+  });
+
+  it("does not persist a conservative fallback, allowing a later valid provider response to recover", async () => {
+    const document = jobDescription();
+    const persisted: CuratedEvidencePack[] = [];
+    const llm = provider("not json");
+    const execute = createReasonJobEvidenceUseCase({
+      jobDescriptionRepository: { hasJobDescriptionVersion: async () => false, findByVersion: async () => undefined, save: async () => undefined, findById: async () => document, list: async () => [document.job] },
+      jobAnalysisRepository: { save: async () => undefined, findLatestByJobDescriptionId: async () => undefined, findByAnalysisIdentity: async () => undefined },
+      candidateEvidencePackBuilder: { build: buildCandidateEvidencePack },
+      curatedEvidencePackRepository: { save: async (pack) => { persisted.push(pack); }, findByRunIdentity: async (_jobId, runIdentity) => persisted.find((pack) => pack.runIdentity === runIdentity) },
+      evidenceReasoner: new LlmEvidenceReasoner(llm, new RecordingObservability())
+    }).execute;
+
+    const fallback = await execute({ jobDescriptionId: "job-1", evidencePack: evidencePack() });
+    expect(fallback.isFallback).toBe(true);
+    expect(persisted).toHaveLength(0);
+    expect(llm.generate).toHaveBeenCalledTimes(2);
   });
 
   it("round-trips validated immutable curated content through the persistence adapter", async () => {

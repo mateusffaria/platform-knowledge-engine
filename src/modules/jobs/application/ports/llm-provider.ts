@@ -1,8 +1,14 @@
+export type LlmResponseFormat = "json" | Record<string, unknown>;
+
 export interface LlmGenerationRequest {
   systemPrompt: string;
   userPrompt: string;
   model?: string;
-  responseFormat: "json";
+  responseFormat: LlmResponseFormat;
+  /** Disable hidden reasoning for compact, schema-bound extraction tasks. */
+  disableThinking?: boolean;
+  /** A one-off completion budget override for a recovery attempt. */
+  maxPredict?: number;
 }
 
 export interface LlmGenerationResponse {
@@ -13,6 +19,7 @@ export interface LlmGenerationResponse {
     promptTokens?: number;
     completionTokens?: number;
   };
+  finishReason?: string;
 }
 
 export interface LlmProviderIdentity {

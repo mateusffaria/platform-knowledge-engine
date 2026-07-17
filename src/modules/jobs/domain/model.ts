@@ -301,4 +301,6 @@ export interface CuratedEvidencePack {
   warnings: string[];
   limitations: string[];
   displayScore?: number;
+  /** A conservative, non-persisted result returned only after bounded recovery fails. */
+  isFallback?: true;
 }

@@ -5,6 +5,7 @@ import { buildCandidateEvidencePack } from "../../application/candidate-evidence
 import { createPrepareCandidateEvidenceUseCase } from "../../application/use-cases/prepare-candidate-evidence.js";
 import { CanonicalEvidenceReader } from "../../../retrieval/application/ports/canonical-evidence-reader.js";
 import { EvidenceClaimStatus, EvidencePack, HybridSubjectType } from "../../../retrieval/application/types.js";
+import { loadConfig } from "../../../../shared/config/env.js";
 
 export interface JobsServices {
   ingestJobDescription: {
@@ -283,6 +284,7 @@ export function registerJobsCommands(
   createJobsServices: JobsServicesFactory,
   createRetrievalServices: JobRetrievalServicesFactory
 ): void {
+  const defaultReasoningCandidateLimit = String(loadConfig().reasoningCandidateLimit);
   const jobs = program.command("jobs").description("Ingest job descriptions and retrieve relevant professional evidence");
 
   jobs.command("ingest")
@@ -396,7 +398,7 @@ export function registerJobsCommands(
     .description("Curate bounded canonical evidence for a persisted job description")
     .argument("<job-id>", "job description id")
     .option("--model <model>", "override the configured LLM model for this reasoning run")
-    .option("--limit-per-requirement <number>", "maximum non-exact candidates sent to the reasoner per requirement", "10")
+    .option("--limit-per-requirement <number>", "maximum non-exact candidates sent to the reasoner per requirement", defaultReasoningCandidateLimit)
     .option("--min-candidate-score <number>", "minimum final score for non-exact candidates sent to the reasoner")
     .option("--json", "print machine-readable JSON")
     .option("--verbose", "include canonical evidence provenance, selections, and rejections")
@@ -435,7 +437,7 @@ export function registerJobsCommands(
     .argument("<job-id>", "job description id")
     .option("--json", "print machine-readable JSON")
     .option("--verbose", "include per-requirement pipeline diagnostics and discard reasons")
-    .option("--limit-per-requirement <number>", "maximum non-exact candidates selected for the reasoner per requirement", "10")
+    .option("--limit-per-requirement <number>", "maximum non-exact candidates selected for the reasoner per requirement", defaultReasoningCandidateLimit)
     .option("--min-candidate-score <number>", "minimum final score for non-exact candidates selected for the reasoner")
     .action(async (jobDescriptionId: string, options: { limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean }) => {
       const selection = parseCandidateSelection(options);

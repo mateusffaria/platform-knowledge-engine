@@ -8,5 +8,8 @@ export class OpenTelemetryReasoningWorkflowTelemetry implements ReasoningWorkflo
   }
   record(name: Parameters<Telemetry["record"]>[0], value: number, attributes: Record<string, string | undefined> = {}): void { this.telemetry.record(name, value, attributes); }
   count(name: "failures" | "validationFailures", attributes: Record<string, string | undefined> = {}): void { this.telemetry.count(name, attributes); }
+  log(message: string, attributes: Record<string, string | undefined> = {}, severity: "info" | "error" = "info"): void {
+    this.telemetry.log(message, Object.fromEntries(Object.entries(attributes).filter(([, value]) => value !== undefined)), severity);
+  }
   traceId(): string | undefined { return this.telemetry.traceId(); }
 }

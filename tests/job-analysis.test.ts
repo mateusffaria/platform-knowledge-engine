@@ -161,6 +161,26 @@ describe("LLM provider", () => {
     await expect(provider.generate({ systemPrompt: "system", userPrompt: "user", responseFormat: "json" }))
       .rejects.toThrow("HTTP 503");
   });
+
+  it("forwards JSON Schema, disabled thinking, and a recovery output budget to Ollama", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ response: "{}", model: "configured-model", done_reason: "stop" }), { status: 200 }));
+    const provider = new OllamaLlmProvider({ baseUrl: "http://ollama", model: "configured-model", fetchImpl });
+
+    await expect(provider.generate({
+      systemPrompt: "system",
+      userPrompt: "user",
+      responseFormat: { type: "object", additionalProperties: false },
+      disableThinking: true,
+      maxPredict: 8192
+    })).resolves.toMatchObject({ content: "{}", finishReason: "stop" });
+
+    const request = fetchImpl.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(String(request.body))).toMatchObject({
+      format: { type: "object", additionalProperties: false },
+      think: false,
+      options: { temperature: 0, num_predict: 8192 }
+    });
+  });
 });
 
 describe("Job Analyzer", () => {

@@ -42,7 +42,102 @@ export const evidenceReasoningOutputSchema = z.object({
   coverage: z.array(coverageSchema)
 }).strict();
 
+/**
+ * Kept alongside the Zod validator so the provider constrains generation with
+ * the exact contract that is checked locally. Zod v3 does not expose a JSON
+ * Schema serializer, so this deliberately mirrors only the provider output
+ * shape (not the enriched, persisted CuratedEvidencePack).
+ */
+export const evidenceReasoningOutputJsonSchema: Record<string, unknown> = {
+  type: "object",
+  additionalProperties: false,
+  required: ["overallCoverageSummary", "warnings", "limitations", "coverage"],
+  properties: {
+    overallCoverageSummary: { type: "string", minLength: 1 },
+    warnings: { type: "array", items: { type: "string", minLength: 1 } },
+    limitations: { type: "array", items: { type: "string", minLength: 1 } },
+    coverage: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["requirementId", "coverageStatus", "selections", "rejections", "strengthFactors", "limitations", "explanation"],
+        properties: {
+          requirementId: { type: "string", minLength: 1 },
+          coverageStatus: { type: "string", enum: ["strong", "partial", "weak", "missing"] },
+          selections: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["evidenceClaimId", "reason", "contribution", "exaggerationRisk"],
+              properties: {
+                evidenceClaimId: { type: "string", minLength: 1 },
+                reason: { type: "string", minLength: 1 },
+                contribution: { type: "string", minLength: 1 },
+                complementaryEvidenceIds: { type: "array", items: { type: "string", minLength: 1 } },
+                exaggerationRisk: { type: "string", enum: ["low", "medium", "high"] }
+              }
+            }
+          },
+          rejections: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["evidenceClaimId", "reason", "explanation"],
+              properties: {
+                evidenceClaimId: { type: "string", minLength: 1 },
+                reason: { type: "string", enum: ["irrelevant", "weak", "redundant", "unsupported_scope", "lower_quality_alternative", "insufficient_provenance", "missing"] },
+                explanation: { type: "string", minLength: 1 }
+              }
+            }
+          },
+          strengthFactors: { type: "array", items: { type: "string", minLength: 1 } },
+          limitations: { type: "array", items: { type: "string", minLength: 1 } },
+          explanation: { type: "string", minLength: 1 }
+        }
+      }
+    }
+  }
+};
+
 type EvidenceReasoningOutput = z.infer<typeof evidenceReasoningOutputSchema>;
+
+export interface EvidenceReasoningValidationDiagnostic {
+  errorCode: "invalid_json" | "invalid_structured_output" | "invalid_reasoning_output";
+  errorSummary: string;
+  validationIssueCount?: number;
+  validationIssues?: string;
+}
+
+function issuePath(path: (string | number)[]): string {
+  if (path.length === 0) return "root";
+  return path.map((segment) => typeof segment === "number" ? `[${segment}]` : segment).join(".").replace(/\.\[/g, "[");
+}
+
+export function describeEvidenceReasoningValidationError(error: unknown): EvidenceReasoningValidationDiagnostic {
+  if (!(error instanceof Error)) {
+    return { errorCode: "invalid_reasoning_output", errorSummary: "The evidence-reasoning validation failed with a non-error value." };
+  }
+
+  if (error.message.startsWith("Evidence Reasoner returned output that was not valid JSON")) {
+    return { errorCode: "invalid_json", errorSummary: "The model response was not valid JSON." };
+  }
+
+  if (error.message.startsWith("Evidence Reasoner returned invalid structured output")) {
+    const issues = error.cause instanceof z.ZodError ? error.cause.issues : [];
+    const issueSummary = [...new Set(issues.slice(0, 8).map((issue) => `${issuePath(issue.path)}:${issue.code}`))].join(", ");
+    return {
+      errorCode: "invalid_structured_output",
+      errorSummary: `The model response violated ${issues.length || 1} structured-output constraint(s).`,
+      validationIssueCount: issues.length || undefined,
+      validationIssues: issueSummary || undefined
+    };
+  }
+
+  return { errorCode: "invalid_reasoning_output", errorSummary: "The model response failed evidence-reasoning validation." };
+}
 
 function unique(values: string[], label: string): void {
   if (new Set(values).size !== values.length) {
@@ -220,7 +315,7 @@ export function parseEvidenceReasoningOutput(content: string, pack: CandidateEvi
   }
   const output = evidenceReasoningOutputSchema.safeParse(parsed);
   if (!output.success) {
-    throw new Error(`Evidence Reasoner returned invalid structured output: ${output.error.issues.map((issue) => issue.message).join("; ")}`);
+    throw new Error(`Evidence Reasoner returned invalid structured output: ${output.error.issues.map((issue) => issue.message).join("; ")}`, { cause: output.error });
   }
   const validationWarnings: string[] = [];
   const coverage = validateCoverage(output.data, pack, validationWarnings);

@@ -18,7 +18,8 @@ export class LlmProviderFactory {
 
     return new OllamaLlmProvider({
       baseUrl: config.ollamaBaseUrl,
-      model: config.llmModel
+      model: config.llmModel,
+      maxPredict: config.ollamaMaxPredict
     });
   }
 }

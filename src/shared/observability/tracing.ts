@@ -1,6 +1,9 @@
 import { context, metrics, SpanStatusCode, trace, type Attributes } from "@opentelemetry/api";
+import { logs, SeverityNumber } from "@opentelemetry/api-logs";
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-http";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { BatchLogRecordProcessor } from "@opentelemetry/sdk-logs";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import { PeriodicExportingMetricReader } from "@opentelemetry/sdk-metrics";
 import { ParentBasedSampler, TraceIdRatioBasedSampler } from "@opentelemetry/sdk-trace-base";
@@ -19,12 +22,14 @@ export const reasoningMetricNames = {
 
 export type MetricAttributes = Partial<Record<"provider" | "model" | "prompt_version" | "outcome" | "failure_class", string>>;
 export type TraceAttributes = Attributes;
+export type TelemetryLogSeverity = "info" | "error";
 
 export interface Telemetry {
   run<T>(name: string, attributes: TraceAttributes, operation: () => Promise<T>): Promise<T>;
   runWithSpan<T>(name: string, operation: () => Promise<T>): Promise<T>;
   record(name: keyof typeof reasoningMetricNames, value: number, attributes?: MetricAttributes): void;
   count(name: "failures" | "validationFailures", attributes?: MetricAttributes): void;
+  log(message: string, attributes?: TraceAttributes, severity?: TelemetryLogSeverity): void;
   traceId(): string | undefined;
   shutdown(): Promise<void>;
 }
@@ -44,6 +49,7 @@ class NoopTelemetry implements Telemetry {
   async runWithSpan<T>(_name: string, operation: () => Promise<T>): Promise<T> { return operation(); }
   record(_name: keyof typeof reasoningMetricNames, _value: number, _attributes?: MetricAttributes): void {}
   count(_name: "failures" | "validationFailures", _attributes?: MetricAttributes): void {}
+  log(_message: string, _attributes?: TraceAttributes, _severity?: TelemetryLogSeverity): void {}
   traceId(): string | undefined { return undefined; }
   async shutdown(): Promise<void> {}
 }
@@ -52,6 +58,7 @@ class OTelTelemetry implements Telemetry {
   private readonly meter = metrics.getMeter("professional-knowledge-engine");
   private readonly histograms = new Map<string, ReturnType<typeof this.meter.createHistogram>>();
   private readonly counters = new Map<string, ReturnType<typeof this.meter.createCounter>>();
+  private readonly logger = logs.getLogger("professional-knowledge-engine");
 
   constructor(private readonly sdk: NodeSDK) {}
 
@@ -62,7 +69,13 @@ class OTelTelemetry implements Telemetry {
         return await operation();
       } catch (error) {
         span.recordException(error as Error);
-        span.setStatus({ code: SpanStatusCode.ERROR, message: classify(error) });
+        const failureClass = classify(error);
+        span.setStatus({ code: SpanStatusCode.ERROR, message: failureClass });
+        this.emitLog("telemetry.operation.failed", {
+          ...attributes,
+          operation: name,
+          failure_class: failureClass
+        }, "error");
         throw error;
       } finally {
         span.end();
@@ -90,6 +103,20 @@ class OTelTelemetry implements Telemetry {
     } catch {}
   }
 
+  log(message: string, attributes: TraceAttributes = {}, severity: TelemetryLogSeverity = "info"): void {
+    this.emitLog(message, attributes, severity);
+  }
+
+  private emitLog(message: string, attributes: TraceAttributes, severity: TelemetryLogSeverity): void {
+    try {
+      this.logger.emit({
+        severityNumber: severity === "error" ? SeverityNumber.ERROR : SeverityNumber.INFO,
+        body: message,
+        attributes: { ...attributes, ...(this.traceId() ? { traceId: this.traceId() } : {}) }
+      });
+    } catch {}
+  }
+
   traceId(): string | undefined { return trace.getActiveSpan()?.spanContext().traceId; }
   async shutdown(): Promise<void> { try { await this.sdk.shutdown(); } catch {} }
 }
@@ -106,7 +133,8 @@ export function createTelemetry(options: boolean | { enabled: boolean; endpoint?
       metricReader: new PeriodicExportingMetricReader({
         exporter: new OTLPMetricExporter(endpoint ? { url: `${endpoint}/v1/metrics` } : undefined),
         exportIntervalMillis: 10_000
-      })
+      }),
+      logRecordProcessors: [new BatchLogRecordProcessor({ exporter: new OTLPLogExporter(endpoint ? { url: `${endpoint}/v1/logs` } : undefined) })]
     });
     sdk.start();
     return new OTelTelemetry(sdk);

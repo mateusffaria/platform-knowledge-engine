@@ -5,6 +5,7 @@ type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
 interface OllamaLlmProviderOptions {
   baseUrl: string;
   model: string;
+  maxPredict?: number;
   fetchImpl?: Fetch;
 }
 
@@ -13,17 +14,20 @@ interface OllamaGenerateResponse {
   model?: unknown;
   prompt_eval_count?: unknown;
   eval_count?: unknown;
+  done_reason?: unknown;
 }
 
 export class OllamaLlmProvider implements LlmProvider {
   private readonly endpoint: string;
   private readonly model: string;
   private readonly fetchImpl: Fetch;
+  private readonly maxPredict: number;
 
-  constructor({ baseUrl, model, fetchImpl = fetch }: OllamaLlmProviderOptions) {
+  constructor({ baseUrl, model, maxPredict = 2048, fetchImpl = fetch }: OllamaLlmProviderOptions) {
     this.endpoint = `${baseUrl.replace(/\/+$/, "")}/api/generate`;
     this.model = model;
     this.fetchImpl = fetchImpl;
+    this.maxPredict = maxPredict;
   }
 
   resolveIdentity(model?: string): LlmProviderIdentity {
@@ -40,9 +44,10 @@ export class OllamaLlmProvider implements LlmProvider {
         system: request.systemPrompt,
         prompt: request.userPrompt,
         format: request.responseFormat,
+        ...(request.disableThinking === true ? { think: false } : {}),
         options: {
           temperature: 0,
-          num_predict: 4096
+          num_predict: request.maxPredict ?? this.maxPredict
         },
         stream: false
       })
@@ -72,7 +77,8 @@ export class OllamaLlmProvider implements LlmProvider {
       content: body.response,
       provider: "ollama",
       model: typeof body.model === "string" && body.model.trim() ? body.model : model,
-      ...(Object.keys(usage).length > 0 ? { usage } : {})
+      ...(Object.keys(usage).length > 0 ? { usage } : {}),
+      ...(typeof body.done_reason === "string" && body.done_reason.trim() ? { finishReason: body.done_reason } : {})
     };
   }
 }

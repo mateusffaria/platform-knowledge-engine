@@ -20,7 +20,7 @@ Evidence reasoning is bounded curation, not retrieval or evidence generation. Ca
 
 `jobs candidates` is concise by default: it reports raw retrieval subjects, eligible and hydrated canonical claims, unique associated candidates, and candidates selected for the reasoner per requirement. `--verbose` adds retrieval intent, ranked candidates, selection outcomes, and normalized discard records; `--json` is lossless and includes every valid associated candidate plus all diagnostics. A hydrated/eligible count can exceed raw when one retrieved asset expands into multiple canonical claims.
 
-Candidate selection is mechanical model-context control, not qualitative reasoning. `--limit-per-requirement <number>` defaults to 10 non-exact candidates; `--min-candidate-score <number>` optionally filters non-exact candidates by final retrieval score. Exact structured matches (`structuredScore >= 1`) remain visible to the reasoner even when semantic score is weak, the minimum score is unmet, or the ordinary limit is exceeded. The same controls are available on `jobs candidates` and `jobs reason`, so inspection matches the bounded reasoner input.
+Candidate selection is mechanical model-context control, not qualitative reasoning. `--limit-per-requirement <number>` defaults to `REASONING_CANDIDATE_LIMIT` (3 when unset); `--min-candidate-score <number>` optionally filters non-exact candidates by final retrieval score. Exact structured matches (`structuredScore >= 1`) remain visible to the reasoner even when semantic score is weak, the minimum score is unmet, or the ordinary limit is exceeded. The same controls are available on `jobs candidates` and `jobs reason`, so inspection matches the bounded reasoner input. `OLLAMA_MAX_PREDICT` defaults to 4096 tokens. Evidence reasoning uses an Ollama JSON Schema and disables hidden thinking; if a response still fails validation it retries once with an 8192-token recovery budget, then returns an explicitly degraded, non-persisted result rather than storing or presenting invented curation.
 
 The model returns only requirement/evidence identifiers and bounded reasons. Zod validation rejects malformed, unknown, contradictory, or out-of-scope references; the application rebuilds selections and rejections from canonical input, preserves objective signals and provenance, and deterministically removes redundant cross-requirement selections. Every requirement remains explicit as `strong`, `partial`, `weak`, or `missing`; qualitative coverage and the optional display score are not hiring-fit proof.
 
@@ -39,8 +39,8 @@ npm run pke -- jobs analyze <job-id> --verbose
 npm run pke -- jobs analyze <job-id> --json
 npm run pke -- jobs retrieve <job-id> --verbose
 npm run pke -- jobs candidates <job-id> --verbose
-npm run pke -- jobs candidates <job-id> --limit-per-requirement 10 --min-candidate-score 0.5 --json
-npm run pke -- jobs reason <job-id> --limit-per-requirement 10 --min-candidate-score 0.5 --verbose
+npm run pke -- jobs candidates <job-id> --limit-per-requirement 3 --min-candidate-score 0.5 --json
+npm run pke -- jobs reason <job-id> --limit-per-requirement 3 --min-candidate-score 0.5 --verbose
 ```
 
 `analyze` requires `LLM_PROVIDER=ollama` and `LLM_MODEL=<model>`. It returns clear setup guidance when either value is absent. A failed model call or invalid structured output does not persist a new analysis. Retrieval uses the latest valid snapshot and includes analysis only as semantic enrichment; deterministic PKQL filters remain unchanged.

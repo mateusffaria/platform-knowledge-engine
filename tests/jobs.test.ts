@@ -335,7 +335,7 @@ describe("jobs CLI commands", () => {
     const { program } = createProgram();
     await program.parseAsync(["node", "pke", "jobs", "candidates", "job-1", "--json"]);
     const pack = JSON.parse(log.mock.calls[0][0]);
-    expect(pack.selection).toEqual({ limitPerRequirement: 10 });
+    expect(pack.selection).toEqual({ limitPerRequirement: 3 });
     expect(pack.requirements).toEqual(expect.arrayContaining([
       expect.objectContaining({
         requirementId: "requirement-typescript",

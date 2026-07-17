@@ -16,6 +16,8 @@ export interface AppConfig {
   llmProvider?: string;
   llmModel?: string;
   ollamaBaseUrl: string;
+  ollamaMaxPredict?: number;
+  reasoningCandidateLimit: number;
   semanticSearchMinScore?: number;
 }
 
@@ -49,6 +51,13 @@ function readRatio(name: string, fallback: number): number {
   return value;
 }
 
+function readPositiveInteger(name: string, fallback: number): number {
+  const value = readOptionalNumber(name);
+  if (value === undefined) return fallback;
+  if (!Number.isInteger(value) || value < 1) throw new Error(`${name} must be a positive integer.`);
+  return value;
+}
+
 export function loadConfig(): AppConfig {
   return {
     databaseUrl: process.env.DATABASE_URL ?? "postgres://pke:pke@localhost:5432/pke",
@@ -66,6 +75,8 @@ export function loadConfig(): AppConfig {
     llmProvider: process.env.LLM_PROVIDER || undefined,
     llmModel: process.env.LLM_MODEL || undefined,
     ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434",
+    ollamaMaxPredict: readPositiveInteger("OLLAMA_MAX_PREDICT", 4096),
+    reasoningCandidateLimit: readPositiveInteger("REASONING_CANDIDATE_LIMIT", 3),
     semanticSearchMinScore: readOptionalNumber("SEMANTIC_SEARCH_MIN_SCORE")
   };
 }
