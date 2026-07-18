@@ -6,6 +6,7 @@ import { createPrepareCandidateEvidenceUseCase } from "../../application/use-cas
 import { CanonicalEvidenceReader } from "../../../retrieval/application/ports/canonical-evidence-reader.js";
 import { EvidenceClaimStatus, EvidencePack, HybridSubjectType } from "../../../retrieval/application/types.js";
 import { loadConfig } from "../../../../shared/config/env.js";
+import { createTerminalProgress } from "../../../../shared/cli/terminal-progress.js";
 
 export interface JobsServices {
   ingestJobDescription: {
@@ -402,11 +403,14 @@ export function registerJobsCommands(
     .option("--min-candidate-score <number>", "minimum final score for non-exact candidates sent to the reasoner")
     .option("--json", "print machine-readable JSON")
     .option("--verbose", "include canonical evidence provenance, selections, and rejections")
-    .action(async (jobDescriptionId: string, options: { model?: string; limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean }) => {
+    .option("--no-progress", "disable interactive terminal progress")
+    .action(async (jobDescriptionId: string, options: { model?: string; limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean; progress?: boolean }) => {
       const selection = parseCandidateSelection(options);
+      const progress = createTerminalProgress({ enabled: options.json !== true && options.progress !== false });
       const jobsServices = createJobsServices();
       let retrievalServices: JobRetrievalServices | undefined;
       try {
+        progress.start("Loading job and preparing candidates");
         const [jobDescription, intent] = await Promise.all([
           jobsServices.showJobDescription.execute({ jobDescriptionId }),
           jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId })
@@ -420,12 +424,18 @@ export function registerJobsCommands(
           retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
           canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
         });
+        const reasonerCandidateCount = candidatePack.requirements.reduce((total, requirement) => total + requirement.reasonerCandidateIds.length, 0);
+        progress.update(`Prepared ${reasonerCandidateCount} candidate${reasonerCandidateCount === 1 ? "" : "s"} for ${candidatePack.requirements.length} requirement${candidatePack.requirements.length === 1 ? "" : "s"}; curating evidence`);
         const curated = await jobsServices.reasonJobEvidence.execute({
           jobDescriptionId,
           candidatePack,
           model: options.model
         });
+        progress.succeed("Evidence curation complete");
         printCuratedEvidencePack(curated, options);
+      } catch (error) {
+        progress.fail("Evidence curation failed");
+        throw error;
       } finally {
         await retrievalServices?.close();
         await jobsServices.close();
