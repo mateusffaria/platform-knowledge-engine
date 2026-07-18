@@ -45,6 +45,10 @@ export interface JobRetrievalServices {
 export type JobsServicesFactory = () => JobsServices;
 export type JobRetrievalServicesFactory = () => JobRetrievalServices;
 
+function createCommandProgress(options: { json?: boolean; progress?: boolean }) {
+  return createTerminalProgress({ enabled: options.json !== true && options.progress !== false });
+}
+
 function parsePositiveInteger(value: string, name: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed < 1) {
@@ -327,11 +331,18 @@ export function registerJobsCommands(
     .option("--model <model>", "override the configured LLM model for this analysis")
     .option("--json", "print machine-readable JSON")
     .option("--verbose", "include analysis source references and execution metadata")
-    .action(async (jobDescriptionId: string, options: { model?: string; json?: boolean; verbose?: boolean }) => {
+    .option("--no-progress", "disable interactive terminal progress")
+    .action(async (jobDescriptionId: string, options: { model?: string; json?: boolean; verbose?: boolean; progress?: boolean }) => {
+      const progress = createCommandProgress(options);
       const services = createJobsServices();
       try {
+        progress.start("Analyzing job description with the configured model");
         const analysis = await services.analyzeJobDescription.execute({ jobDescriptionId, model: options.model });
+        progress.succeed("Job analysis complete");
         printJobAnalysis(analysis, options);
+      } catch (error) {
+        progress.fail("Job analysis failed");
+        throw error;
       } finally {
         await services.close();
       }
@@ -346,6 +357,7 @@ export function registerJobsCommands(
     .option("--subject-type <type>", "filter by subject type: knowledge_asset, evidence_claim, skill, experience, project, achievement")
     .option("--verbose", "include identifiers and provenance")
     .option("--json", "print machine-readable JSON")
+    .option("--no-progress", "disable interactive terminal progress")
     .action(async (jobDescriptionId: string, options: {
       limit: string;
       minScore?: string;
@@ -353,19 +365,23 @@ export function registerJobsCommands(
       subjectType?: string;
       verbose?: boolean;
       json?: boolean;
+      progress?: boolean;
     }) => {
       const limit = parsePositiveInteger(options.limit, "Retrieval limit");
       const minScore = parseOptionalScore(options.minScore);
       const claimStatus = parseOptionalClaimStatus(options.claimStatus);
       const subjectType = parseOptionalSubjectType(options.subjectType);
+      const progress = createCommandProgress(options);
       const jobsServices = createJobsServices();
       let retrievalServices: JobRetrievalServices | undefined;
       try {
+        progress.start("Loading job and retrieval intent");
         const [jobDescription, intent] = await Promise.all([
           jobsServices.showJobDescription.execute({ jobDescriptionId }),
           jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId })
         ]);
         retrievalServices = createRetrievalServices();
+        progress.update("Retrieving ranked evidence");
         const pack = await retrievalServices.hybridSearch.execute({
           query: intent.query,
           limit,
@@ -373,8 +389,8 @@ export function registerJobsCommands(
           claimStatus,
           subjectType
         });
-        printEvidencePack(pack, options);
         if (options.verbose) {
+          progress.update(`Preparing candidates for ${jobDescription.requirements.filter((requirement) => !requirement.inferred).length} requirements`);
           const candidatePack = await createPrepareCandidateEvidenceUseCase().prepare({
             jobDescription,
             jobAnalysisId: intent.analysisId,
@@ -382,13 +398,21 @@ export function registerJobsCommands(
             retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
             canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
           });
+          progress.succeed("Evidence retrieval complete");
+          printEvidencePack(pack, options);
           printCandidateEvidencePack(candidatePack, { verbose: true });
+        } else {
+          progress.succeed("Evidence retrieval complete");
+          printEvidencePack(pack, options);
         }
         if (!options.json) {
           for (const warning of intent.warnings) {
             console.log(`Job intent warning: ${warning}`);
           }
         }
+      } catch (error) {
+        progress.fail("Evidence retrieval failed");
+        throw error;
       } finally {
         await retrievalServices?.close();
         await jobsServices.close();
@@ -406,7 +430,7 @@ export function registerJobsCommands(
     .option("--no-progress", "disable interactive terminal progress")
     .action(async (jobDescriptionId: string, options: { model?: string; limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean; progress?: boolean }) => {
       const selection = parseCandidateSelection(options);
-      const progress = createTerminalProgress({ enabled: options.json !== true && options.progress !== false });
+      const progress = createCommandProgress(options);
       const jobsServices = createJobsServices();
       let retrievalServices: JobRetrievalServices | undefined;
       try {
@@ -449,16 +473,20 @@ export function registerJobsCommands(
     .option("--verbose", "include per-requirement pipeline diagnostics and discard reasons")
     .option("--limit-per-requirement <number>", "maximum non-exact candidates selected for the reasoner per requirement", defaultReasoningCandidateLimit)
     .option("--min-candidate-score <number>", "minimum final score for non-exact candidates selected for the reasoner")
-    .action(async (jobDescriptionId: string, options: { limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean }) => {
+    .option("--no-progress", "disable interactive terminal progress")
+    .action(async (jobDescriptionId: string, options: { limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean; progress?: boolean }) => {
       const selection = parseCandidateSelection(options);
+      const progress = createCommandProgress(options);
       const jobsServices = createJobsServices();
       let retrievalServices: JobRetrievalServices | undefined;
       try {
+        progress.start("Loading job and retrieval intent");
         const [jobDescription, intent] = await Promise.all([
           jobsServices.showJobDescription.execute({ jobDescriptionId }),
           jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId })
         ]);
         retrievalServices = createRetrievalServices();
+        progress.update(`Preparing candidates for ${jobDescription.requirements.filter((requirement) => !requirement.inferred).length} requirements`);
         const candidatePack = await createPrepareCandidateEvidenceUseCase().prepare({
           jobDescription,
           jobAnalysisId: intent.analysisId,
@@ -467,7 +495,12 @@ export function registerJobsCommands(
           retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
           canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
         });
+        const reasonerCandidateCount = candidatePack.requirements.reduce((total, requirement) => total + requirement.reasonerCandidateIds.length, 0);
+        progress.succeed(`Prepared ${reasonerCandidateCount} candidate${reasonerCandidateCount === 1 ? "" : "s"}`);
         printCandidateEvidencePack(candidatePack, options);
+      } catch (error) {
+        progress.fail("Candidate preparation failed");
+        throw error;
       } finally {
         await retrievalServices?.close();
         await jobsServices.close();

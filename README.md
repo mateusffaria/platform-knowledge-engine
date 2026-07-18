@@ -148,6 +148,10 @@ Environment variables:
 
 `EMBEDDING_*` configuration is used for semantic indexing and retrieval. `LLM_*` configuration is used for bounded job analysis and evidence reasoning; ingestion, show, and deterministic retrieval remain usable without LLM configuration.
 
+## Terminal progress
+
+Long-running interactive commands (`index`, `search`, `retrieve`, `jobs analyze`, `jobs retrieve`, `jobs candidates`, and `jobs reason`) show transient stage feedback with elapsed time when stderr is a TTY. This feedback is written directly to the terminal, never through Pino or OpenTelemetry, so it is not exported to Grafana. It is disabled automatically for `--json`, redirected output, CI, and non-interactive containers; use `--no-progress` to suppress it explicitly.
+
 ## Local reasoning observability
 
 Start the local metrics, logs, and dashboard stack without changing normal CLI operation:

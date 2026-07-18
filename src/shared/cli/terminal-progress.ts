@@ -10,6 +10,7 @@ export interface TerminalProgressOptions {
   stream?: NodeJS.WriteStream;
   now?: () => number;
   refreshIntervalMs?: number;
+  isCi?: boolean;
 }
 
 const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -90,8 +91,9 @@ export function createTerminalProgress({
   enabled,
   stream = process.stderr,
   now = performance.now.bind(performance),
-  refreshIntervalMs = 125
+  refreshIntervalMs = 125,
+  isCi = process.env.CI !== undefined
 }: TerminalProgressOptions): TerminalProgress {
-  if (!enabled || stream.isTTY !== true) return new NoopTerminalProgress();
+  if (!enabled || isCi || stream.isTTY !== true) return new NoopTerminalProgress();
   return new InteractiveTerminalProgress(stream, now, refreshIntervalMs);
 }

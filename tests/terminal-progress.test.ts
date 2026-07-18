@@ -13,7 +13,7 @@ describe("terminal progress", () => {
   it("renders transient feedback only to an interactive stream", () => {
     let now = 0;
     const stream = terminal(true);
-    const progress = createTerminalProgress({ enabled: true, stream, now: () => now, refreshIntervalMs: 60_000 });
+    const progress = createTerminalProgress({ enabled: true, stream, now: () => now, refreshIntervalMs: 60_000, isCi: false });
 
     progress.start("Preparing candidates");
     now = 65_000;
@@ -28,7 +28,8 @@ describe("terminal progress", () => {
   it("does not write when disabled or redirected", () => {
     for (const options of [
       { enabled: false, stream: terminal(true) },
-      { enabled: true, stream: terminal(false) }
+      { enabled: true, stream: terminal(false) },
+      { enabled: true, stream: terminal(true), isCi: true }
     ]) {
       const progress = createTerminalProgress(options);
       progress.start("Preparing candidates");

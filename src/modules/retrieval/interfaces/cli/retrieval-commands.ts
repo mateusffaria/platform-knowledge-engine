@@ -11,8 +11,13 @@ import {
 import { PkqlParseError } from "../../application/pkql-parser.js";
 import { MissingEmbeddingProviderError } from "../../infrastructure/embedding-providers/missing-embedding-provider-error.js";
 import { createProductionRetrievalServices } from "../../infrastructure/retrieval-runner.js";
+import { createTerminalProgress } from "../../../../shared/cli/terminal-progress.js";
 
 type RetrievalServicesFactory = typeof createProductionRetrievalServices;
+
+function createCommandProgress(options: { json?: boolean; progress?: boolean }) {
+  return createTerminalProgress({ enabled: options.json !== true && options.progress !== false });
+}
 
 function reportMissingEmbeddingProvider(error: unknown): boolean {
   if (!(error instanceof MissingEmbeddingProviderError)) {
@@ -213,13 +218,19 @@ export function registerRetrievalCommands(
     .command("index")
     .description("Index persisted professional knowledge for semantic retrieval")
     .option("--force", "regenerate and update embeddings even when indexed text is unchanged")
-    .action(async (options: { force?: boolean }) => {
+    .option("--no-progress", "disable interactive terminal progress")
+    .action(async (options: { force?: boolean; progress?: boolean }) => {
+      const progress = createCommandProgress(options);
       let services: ReturnType<RetrievalServicesFactory> | undefined;
       try {
+        progress.start("Loading professional knowledge for indexing");
         services = createServices();
+        progress.update("Generating embeddings and persisting the index");
         const result = await services.indexKnowledge.execute({ force: options.force });
+        progress.succeed(`Indexed ${result.indexed} embedding${result.indexed === 1 ? "" : "s"}; skipped ${result.skipped}`);
         console.log(`Indexed ${result.indexed} embeddings; skipped ${result.skipped} unchanged embeddings.`);
       } catch (error) {
+        progress.fail("Knowledge indexing failed");
         if (!reportMissingEmbeddingProvider(error) && !reportPkqlParseError(error)) {
           throw error;
         }
@@ -236,16 +247,21 @@ export function registerRetrievalCommands(
     .option("--min-score <number>", "minimum similarity score for relevant evidence")
     .option("--verbose", "include identifiers and full embedding text")
     .option("--json", "print machine-readable JSON")
-    .action(async (query: string, options: { limit: string; minScore?: string; verbose?: boolean; json?: boolean }) => {
+    .option("--no-progress", "disable interactive terminal progress")
+    .action(async (query: string, options: { limit: string; minScore?: string; verbose?: boolean; json?: boolean; progress?: boolean }) => {
       const limit = parsePositiveInteger(options.limit, "Search limit");
       const minScore = parseOptionalScore(options.minScore);
+      const progress = createCommandProgress(options);
 
       let services: ReturnType<RetrievalServicesFactory> | undefined;
       try {
+        progress.start("Embedding query and searching professional knowledge");
         services = createServices();
         const result = await services.searchKnowledge.execute({ query, limit, minScore });
+        progress.succeed("Semantic search complete");
         printSearchResult(result, options);
       } catch (error) {
+        progress.fail("Semantic search failed");
         if (!reportMissingEmbeddingProvider(error) && !reportPkqlParseError(error)) {
           throw error;
         }
@@ -264,6 +280,7 @@ export function registerRetrievalCommands(
     .option("--subject-type <type>", "filter by subject type: knowledge_asset, evidence_claim, skill, experience, project, achievement")
     .option("--verbose", "include identifiers, score components, strategies, and excerpts")
     .option("--json", "print machine-readable JSON")
+    .option("--no-progress", "disable interactive terminal progress")
     .action(async (
       query: string,
       options: {
@@ -273,15 +290,18 @@ export function registerRetrievalCommands(
         subjectType?: string;
         verbose?: boolean;
         json?: boolean;
+        progress?: boolean;
       }
     ) => {
       const limit = parsePositiveInteger(options.limit, "Retrieval limit");
       const minScore = parseOptionalScore(options.minScore);
       const claimStatus = parseOptionalClaimStatus(options.claimStatus);
       const subjectType = parseOptionalSubjectType(options.subjectType);
+      const progress = createCommandProgress(options);
 
       let services: ReturnType<RetrievalServicesFactory> | undefined;
       try {
+        progress.start("Planning and retrieving ranked evidence");
         services = createServices();
         const result = await services.hybridSearch.execute({
           query,
@@ -290,8 +310,10 @@ export function registerRetrievalCommands(
           claimStatus,
           subjectType
         });
+        progress.succeed("Evidence retrieval complete");
         printEvidencePack(result, options);
       } catch (error) {
+        progress.fail("Evidence retrieval failed");
         if (!reportMissingEmbeddingProvider(error) && !reportPkqlParseError(error)) {
           throw error;
         }
