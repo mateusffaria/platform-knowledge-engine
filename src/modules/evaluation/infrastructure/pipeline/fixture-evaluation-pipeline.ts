@@ -5,6 +5,10 @@ import { MetadataMatcher } from "../../../retrieval/application/ports/metadata-m
 import { StructuredKnowledgeSearch } from "../../../retrieval/application/ports/structured-knowledge-search.js"
 import { createHybridSearchUseCase } from "../../../retrieval/application/use-cases/hybrid-search.js"
 import { EvidencePack, HybridSearchCandidate } from "../../../retrieval/application/types.js"
+import { freezeResumePlanningInput } from "../../../documents/application/planning-input.js"
+import { parseResumePlanDraft, ResumePlanSchemaError } from "../../../documents/application/resume-content-plan-schema.js"
+import { validateResumePlanDraft } from "../../../documents/application/resume-plan-validator.js"
+import { buildResumePlanIdentity } from "../../../documents/application/services/llm-resume-content-planner.js"
 import { EvaluationPipeline } from "../../application/ports/evaluation-pipeline.js"
 import {
   EvaluationEvidenceFixture,
@@ -263,6 +267,71 @@ export class FixtureEvaluationPipeline implements EvaluationPipeline {
           executions.push({ stage: "reasoning", metadata: { candidatePackVersion: candidatePack?.version, durationMs: this.now() - started }, error: { code: "reasoning_error", message: error instanceof Error ? error.message : "Reasoning failed." } })
         }
       }
+    }
+
+    if (scenario.resumePlanning && !scenario.skipStages?.includes("resume_planning")) {
+      const started = this.now()
+      const planning = scenario.resumePlanning
+      const selectedIds = new Set(planning.selectedEvidenceIds ?? scenario.evidence.filter((evidence) => evidence.claimStatus === "confirmed" || evidence.claimStatus === "single_source").map((evidence) => evidence.id))
+      const coverage = scenario.reasoning?.coverage ?? scenario.requirements.map((requirement) => ({ requirementId: requirement.id, coverageStatus: "missing" as const, selectedEvidenceIds: [], rejectedEvidenceIds: [] }))
+      const input = freezeResumePlanningInput({
+        curatedEvidencePack: {
+          id: `pack-${scenario.id}`,
+          jobDescriptionId: `job-${scenario.id}`,
+          createdAt: new Date(0),
+          provider: scenario.reasoning?.provider ?? "fixture",
+          model: scenario.reasoning?.model ?? "fixture-resume-planner",
+          promptVersion: scenario.reasoning?.promptVersion ?? "fixture-reasoning-v1",
+          requirements: scenario.requirements.map((requirement) => {
+            const observed = coverage.find((entry) => entry.requirementId === requirement.id)
+            return { requirementId: requirement.id, requirementText: requirement.text, importance: requirement.importance, coverageStatus: observed?.coverageStatus ?? "missing", selectedEvidenceIds: observed?.selectedEvidenceIds ?? [] }
+          }),
+          selectedEvidence: scenario.evidence.filter((evidence) => selectedIds.has(evidence.id)).map((evidence) => ({
+            evidenceClaimId: evidence.id,
+            knowledgeAssetId: evidence.knowledgeAssetId,
+            subjectType: evidence.subjectType ?? "professional_experience",
+            claimType: evidence.claimType,
+            claimText: evidence.claimText,
+            claimStatus: evidence.claimStatus,
+            contribution: evidence.claimText,
+            exaggerationRisk: evidence.exaggerationRisk ?? "low",
+            requirementIds: evidence.requirementIds,
+            presentation: evidence.presentation ?? { sourceOrganizationOrExperienceId: evidence.knowledgeAssetId, technologies: evidence.tags, metrics: [] },
+            provenance: evidence.sources.map((source) => ({ sourceDocumentId: source.sourceDocumentId, sourceReferenceId: source.sourceReferenceId, locator: source.locator }))
+          })),
+          discardedEvidenceIds: scenario.evidence.filter((evidence) => !selectedIds.has(evidence.id)).map((evidence) => evidence.id),
+          missingRequirementIds: coverage.filter((entry) => entry.coverageStatus === "missing").map((entry) => entry.requirementId),
+          warnings: [],
+          limitations: []
+        }
+      })
+      let schemaValid = true
+      let validationIssues: Array<{ code: string; path: string }> = []
+      let selectedEvidenceIds: string[] = []
+      try {
+        const draft = parseResumePlanDraft(JSON.stringify(planning.response))
+        selectedEvidenceIds = draft.selectedEvidenceIds
+        validationIssues = validateResumePlanDraft(draft, input, planning.language, planning.length).map((issue) => ({ code: issue.code, path: issue.path }))
+      } catch (error) {
+        schemaValid = false
+        validationIssues = [{ code: error instanceof ResumePlanSchemaError ? error.diagnostic.errorCode : "evaluation_error", path: "root" }]
+      }
+      const identityInput = { curatedEvidencePackId: input.curatedEvidencePack.id, provider: "fixture", model: "fixture-resume-planner", promptVersion: "resume-planning/v1", language: planning.language, length: planning.length }
+      executions.push({
+        stage: "resume_planning",
+        observation: {
+          evidence: selectedEvidenceIds.map((evidenceId) => {
+            const evidence = scenario.evidence.find((item) => item.id === evidenceId)
+            return evidence ? sourceObservation(evidence) : { evidenceId, sources: [] }
+          }),
+          candidateEvidenceIdsByRequirement: Object.fromEntries(coverage.map((entry) => [entry.requirementId, entry.selectedEvidenceIds])),
+          coverage,
+          schemaValid,
+          validationIssues,
+          planIdentityStable: planning.identityReuse ? buildResumePlanIdentity(identityInput) === buildResumePlanIdentity(identityInput) : undefined
+        },
+        metadata: { provider: "fixture", model: "fixture-resume-planner", promptVersion: "resume-planning/v1", durationMs: this.now() - started }
+      })
     }
 
     return executions

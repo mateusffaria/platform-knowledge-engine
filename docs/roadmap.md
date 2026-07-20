@@ -116,6 +116,8 @@ Capabilities:
 - LinkedIn update;
 - interview answers.
 
+Status: the evidence-grounded Resume Content Planning slice is implemented in AEM-010; rendering and other generators remain deferred.
+
 ## AEM-008 — AI Observability
 
 Add first-class AI observability.
@@ -145,7 +147,22 @@ Capabilities:
 
 Out of scope: ATS scoring, subjective writing evaluation, LLM-as-judge, provider comparison, leaderboards, fine-tuning, and production alerting.
 
-## AEM-010 — Intelligence Benchmarking
+## AEM-010 — Evidence-Grounded Resume Content Planning
+
+Convert only the latest compatible Curated Evidence Pack into a schema-bound, deterministically validated, immutable Resume Content Plan.
+
+Capabilities:
+
+- closed-world `ResumeContentPlanner` and LLM adapter;
+- traceable summaries, experiences, bullets, skill groups, omissions, and uncovered requirements;
+- exact fact/metric preservation and evidence-strength validation;
+- Portuguese/English and concise/standard/detailed profiles;
+- `pke documents resume plan <job-id>` with JSON and terminal views;
+- immutable identity reuse, OpenTelemetry/Langfuse instrumentation, and golden evaluation.
+
+Out of scope: PDF/DOCX/HTML rendering, visual templates, cover letters, LinkedIn/interview content, ATS scoring, automated applications, and provider benchmarking.
+
+## AEM-011 — Intelligence Benchmarking
 
 Benchmark LLM providers.
 

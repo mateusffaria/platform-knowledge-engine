@@ -20,9 +20,9 @@ describe("evaluation runner", () => {
     const run = await createRunEvaluationUseCase({ datasetLoader: new FileEvaluationDatasetLoader(), pipeline: new FixtureEvaluationPipeline(undefined, () => 0), repository, runtime }).execute()
 
     expect(run.status).toBe("passed")
-    expect(new Set(run.results.map((result) => result.scenarioId)).size).toBe(6)
+    expect(new Set(run.results.map((result) => result.scenarioId)).size).toBe(21)
     expect(run.results.every((result) => result.status === "passed")).toBe(true)
-    expect(run.versions).toMatchObject({ datasetVersion: "1.0.0", gitSha: "git-sha", provider: "fixture", model: "golden-reasoner-v1", promptVersion: "evidence-reasoner-v1" })
+    expect(run.versions).toMatchObject({ datasetVersion: "1.1.0", gitSha: "git-sha", provider: "fixture", model: "golden-reasoner-v1", promptVersion: "evidence-reasoner-v1" })
     expect(run.versions.candidatePackVersions).toEqual(["candidate-evidence-pack-v4"])
     expect(await repository.findById("run-1")).toEqual(run)
   })
@@ -54,7 +54,7 @@ describe("evaluation runner", () => {
     const throwingTrace: EvaluationTrace = { stage: async () => { throw new Error("telemetry") }, assertion: async () => { throw new Error("telemetry") }, complete: async () => { throw new Error("telemetry") }, flush: async () => { throw new Error("telemetry") } }
     const observability: EvaluationObservability = { trace: () => throwingTrace }
     const run = await createRunEvaluationUseCase({ datasetLoader: { load: async () => dataset }, pipeline, repository: new InMemoryEvaluationRepository(), runtime, observability }).execute()
-    expect(seen).toHaveLength(6)
+    expect(seen).toHaveLength(21)
     expect(run.status).toBe("errored")
   })
 

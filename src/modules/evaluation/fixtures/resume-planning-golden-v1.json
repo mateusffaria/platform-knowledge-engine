@@ -1,0 +1,177 @@
+{
+  "schemaVersion": "resume-planning-evaluation-v1",
+  "id": "resume-planning-golden",
+  "version": "1.0.0",
+  "input": {
+    "requirements": [
+      { "id": "req-typescript", "text": "TypeScript delivery", "type": "technology", "importance": "required", "query": "technology:TypeScript" },
+      { "id": "req-kubernetes", "text": "Kubernetes", "type": "technology", "importance": "preferred", "query": "technology:Kubernetes" }
+    ],
+    "evidence": [
+      {
+        "id": "ev-impact", "knowledgeAssetId": "experience-acme", "claimText": "Improved API latency by 35% using TypeScript.", "claimStatus": "confirmed", "confidenceScore": 95,
+        "tags": ["TypeScript"], "requirementIds": ["req-typescript"], "claimType": "achievement", "subjectType": "professional_experience", "exaggerationRisk": "low",
+        "presentation": { "sourceOrganizationOrExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "startDate": "2022-01", "endDate": "2024-06", "technologies": ["TypeScript"], "metrics": ["35%"] },
+        "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-impact", "locator": "experience:acme", "excerpt": "Improved API latency by 35% using TypeScript." }]
+      },
+      {
+        "id": "ev-skill", "knowledgeAssetId": "skill-typescript", "claimText": "TypeScript", "claimStatus": "confirmed", "confidenceScore": 90,
+        "tags": ["TypeScript"], "requirementIds": [], "claimType": "skill", "subjectType": "skill", "exaggerationRisk": "low",
+        "presentation": { "sourceOrganizationOrExperienceId": "skill-typescript", "technologies": ["TypeScript"], "metrics": [] },
+        "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-skill", "locator": "skills", "excerpt": "TypeScript" }]
+      },
+      {
+        "id": "ev-rejected", "knowledgeAssetId": "experience-rejected", "claimText": "Owned Kubernetes in production.", "claimStatus": "rejected", "confidenceScore": 20,
+        "tags": ["Kubernetes"], "requirementIds": ["req-kubernetes"], "claimType": "experience", "subjectType": "professional_experience", "exaggerationRisk": "high",
+        "presentation": { "sourceOrganizationOrExperienceId": "experience-rejected", "organization": "Acme", "role": "Engineer", "technologies": ["Kubernetes"], "metrics": [] },
+        "sources": []
+      }
+    ],
+    "reasoning": {
+      "provider": "fixture", "model": "golden-reasoner-v1", "promptVersion": "evidence-reasoner-v1",
+      "coverage": [
+        { "requirementId": "req-typescript", "coverageStatus": "strong", "selectedEvidenceIds": ["ev-impact"], "rejectedEvidenceIds": [] },
+        { "requirementId": "req-kubernetes", "coverageStatus": "missing", "selectedEvidenceIds": [], "rejectedEvidenceIds": ["ev-rejected"] }
+      ]
+    }
+  },
+  "scenarios": [
+    {
+      "id": "resume-valid-en-concise", "description": "A concise English plan remains grounded and bounded.", "language": "en", "length": "concise",
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services for platform teams.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "startDate": "2022-01", "endDate": "2024-06", "bullets": [{ "text": "Improved API latency by 35% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": true }
+    },
+    {
+      "id": "resume-valid-en-detailed", "description": "A detailed English plan contains more supported content than concise output.", "language": "en", "length": "detailed",
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services and improved API performance for platform teams.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "startDate": "2022-01", "endDate": "2024-06", "bullets": [{ "text": "Improved API latency by 35% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }, { "text": "Developed the TypeScript API with the platform team.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": true }
+    },
+    {
+      "id": "resume-valid-pt", "description": "Portuguese content preserves canonical presentation values.", "language": "pt-BR", "length": "standard",
+      "response": {
+        "professionalSummary": { "text": "Desenvolveu serviços confiáveis em TypeScript para equipes de plataforma.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "startDate": "2022-01", "endDate": "2024-06", "bullets": [{ "text": "Melhorou a latência da API em 35% com TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Linguagens", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": true }
+    },
+    {
+      "id": "resume-sparse-evidence", "description": "Sparse evidence remains short without skill padding.", "language": "en", "length": "detailed", "selectedEvidenceIds": ["ev-impact"],
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services for platform teams.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "startDate": "2022-01", "endDate": "2024-06", "bullets": [{ "text": "Improved API latency by 35% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [], "selectedEvidenceIds": ["ev-impact"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": ["Evidence is sparse."]
+      },
+      "expected": { "valid": true }
+    },
+    {
+      "id": "resume-fabricated-evidence", "description": "An unknown supporting evidence ID is rejected.", "language": "en", "length": "standard",
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services for platform teams.", "supportingEvidenceIds": ["ev-invented"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "bullets": [{ "text": "Improved API latency by 35% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-invented", "ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": false, "issueCodes": ["unknown_evidence_id"] }
+    },
+    {
+      "id": "resume-discarded-evidence", "description": "Rejected evidence remains unusable.", "language": "en", "length": "standard",
+      "response": {
+        "professionalSummary": { "text": "Owned Kubernetes in production.", "supportingEvidenceIds": ["ev-rejected"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "bullets": [{ "text": "Improved API latency by 35% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-rejected", "ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": false, "issueCodes": ["discarded_evidence_id"] }
+    },
+    {
+      "id": "resume-altered-metric", "description": "An altered source metric is rejected.", "language": "en", "length": "standard",
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services for platform teams.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "bullets": [{ "text": "Improved API latency by 50% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": false, "issueCodes": ["unsupported_metric"] }
+    },
+    {
+      "id": "resume-canonical-drift", "description": "Canonical organization drift is rejected.", "language": "en", "length": "standard",
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services for platform teams.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Globex", "role": "Engineer", "bullets": [{ "text": "Improved API latency by 35% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": false, "issueCodes": ["canonical_presentation_mismatch"] }
+    },
+    {
+      "id": "resume-unsupported-technology", "description": "An unsupported technology is rejected.", "language": "en", "length": "standard",
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services for platform teams.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "bullets": [{ "text": "Improved API latency by 35% with TypeScript and Kubernetes.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": false, "issueCodes": ["unsupported_technology"] }
+    },
+    {
+      "id": "resume-skill-inflation", "description": "Skill-only evidence cannot become production experience.", "language": "en", "length": "standard",
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services for platform teams.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "skill-typescript", "bullets": [{ "text": "Built production TypeScript services.", "supportingEvidenceIds": ["ev-skill"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "skill-typescript", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": false, "issueCodes": ["skill_promoted_to_experience"] }
+    },
+    {
+      "id": "resume-uncovered-fabrication", "description": "An uncovered requirement cannot be targeted.", "language": "en", "length": "standard",
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services for platform teams.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "bullets": [{ "text": "Improved API latency by 35% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-kubernetes"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": false, "issueCodes": ["unsupported_requirement"] }
+    },
+    {
+      "id": "resume-locale-mismatch", "description": "English prose is rejected for a Portuguese request.", "language": "pt-BR", "length": "standard",
+      "response": {
+        "professionalSummary": { "text": "Built the reliable TypeScript service for the platform team.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "bullets": [{ "text": "Improved the API latency by 35% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": false, "issueCodes": ["language_mismatch"] }
+    },
+    {
+      "id": "resume-length-exceeded", "description": "Concise output above four bullets is rejected.", "language": "en", "length": "concise",
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services for platform teams.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "bullets": [
+          { "text": "Improved API latency by 35% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] },
+          { "text": "Developed the TypeScript API with the platform team.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] },
+          { "text": "Improved the TypeScript API for the platform team.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] },
+          { "text": "Built the TypeScript API with the platform team.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] },
+          { "text": "Improved API latency by 35% for the platform team.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }
+        ] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": false, "issueCodes": ["length_exceeded"] }
+    },
+    {
+      "id": "resume-schema-invalid", "description": "Unknown structured-output fields fail schema validation.", "language": "en", "length": "standard",
+      "response": { "professionalSummary": { "text": "Built services.", "supportingEvidenceIds": ["ev-impact"] }, "plannedExperiences": [], "plannedSkillGroups": [], "selectedEvidenceIds": ["ev-impact"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": [], "unknown": true },
+      "expected": { "valid": false, "issueCodes": ["invalid_schema"] }
+    },
+    {
+      "id": "resume-identity-reuse", "description": "Identical planning identity inputs remain stable for immutable reuse.", "language": "en", "length": "standard",
+      "response": {
+        "professionalSummary": { "text": "Built reliable TypeScript services for platform teams.", "supportingEvidenceIds": ["ev-impact"] },
+        "plannedExperiences": [{ "sourceExperienceId": "experience-acme", "organization": "Acme", "role": "Engineer", "bullets": [{ "text": "Improved API latency by 35% with TypeScript.", "supportingEvidenceIds": ["ev-impact"], "targetRequirementIds": ["req-typescript"], "sourceOrganizationOrExperienceId": "experience-acme", "exaggerationRisk": "low", "warnings": [] }] }],
+        "plannedSkillGroups": [{ "name": "Languages", "skills": ["TypeScript"], "supportingEvidenceIds": ["ev-skill"] }], "selectedEvidenceIds": ["ev-impact", "ev-skill"], "omittedEvidence": [], "uncoveredRequirementIds": ["req-kubernetes"], "warnings": []
+      },
+      "expected": { "valid": true, "identityReuse": true }
+    }
+  ]
+}

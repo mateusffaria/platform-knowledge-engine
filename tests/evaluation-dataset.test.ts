@@ -30,6 +30,21 @@ describe("evaluation datasets", () => {
       "exact-technology-coverage",
       "missing-technology",
       "redundant-candidates",
+      "resume-altered-metric",
+      "resume-canonical-drift",
+      "resume-discarded-evidence",
+      "resume-fabricated-evidence",
+      "resume-identity-reuse",
+      "resume-length-exceeded",
+      "resume-locale-mismatch",
+      "resume-schema-invalid",
+      "resume-skill-inflation",
+      "resume-sparse-evidence",
+      "resume-uncovered-fabrication",
+      "resume-unsupported-technology",
+      "resume-valid-en-concise",
+      "resume-valid-en-detailed",
+      "resume-valid-pt",
       "trust-policy"
     ])
     expect(first.scenarios.every((scenario) => scenario.expectations.every((item, index, items) => index === 0 || items[index - 1].id.localeCompare(item.id) <= 0))).toBe(true)

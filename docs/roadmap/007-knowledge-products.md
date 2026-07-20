@@ -8,7 +8,7 @@ Generate professional artifacts from verified evidence.
 
 The end user needs outputs such as resumes and cover letters, but these outputs must be grounded in verified professional knowledge.
 
-## Scope
+## Long-term Scope
 
 - resume generation
 - cover letter generation
@@ -22,6 +22,12 @@ The end user needs outputs such as resumes and cover letters, but these outputs 
 - visual design customization
 - SaaS editing interface
 - automated job application submission
+
+## Implemented slice: AEM-010
+
+AEM-010 implements JSON Resume Content Planning only. It consumes the latest compatible Curated Evidence Pack through a closed documents boundary, validates every factual field against selected canonical evidence, persists immutable versioned plans, and exposes `pke documents resume plan <job-id>`.
+
+Deferred from AEM-010: PDF, DOCX, HTML and visual rendering; cover letters; LinkedIn and interview content; subjective writing or ATS scoring; provider benchmarking; and automated applications.
 
 ## Architectural Decisions
 
@@ -39,10 +45,10 @@ Document rendering should be behind a port so implementation can change.
 
 ## Acceptance Criteria
 
-- The system can generate a resume draft.
-- The system can generate a cover letter draft.
-- Outputs use verified evidence.
-- Unsupported claims are blocked or flagged.
+- The system can generate a validated JSON Resume Content Plan from a Curated Evidence Pack.
+- Every factual bullet is traceable to selected canonical evidence.
+- Unsupported claims and altered metrics are rejected before persistence.
+- Rendering and additional professional artifacts remain explicit later milestones.
 
 ## Risks
 

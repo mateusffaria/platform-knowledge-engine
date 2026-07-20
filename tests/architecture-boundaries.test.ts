@@ -220,4 +220,35 @@ describe("Architecture boundaries", () => {
       }
     }
   });
+
+  it("keeps documents domain and application code inside the closed planning boundary", async () => {
+    const files = [
+      ...await readTypescriptFiles("src/modules/documents/domain"),
+      ...await readTypescriptFiles("src/modules/documents/application")
+    ];
+    const forbiddenImports = [
+      "../infrastructure",
+      "../../infrastructure",
+      "jobs/infrastructure",
+      "retrieval",
+      "shared/database",
+      "drizzle-orm",
+      "postgres",
+      "pgvector",
+      "@opentelemetry",
+      "langfuse",
+      "commander",
+      "interfaces/cli",
+      "renderer"
+    ];
+
+    for (const file of files) {
+      const imports = importedSpecifiers(file.contents);
+      for (const forbiddenImport of forbiddenImports) {
+        for (const importSpecifier of imports) {
+          expect(importSpecifier, `${file.path} imports ${forbiddenImport}`).not.toContain(forbiddenImport);
+        }
+      }
+    }
+  });
 });

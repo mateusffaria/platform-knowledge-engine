@@ -9,6 +9,7 @@ import { registerClaimsCommands } from "../modules/reconciliation/interfaces/cli
 import { createProductionRetrievalServices } from "../modules/retrieval/infrastructure/retrieval-runner.js";
 import { registerRetrievalCommands } from "../modules/retrieval/interfaces/cli/retrieval-commands.js";
 import { registerEvaluationCommands } from "../modules/evaluation/interfaces/cli/evaluation-command.js";
+import { registerDocumentsCommands } from "../modules/documents/interfaces/cli/documents-command.js";
 import { createProductionClaimReviewServices } from "../shared/composition/reconciliation-services.js";
 
 export function buildProgram(): Command {
@@ -24,6 +25,7 @@ export function buildProgram(): Command {
   registerJobsCommands(program, createProductionJobsServices, createProductionRetrievalServices);
   registerRetrievalCommands(program);
   registerEvaluationCommands(program);
+  registerDocumentsCommands(program);
 
   return program;
 }

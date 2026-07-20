@@ -66,6 +66,12 @@ Evidence Pack
 Candidate Evidence Pack
         ↓
 Curated Evidence Pack
+        ↓
+Resume Content Planner (closed evidence boundary)
+        ↓
+Validated, immutable Resume Content Plan
+        ↓
+Renderer (future milestone)
 ```
 
 Evaluation executes the retrieval and jobs boundaries against immutable fixtures:
@@ -75,7 +81,7 @@ Versioned Golden Dataset
         ↓
 Read-only Fixture Pipeline
         ↓
-Retrieval → Candidate Association → Reasoning
+Retrieval → Candidate Association → Reasoning → Resume Planning
         ↓
 Deterministic Stage Assertions
         ↓
@@ -265,19 +271,17 @@ The initial parser supports local Markdown and plain text. It detects common req
 
 ### Documents
 
-Responsible for generating outputs from evidence.
+Responsible for planning professional documents from curated evidence without becoming a knowledge source or renderer.
 
-Examples:
+The initial documents capability is resume content planning. Its application use case loads the latest compatible Curated Evidence Pack through a documents-owned port, freezes a closed-world `ResumePlanningInput`, resolves an immutable plan identity, invokes a schema-bound planner, applies deterministic grounding validation, and persists the valid aggregate. The planner receives no repository, retrieval, pgvector, search, raw-document, or unrestricted-tool port.
 
-- evidence packs;
-- resumes;
-- cover letters;
-- LinkedIn summaries;
-- interview answers.
+The `ResumeContentPlan` contains typed summary, experience, bullet, skill, omission, uncovered-requirement, warning, evidence-traceability, and generation-provenance data. Content selection and rewriting end at this boundary. A future renderer may consume the plan, but it must not add facts, query canonical knowledge, or change content decisions.
+
+Documents domain and application code depend only on documents domain types and application ports. Infrastructure owns Drizzle, provider, OpenTelemetry, and Langfuse adapters; CLI interfaces call only the planning use case.
 
 ### Evaluation
 
-Responsible for versioned golden fixtures, isolated pipeline execution, deterministic stage-scoped expectations, aggregate metrics, immutable run snapshots, reports, and evaluation commands. It consumes retrieval and jobs through application contracts and read-only adapters. It never owns or mutates canonical knowledge, claim lifecycle state, retrieval policy, or reasoning policy.
+Responsible for versioned golden fixtures, isolated pipeline execution, deterministic stage-scoped expectations, aggregate metrics, immutable run snapshots, reports, and evaluation commands. It consumes retrieval, jobs, and documents through application contracts and read-only adapters. Resume-planning fixtures exercise the real strict schema and deterministic validator with controlled responses; they never use an LLM judge. Evaluation never owns or mutates canonical knowledge, claim lifecycle state, retrieval policy, reasoning policy, or persisted Resume Content Plans.
 
 ## Data Strategy
 

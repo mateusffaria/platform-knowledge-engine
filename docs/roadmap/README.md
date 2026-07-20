@@ -17,7 +17,8 @@ The roadmap is not only a feature list. It is a record of the architectural evol
 7. Knowledge Products
 8. AI Observability
 9. AI Evaluation
-10. Intelligence Benchmarking
+10. Evidence-Grounded Resume Content Planning
+11. Intelligence Benchmarking
 
 ## How to read this roadmap
 

@@ -14,7 +14,7 @@ function run(): EvaluationRun {
 describe("evaluation observability", () => {
   it("emits bounded metric labels and one wide completion event", async () => {
     const metrics: Array<{ name: string; attributes: Record<string, string | undefined> }> = []
-    const telemetry: Telemetry = { run: async (_n, _a, operation) => operation(), runWithSpan: async (_n, operation) => operation(), record: () => undefined, count: () => undefined, recordEvaluation: (name, _value, attributes = {}) => metrics.push({ name, attributes }), countEvaluation: (name, attributes = {}) => metrics.push({ name, attributes }), traceId: () => undefined, shutdown: async () => undefined }
+    const telemetry: Telemetry = { run: async (_n, _a, operation) => operation(), runWithSpan: async (_n, operation) => operation(), record: () => undefined, count: () => undefined, recordEvaluation: (name, _value, attributes = {}) => metrics.push({ name, attributes }), countEvaluation: (name, attributes = {}) => metrics.push({ name, attributes }), recordDocument: () => undefined, traceId: () => undefined, shutdown: async () => undefined }
     const logger = { info: vi.fn(), error: vi.fn() } as any
     const trace = new OpenTelemetryEvaluationObservability(telemetry, logger).trace({ dataset_version: "1" })
     await trace.stage("scenario-high-cardinality", { stage: "reasoning", metadata: { durationMs: 4, provider: "fixture", model: "model", promptVersion: "prompt" }, observation: { evidence: [], candidateEvidenceIdsByRequirement: {}, coverage: [], schemaValid: true } })

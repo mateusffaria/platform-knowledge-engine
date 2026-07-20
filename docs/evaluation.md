@@ -1,6 +1,6 @@
 # Evidence Evaluation
 
-The evaluation module detects quality regressions in retrieval, Candidate Evidence Pack association, and Curated Evidence Pack reasoning. It treats deterministic assertions over versioned golden fixtures as authoritative; it does not use an LLM judge or score writing style.
+The evaluation module detects quality regressions in retrieval, Candidate Evidence Pack association, Curated Evidence Pack reasoning, and Resume Content Planning. It treats deterministic assertions over versioned golden fixtures as authoritative; it does not use an LLM judge or score writing style.
 
 ## CLI
 
@@ -30,7 +30,7 @@ When `LLM_PROVIDER` and `LLM_MODEL` are configured, the reasoning stage invokes 
 
 ## Golden dataset
 
-The initial dataset is `src/modules/evaluation/fixtures/golden-v1.json`. Its manifest has a schema version, stable dataset ID/version, and scenarios with stable requirement, evidence, and expectation IDs. The loader validates Zod structure, uniqueness, all references, stable ordering, and a SHA-256 hash before execution.
+The evidence dataset is `src/modules/evaluation/fixtures/golden-v1.json`; the versioned companion `resume-planning-golden-v1.json` adds controlled planning responses to the same default run. Their manifest data has schema versions, stable dataset/scenario identities, and stable requirement, evidence, and expectation IDs. The loader validates Zod structure, uniqueness, all references, stable ordering, and a SHA-256 hash before execution.
 
 To add a scenario:
 
@@ -55,6 +55,10 @@ Supported expectation types are:
 - `required_provenance`;
 - `candidate_membership` and `no_fabricated_evidence`;
 - `schema_validity`.
+- `resume_plan_validity`, including required deterministic issue codes;
+- `resume_plan_identity_reuse`.
+
+The `resume_planning` stage invokes the real strict Resume Content Plan schema and deterministic validator against read-only Curated Evidence Pack fixtures. Scenarios cover bilingual and bounded valid output, sparse evidence, fabricated/discarded evidence, altered metrics, canonical organization drift, unsupported technologies, skill inflation, uncovered requirements, locale mismatch, malformed structure, and immutable identity reuse. Controlled provider responses make these assertions reproducible and keep LLM benchmarking and subjective prose judgment out of scope.
 
 Every assertion result records its scenario, owning pipeline stage, expectation ID/type, pass/fail outcome, machine-readable reason code, and safe expected/observed identifiers or counts. Missing requirements pass only when the closed fixture world has no eligible supporting evidence; they are not counted as retrieval recall misses.
 
@@ -74,7 +78,7 @@ An undefined denominator is reported as `not_applicable`, never as zero. Perform
 
 ## Observability and privacy
 
-With `OTEL_ENABLED=true`, evaluation emits `pke.eval.*` run/stage/assertion, quality, latency, and token metrics. Metric labels use only bounded dataset-version, stage, provider/model/prompt-version, and outcome dimensions. The provisioned **PKE Evaluation Quality** dashboard keeps quality panels separate from latency and token panels.
+With `OTEL_ENABLED=true`, evaluation emits `pke.eval.*` run/stage/assertion, quality, latency, and token metrics. Resume planning separately emits `pke.documents.resume.plan.*` duration, inference, token, validation-failure, and cache-hit metrics. Metric labels use only bounded dataset-version, stage, provider/model/prompt-version, language/length, and outcome dimensions. The provisioned **PKE Evaluation Quality** dashboard keeps quality panels separate from latency and token panels.
 
 The application emits one wide `evaluation.run.completed` structured event containing safe run/version identities, stage/assertion counts, outcomes, and aggregate metrics. When Langfuse is configured, evaluation attaches dataset/version/hash, git SHA, provider/model/prompt, Candidate Evidence Pack versions, stage outcomes, and aggregate metrics. Canonical evidence, prompts, and model completions are excluded by default.
 

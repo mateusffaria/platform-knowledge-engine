@@ -34,8 +34,18 @@ export const evaluationMetricNames = {
   completionTokens: "pke.eval.performance.completion_tokens"
 } as const;
 
+export const documentMetricNames = {
+  commandDuration: "pke.documents.resume.plan.duration",
+  inferenceDuration: "pke.documents.resume.plan.llm.duration",
+  promptTokens: "pke.documents.resume.plan.llm.prompt_tokens",
+  completionTokens: "pke.documents.resume.plan.llm.completion_tokens",
+  validationFailures: "pke.documents.resume.plan.validation_failures",
+  cacheHits: "pke.documents.resume.plan.cache_hits"
+} as const;
+
 export type MetricAttributes = Partial<Record<"provider" | "model" | "prompt_version" | "outcome" | "failure_class", string>>;
 export type EvaluationMetricAttributes = Partial<Record<"dataset_version" | "stage" | "provider" | "model" | "prompt_version" | "outcome", string>>;
+export type DocumentMetricAttributes = Partial<Record<"provider" | "model" | "prompt_version" | "outcome" | "language" | "length", string>>;
 export type TraceAttributes = Attributes;
 
 export interface Telemetry {
@@ -45,6 +55,7 @@ export interface Telemetry {
   count(name: "failures" | "validationFailures", attributes?: MetricAttributes): void;
   recordEvaluation(name: keyof typeof evaluationMetricNames, value: number, attributes?: EvaluationMetricAttributes): void;
   countEvaluation(name: "run" | "stage" | "assertion", attributes?: EvaluationMetricAttributes): void;
+  recordDocument(name: keyof typeof documentMetricNames, value: number, attributes?: DocumentMetricAttributes): void;
   traceId(): string | undefined;
   shutdown(): Promise<void>;
 }
@@ -66,6 +77,7 @@ class NoopTelemetry implements Telemetry {
   count(_name: "failures" | "validationFailures", _attributes?: MetricAttributes): void {}
   recordEvaluation(_name: keyof typeof evaluationMetricNames, _value: number, _attributes?: EvaluationMetricAttributes): void {}
   countEvaluation(_name: "run" | "stage" | "assertion", _attributes?: EvaluationMetricAttributes): void {}
+  recordDocument(_name: keyof typeof documentMetricNames, _value: number, _attributes?: DocumentMetricAttributes): void {}
   traceId(): string | undefined { return undefined; }
   async shutdown(): Promise<void> {}
 }
@@ -121,6 +133,13 @@ class OTelTelemetry implements Telemetry {
     const counter = this.counters.get(metric) ?? this.meter.createCounter(metric, { unit: "1" });
     this.counters.set(metric, counter);
     counter.add(1, safeAttributes(attributes));
+  }
+
+  recordDocument(name: keyof typeof documentMetricNames, value: number, attributes: DocumentMetricAttributes = {}): void {
+    const metric = documentMetricNames[name];
+    const instrument = this.histograms.get(metric) ?? this.meter.createHistogram(metric, { unit: name.includes("Duration") ? "ms" : "1" });
+    this.histograms.set(metric, instrument);
+    instrument.record(value, safeAttributes(attributes));
   }
 
   traceId(): string | undefined { return trace.getActiveSpan()?.spanContext().traceId; }

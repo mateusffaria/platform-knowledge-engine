@@ -1,4 +1,4 @@
-export const evaluationStages = ["retrieval", "candidate_association", "reasoning"] as const
+export const evaluationStages = ["retrieval", "candidate_association", "reasoning", "resume_planning"] as const
 export type EvaluationStage = typeof evaluationStages[number]
 
 export type EvaluationRunStatus = "passed" | "failed" | "errored"
@@ -24,6 +24,18 @@ export interface EvaluationEvidenceFixture {
   tags: string[]
   requirementIds: string[]
   sources: EvaluationSourceFixture[]
+  claimType?: string
+  subjectType?: string
+  exaggerationRisk?: "low" | "medium" | "high"
+  presentation?: {
+    sourceOrganizationOrExperienceId: string
+    organization?: string
+    role?: string
+    startDate?: string
+    endDate?: string
+    technologies: string[]
+    metrics: string[]
+  }
 }
 
 export interface EvaluationRequirementFixture {
@@ -50,6 +62,8 @@ export type EvaluationExpectation =
   | (EvaluationExpectationBase & { type: "candidate_membership" })
   | (EvaluationExpectationBase & { type: "no_fabricated_evidence" })
   | (EvaluationExpectationBase & { type: "schema_validity"; valid: boolean })
+  | (EvaluationExpectationBase & { type: "resume_plan_validity"; valid: boolean; issueCodes?: string[] })
+  | (EvaluationExpectationBase & { type: "resume_plan_identity_reuse" })
 
 export interface EvaluationReasoningFixture {
   provider: string
@@ -73,6 +87,13 @@ export interface EvaluationScenario {
   expectations: EvaluationExpectation[]
   reasoning?: EvaluationReasoningFixture
   skipStages?: EvaluationStage[]
+  resumePlanning?: {
+    language: "pt-BR" | "en"
+    length: "concise" | "standard" | "detailed"
+    selectedEvidenceIds?: string[]
+    response: unknown
+    identityReuse?: boolean
+  }
 }
 
 export interface EvaluationDataset {
@@ -101,6 +122,8 @@ export interface EvaluationStageObservation {
   candidateEvidenceIdsByRequirement: Record<string, string[]>
   coverage: EvaluationCoverageObservation[]
   schemaValid: boolean
+  validationIssues?: Array<{ code: string; path: string }>
+  planIdentityStable?: boolean
 }
 
 export interface EvaluationExecutionMetadata {

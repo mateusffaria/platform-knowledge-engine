@@ -295,6 +295,29 @@ export const curatedEvidencePacks = pgTable("curated_evidence_packs", {
   uniqueIndex("curated_evidence_packs_job_description_run_identity_unique").on(table.jobDescriptionId, table.runIdentity)
 ]);
 
+export const resumeContentPlans = pgTable("resume_content_plans", {
+  id: uuid("id").primaryKey(),
+  planIdentity: text("plan_identity").notNull(),
+  schemaVersion: text("schema_version").notNull(),
+  jobDescriptionId: uuid("job_description_id")
+    .notNull()
+    .references(() => jobDescriptions.id, { onDelete: "cascade" }),
+  curatedEvidencePackId: uuid("curated_evidence_pack_id")
+    .notNull()
+    .references(() => curatedEvidencePacks.id, { onDelete: "cascade" }),
+  language: text("language").notNull(),
+  length: text("length").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  promptVersion: text("prompt_version").notNull(),
+  resumePlan: jsonb("resume_plan").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull()
+}, (table) => [
+  index("resume_content_plans_job_description_created_at_idx").on(table.jobDescriptionId, table.createdAt),
+  index("resume_content_plans_curated_evidence_pack_idx").on(table.curatedEvidencePackId),
+  uniqueIndex("resume_content_plans_plan_identity_unique").on(table.planIdentity)
+]);
+
 export const evaluationRuns = pgTable("evaluation_runs", {
   id: uuid("id").primaryKey(),
   datasetId: text("dataset_id").notNull(),

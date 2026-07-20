@@ -76,6 +76,16 @@ export function assertExpectation(expectation: EvaluationExpectation, observatio
     }
     case "schema_validity":
       return result(expectation, observation.schemaValid === expectation.valid, observation.schemaValid === expectation.valid ? "expectation_satisfied" : "schema_validity_mismatch", expectation.valid, observation.schemaValid)
+    case "resume_plan_validity": {
+      const issueCodes = [...new Set((observation.validationIssues ?? []).map((issue) => issue.code))].sort()
+      const observedValid = observation.schemaValid && issueCodes.length === 0
+      const requiredCodes = [...(expectation.issueCodes ?? [])].sort()
+      const codesPresent = requiredCodes.every((code) => issueCodes.includes(code))
+      const passed = observedValid === expectation.valid && codesPresent
+      return result(expectation, passed, passed ? "expectation_satisfied" : "resume_plan_validity_mismatch", { valid: expectation.valid, issueCodes: requiredCodes }, { valid: observedValid, issueCodes })
+    }
+    case "resume_plan_identity_reuse":
+      return result(expectation, observation.planIdentityStable === true, observation.planIdentityStable ? "expectation_satisfied" : "resume_plan_identity_changed", true, observation.planIdentityStable)
   }
 }
 
