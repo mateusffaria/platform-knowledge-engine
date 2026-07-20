@@ -66,4 +66,6 @@ Evidence Packs only include trusted retrieval output:
 
 Claims with `needs_review`, `rejected`, or `superseded` status remain auditable in the knowledge store but are excluded from Evidence Packs.
 
+The evaluation module regression-tests this eligibility/ranking boundary through immutable golden fixtures. Retrieval remains unaware of evaluation policy and exposes only its existing application contracts.
+
 For requirement-scoped job candidate preparation, a retrieval-owned canonical evidence reader resolves a claim result directly or resolves a knowledge-asset result to its canonical claims. Eligibility is evaluated from the canonical reconciliation status, not embedding text. Unsupported legacy projections and identity mismatches are explicit diagnostics; reindexing cannot repair those canonical-record problems.

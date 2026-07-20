@@ -148,9 +148,22 @@ Environment variables:
 
 `EMBEDDING_*` configuration is used for semantic indexing and retrieval. `LLM_*` configuration is used for bounded job analysis and evidence reasoning; ingestion, show, and deterministic retrieval remain usable without LLM configuration.
 
+## Evidence evaluation
+
+Run the versioned golden evidence suite or one scenario:
+
+```bash
+npm run pke -- eval list
+npm run pke -- eval run
+npm run pke -- eval run exact-technology-coverage
+npm run pke -- eval show <run-id> --format markdown
+```
+
+Evaluation reports retrieval, Candidate Evidence Pack association, and reasoning separately. Deterministic assertions detect expected/forbidden evidence, incorrect missing coverage, unsupported or fabricated selections, provenance gaps, excessive evidence, and invalid schemas. JSON and Markdown export use `--format`; `--output <path>` creates a new file without overwriting an existing report. See [Evidence Evaluation](docs/evaluation.md).
+
 ## Terminal progress
 
-Long-running interactive commands (`index`, `search`, `retrieve`, `jobs analyze`, `jobs retrieve`, `jobs candidates`, and `jobs reason`) show transient stage feedback with elapsed time when stderr is a TTY. This feedback is written directly to the terminal, never through Pino or OpenTelemetry, so it is not exported to Grafana. It is disabled automatically for `--json`, redirected output, CI, and non-interactive containers; use `--no-progress` to suppress it explicitly.
+Long-running interactive commands (`index`, `search`, `retrieve`, `jobs analyze`, `jobs retrieve`, `jobs candidates`, `jobs reason`, and `eval run`) show transient stage feedback with elapsed time when stderr is a TTY. Evaluation progress covers dataset/runtime loading, scenario execution, report storage, telemetry flush, and resource shutdown. This feedback is written directly to the terminal, never through Pino or OpenTelemetry, so it is not exported to Grafana. It is disabled automatically for machine-readable evaluation formats, redirected output, CI, and non-interactive containers; use `--no-progress` to suppress it explicitly.
 
 ## Local reasoning observability
 
@@ -161,7 +174,7 @@ docker compose --profile observability-lite up -d
 OTEL_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 npm run pke -- jobs reason <job-id>
 ```
 
-Grafana is available at `http://localhost:3000` (`admin` / `pke`). Its provisioned **PKE / PKE Reasoning Performance** dashboard shows total command and Ollama inference latency, tokens when Ollama provides them, candidate-pack size, evidence volume, validation/reasoning failures, and model/prompt-version latency. PKE emits canonical JSON events with Pino to stderr and, when `OTEL_ENABLED=true`, to the OTLP collector. In **Explore**, select **VictoriaLogs** and run `*`; use `severity:Error` to focus on failures. **Stream filters** intentionally lists only stable stream/resource fields such as `service.name` and `host.name`; per-record application fields such as `event_name`, `error_code`, `error_message`, `error_stack`, and `trace_id` remain queryable but do not appear in that picker. In Code mode, run `* | field_names` to discover every field in the selected time range, then use queries such as `event_name:jobs.reason.command`, `outcome:failure`, `error_code:invalid_structured_output`, or `trace_id:<trace-id>`. VictoriaMetrics is exposed on port `8428`; VictoriaLogs is exposed on port `9428` for trace-correlated structured logs.
+Grafana is available at `http://localhost:3000` (`admin` / `pke`). Its provisioned **PKE / PKE Reasoning Performance** dashboard shows reasoning latency, tokens, evidence volume, and failures; **PKE Evaluation Quality** separates precision/recall, coverage, missing-evidence, unsupported-selection, provenance, and schema quality from evaluation latency and tokens. PKE emits canonical JSON events with Pino to stderr and, when `OTEL_ENABLED=true`, to the OTLP collector. In **Explore**, select **VictoriaLogs** and run `*`; use `severity:Error` to focus on failures. **Stream filters** intentionally lists only stable stream/resource fields such as `service.name` and `host.name`; per-record application fields such as `event_name`, `error_code`, `error_message`, `error_stack`, and `trace_id` remain queryable but do not appear in that picker. In Code mode, run `* | field_names` to discover every field in the selected time range, then use queries such as `event_name:jobs.reason.command`, `event_name:evaluation.run.completed`, `outcome:failure`, or `trace_id:<trace-id>`. VictoriaMetrics is exposed on port `8428`; VictoriaLogs is exposed on port `9428` for trace-correlated structured logs.
 
 For Langfuse, start `docker compose --profile observability-full up -d`, create local project keys in `http://localhost:3001`, and configure the `LANGFUSE_*` variables above. The default integration sends safe metadata and outcomes only. Retention is seven days in the local Victoria services; adjust the Compose `-retentionPeriod` settings and `OTEL_SAMPLE_RATIO` for longer or lower-volume local investigations. All telemetry integrations are optional; when enabled, PKE does not silently discard instrumentation setup or shutdown failures.
 

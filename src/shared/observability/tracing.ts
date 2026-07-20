@@ -17,7 +17,25 @@ export const reasoningMetricNames = {
   validationFailures: "pke.jobs.reason.validation_failures"
 } as const;
 
+export const evaluationMetricNames = {
+  run: "pke.eval.runs",
+  stage: "pke.eval.stages",
+  assertion: "pke.eval.assertions",
+  stageDuration: "pke.eval.stage.duration",
+  evidencePrecisionAtK: "pke.eval.quality.evidence_precision_at_k",
+  evidenceRecallAtK: "pke.eval.quality.evidence_recall_at_k",
+  requirementCoverageAccuracy: "pke.eval.quality.requirement_coverage_accuracy",
+  missingEvidenceAccuracy: "pke.eval.quality.missing_evidence_accuracy",
+  unsupportedSelectionRate: "pke.eval.quality.unsupported_selection_rate",
+  provenanceCompleteness: "pke.eval.quality.provenance_completeness",
+  schemaValidationSuccessRate: "pke.eval.quality.schema_validation_success_rate",
+  reasoningLatency: "pke.eval.performance.reasoning_latency",
+  promptTokens: "pke.eval.performance.prompt_tokens",
+  completionTokens: "pke.eval.performance.completion_tokens"
+} as const;
+
 export type MetricAttributes = Partial<Record<"provider" | "model" | "prompt_version" | "outcome" | "failure_class", string>>;
+export type EvaluationMetricAttributes = Partial<Record<"dataset_version" | "stage" | "provider" | "model" | "prompt_version" | "outcome", string>>;
 export type TraceAttributes = Attributes;
 
 export interface Telemetry {
@@ -25,6 +43,8 @@ export interface Telemetry {
   runWithSpan<T>(name: string, operation: () => Promise<T>): Promise<T>;
   record(name: keyof typeof reasoningMetricNames, value: number, attributes?: MetricAttributes): void;
   count(name: "failures" | "validationFailures", attributes?: MetricAttributes): void;
+  recordEvaluation(name: keyof typeof evaluationMetricNames, value: number, attributes?: EvaluationMetricAttributes): void;
+  countEvaluation(name: "run" | "stage" | "assertion", attributes?: EvaluationMetricAttributes): void;
   traceId(): string | undefined;
   shutdown(): Promise<void>;
 }
@@ -44,6 +64,8 @@ class NoopTelemetry implements Telemetry {
   async runWithSpan<T>(_name: string, operation: () => Promise<T>): Promise<T> { return operation(); }
   record(_name: keyof typeof reasoningMetricNames, _value: number, _attributes?: MetricAttributes): void {}
   count(_name: "failures" | "validationFailures", _attributes?: MetricAttributes): void {}
+  recordEvaluation(_name: keyof typeof evaluationMetricNames, _value: number, _attributes?: EvaluationMetricAttributes): void {}
+  countEvaluation(_name: "run" | "stage" | "assertion", _attributes?: EvaluationMetricAttributes): void {}
   traceId(): string | undefined { return undefined; }
   async shutdown(): Promise<void> {}
 }
@@ -82,6 +104,20 @@ class OTelTelemetry implements Telemetry {
 
   count(name: "failures" | "validationFailures", attributes: MetricAttributes = {}): void {
     const metric = reasoningMetricNames[name];
+    const counter = this.counters.get(metric) ?? this.meter.createCounter(metric, { unit: "1" });
+    this.counters.set(metric, counter);
+    counter.add(1, safeAttributes(attributes));
+  }
+
+  recordEvaluation(name: keyof typeof evaluationMetricNames, value: number, attributes: EvaluationMetricAttributes = {}): void {
+    const metric = evaluationMetricNames[name];
+    const histogram = this.histograms.get(metric) ?? this.meter.createHistogram(metric, { unit: name.toLowerCase().includes("duration") || name.toLowerCase().includes("latency") ? "ms" : "1" });
+    this.histograms.set(metric, histogram);
+    histogram.record(value, safeAttributes(attributes));
+  }
+
+  countEvaluation(name: "run" | "stage" | "assertion", attributes: EvaluationMetricAttributes = {}): void {
+    const metric = evaluationMetricNames[name];
     const counter = this.counters.get(metric) ?? this.meter.createCounter(metric, { unit: "1" });
     this.counters.set(metric, counter);
     counter.add(1, safeAttributes(attributes));

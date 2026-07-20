@@ -131,15 +131,19 @@ Capabilities:
 
 ## AEM-009 — AI Evaluation
 
-Evaluate output quality.
+Detect evidence-quality regressions with deterministic, stage-attributed evaluation.
 
 Capabilities:
 
-- golden dataset;
-- regression tests;
-- hallucination checks;
-- unsupported claim detection;
-- ATS-style score.
+- versioned golden datasets and fixture isolation;
+- independent retrieval, Candidate Evidence Pack association, and Curated Evidence Pack reasoning evaluation;
+- deterministic evidence, coverage, missing-evidence, provenance, fabrication, and schema assertions;
+- separate quality and performance metrics;
+- persisted run snapshots and concise, JSON, and Markdown reports;
+- `pke eval list`, `pke eval run [scenario-id]`, and `pke eval show <run-id>`;
+- optional local OpenTelemetry, Grafana, structured-log, and Langfuse observations.
+
+Out of scope: ATS scoring, subjective writing evaluation, LLM-as-judge, provider comparison, leaderboards, fine-tuning, and production alerting.
 
 ## AEM-010 — Intelligence Benchmarking
 

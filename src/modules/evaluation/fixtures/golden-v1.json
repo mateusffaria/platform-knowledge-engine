@@ -1,0 +1,115 @@
+{
+  "schemaVersion": "evaluation-dataset-v1",
+  "id": "pke-golden-evidence",
+  "version": "1.0.0",
+  "scenarios": [
+    {
+      "id": "exact-technology-coverage",
+      "description": "Exact TypeScript, Node.js, and PostgreSQL evidence remains retrievable and strongly covered.",
+      "requirements": [
+        { "id": "nodejs", "text": "Node.js", "type": "technology", "importance": "required", "query": "technology:Node.js" },
+        { "id": "postgresql", "text": "PostgreSQL", "type": "technology", "importance": "required", "query": "technology:PostgreSQL" },
+        { "id": "typescript", "text": "TypeScript", "type": "technology", "importance": "required", "query": "technology:TypeScript" }
+      ],
+      "evidence": [
+        { "id": "claim-nodejs", "knowledgeAssetId": "asset-nodejs", "claimText": "Built production Node.js services.", "claimStatus": "confirmed", "confidenceScore": 95, "structuredScore": 1, "semanticScore": 0.9, "tags": ["node.js"], "requirementIds": ["nodejs"], "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-nodejs", "locator": "experience:1", "excerpt": "Built production Node.js services." }] },
+        { "id": "claim-postgresql", "knowledgeAssetId": "asset-postgresql", "claimText": "Designed PostgreSQL data models.", "claimStatus": "confirmed", "confidenceScore": 95, "structuredScore": 1, "semanticScore": 0.9, "tags": ["postgresql"], "requirementIds": ["postgresql"], "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-postgresql", "locator": "experience:2", "excerpt": "Designed PostgreSQL data models." }] },
+        { "id": "claim-typescript", "knowledgeAssetId": "asset-typescript", "claimText": "Delivered TypeScript applications.", "claimStatus": "confirmed", "confidenceScore": 95, "structuredScore": 1, "semanticScore": 0.9, "tags": ["typescript"], "requirementIds": ["typescript"], "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-typescript", "locator": "experience:3", "excerpt": "Delivered TypeScript applications." }] }
+      ],
+      "expectations": [
+        { "id": "exact-retrieval", "stage": "retrieval", "type": "expected_evidence_ids", "evidenceIds": ["claim-nodejs", "claim-postgresql", "claim-typescript"], "k": 3 },
+        { "id": "exact-candidates", "stage": "candidate_association", "type": "expected_evidence_ids", "evidenceIds": ["claim-nodejs", "claim-postgresql", "claim-typescript"] },
+        { "id": "exact-provenance", "stage": "reasoning", "type": "required_provenance", "evidenceIds": ["claim-nodejs", "claim-postgresql", "claim-typescript"], "fields": ["sourceDocumentId", "sourceReferenceId", "locator"] },
+        { "id": "node-strong", "stage": "reasoning", "type": "coverage_range", "requirementId": "nodejs", "minimum": "strong" },
+        { "id": "postgres-strong", "stage": "reasoning", "type": "coverage_range", "requirementId": "postgresql", "minimum": "strong" },
+        { "id": "typescript-strong", "stage": "reasoning", "type": "coverage_range", "requirementId": "typescript", "minimum": "strong" },
+        { "id": "exact-schema", "stage": "reasoning", "type": "schema_validity", "valid": true }
+      ],
+      "reasoning": { "provider": "fixture", "model": "golden-reasoner-v1", "promptVersion": "evidence-reasoner-v1", "promptTokens": 180, "completionTokens": 90, "coverage": [
+        { "requirementId": "nodejs", "coverageStatus": "strong", "selectedEvidenceIds": ["claim-nodejs"], "rejectedEvidenceIds": [] },
+        { "requirementId": "postgresql", "coverageStatus": "strong", "selectedEvidenceIds": ["claim-postgresql"], "rejectedEvidenceIds": [] },
+        { "requirementId": "typescript", "coverageStatus": "strong", "selectedEvidenceIds": ["claim-typescript"], "rejectedEvidenceIds": [] }
+      ] }
+    },
+    {
+      "id": "conceptual-leadership-coverage",
+      "description": "Leadership evidence is selected while unrelated performance-only evidence is rejected.",
+      "requirements": [{ "id": "leadership", "text": "Cross-team technical leadership", "type": "responsibility", "importance": "required", "query": "technical leadership across teams" }],
+      "evidence": [
+        { "id": "claim-leadership", "knowledgeAssetId": "asset-leadership", "claimText": "Led architecture decisions across three teams.", "claimStatus": "confirmed", "confidenceScore": 94, "semanticScore": 0.92, "tags": ["leadership", "cross-team"], "requirementIds": ["leadership"], "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-leadership", "locator": "experience:4", "excerpt": "Led architecture decisions across three teams." }] },
+        { "id": "claim-performance", "knowledgeAssetId": "asset-performance", "claimText": "Reduced API latency by 40 percent.", "claimStatus": "confirmed", "confidenceScore": 92, "semanticScore": 0.3, "tags": ["performance"], "requirementIds": [], "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-performance", "locator": "achievement:1", "excerpt": "Reduced API latency by 40 percent." }] }
+      ],
+      "expectations": [
+        { "id": "leadership-retrieved", "stage": "retrieval", "type": "expected_evidence_ids", "evidenceIds": ["claim-leadership"], "k": 1 },
+        { "id": "performance-forbidden", "stage": "reasoning", "type": "forbidden_evidence_ids", "evidenceIds": ["claim-performance"] },
+        { "id": "leadership-coverage", "stage": "reasoning", "type": "coverage_range", "requirementId": "leadership", "minimum": "partial" },
+        { "id": "leadership-membership", "stage": "reasoning", "type": "candidate_membership" }
+      ],
+      "reasoning": { "provider": "fixture", "model": "golden-reasoner-v1", "promptVersion": "evidence-reasoner-v1", "coverage": [{ "requirementId": "leadership", "coverageStatus": "strong", "selectedEvidenceIds": ["claim-leadership"], "rejectedEvidenceIds": [] }] }
+    },
+    {
+      "id": "missing-technology",
+      "description": "Unsupported Kubernetes remains explicitly missing.",
+      "requirements": [{ "id": "kubernetes", "text": "Kubernetes", "type": "technology", "importance": "required", "query": "technology:Kubernetes" }],
+      "evidence": [],
+      "expectations": [
+        { "id": "no-retrieval", "stage": "retrieval", "type": "maximum_evidence_count", "maximum": 0 },
+        { "id": "kubernetes-missing", "stage": "reasoning", "type": "expected_missing_requirements", "requirementIds": ["kubernetes"] },
+        { "id": "no-fabrication", "stage": "reasoning", "type": "no_fabricated_evidence" }
+      ],
+      "reasoning": { "provider": "fixture", "model": "golden-reasoner-v1", "promptVersion": "evidence-reasoner-v1", "coverage": [{ "requirementId": "kubernetes", "coverageStatus": "missing", "selectedEvidenceIds": [], "rejectedEvidenceIds": [] }] }
+    },
+    {
+      "id": "empty-candidate-pack",
+      "description": "An empty Candidate Evidence Pack keeps every requirement missing without fabricated evidence.",
+      "requirements": [
+        { "id": "flutter", "text": "Flutter", "type": "technology", "importance": "required", "query": "technology:Flutter" },
+        { "id": "leadership-empty", "text": "Technical leadership", "type": "responsibility", "importance": "required", "query": "technical leadership" }
+      ],
+      "evidence": [],
+      "expectations": [
+        { "id": "empty-candidates", "stage": "candidate_association", "type": "maximum_evidence_count", "maximum": 0 },
+        { "id": "all-missing", "stage": "reasoning", "type": "expected_missing_requirements", "requirementIds": ["flutter", "leadership-empty"] },
+        { "id": "empty-no-fabrication", "stage": "reasoning", "type": "no_fabricated_evidence" },
+        { "id": "empty-schema", "stage": "reasoning", "type": "schema_validity", "valid": true }
+      ],
+      "reasoning": { "provider": "fixture", "model": "golden-reasoner-v1", "promptVersion": "evidence-reasoner-v1", "coverage": [
+        { "requirementId": "flutter", "coverageStatus": "missing", "selectedEvidenceIds": [], "rejectedEvidenceIds": [] },
+        { "requirementId": "leadership-empty", "coverageStatus": "missing", "selectedEvidenceIds": [], "rejectedEvidenceIds": [] }
+      ] }
+    },
+    {
+      "id": "redundant-candidates",
+      "description": "Strong complementary evidence is retained while duplicate and weaker alternatives are rejected.",
+      "requirements": [{ "id": "backend", "text": "Backend delivery", "type": "experience", "importance": "required", "query": "backend delivery" }],
+      "evidence": [
+        { "id": "claim-backend-context", "knowledgeAssetId": "asset-backend-context", "claimText": "Owned backend delivery for a revenue-critical platform.", "claimStatus": "confirmed", "confidenceScore": 96, "semanticScore": 0.94, "tags": ["backend", "ownership"], "requirementIds": ["backend"], "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-backend-context", "locator": "experience:5", "excerpt": "Owned backend delivery." }] },
+        { "id": "claim-backend-impact", "knowledgeAssetId": "asset-backend-impact", "claimText": "Improved backend reliability to 99.99 percent.", "claimStatus": "confirmed", "confidenceScore": 93, "semanticScore": 0.89, "tags": ["backend", "reliability"], "requirementIds": ["backend"], "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-backend-impact", "locator": "achievement:2", "excerpt": "Improved backend reliability." }] },
+        { "id": "claim-backend-duplicate", "knowledgeAssetId": "asset-backend-duplicate", "claimText": "Worked on backend services.", "claimStatus": "single_source", "confidenceScore": 65, "semanticScore": 0.6, "tags": ["backend"], "requirementIds": ["backend"], "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-backend-duplicate", "locator": "experience:6", "excerpt": "Worked on backend services." }] }
+      ],
+      "expectations": [
+        { "id": "strong-complementary", "stage": "reasoning", "type": "expected_evidence_ids", "evidenceIds": ["claim-backend-context", "claim-backend-impact"] },
+        { "id": "weak-forbidden", "stage": "reasoning", "type": "forbidden_evidence_ids", "evidenceIds": ["claim-backend-duplicate"] },
+        { "id": "bounded-selection", "stage": "reasoning", "type": "maximum_evidence_count", "maximum": 2 }
+      ],
+      "reasoning": { "provider": "fixture", "model": "golden-reasoner-v1", "promptVersion": "evidence-reasoner-v1", "coverage": [{ "requirementId": "backend", "coverageStatus": "strong", "selectedEvidenceIds": ["claim-backend-context", "claim-backend-impact"], "rejectedEvidenceIds": ["claim-backend-duplicate"] }] }
+    },
+    {
+      "id": "trust-policy",
+      "description": "Rejected, superseded, and needs-review claims never reach trusted evidence output.",
+      "requirements": [{ "id": "typescript-trust", "text": "TypeScript", "type": "technology", "importance": "required", "query": "technology:TypeScript" }],
+      "evidence": [
+        { "id": "claim-trusted", "knowledgeAssetId": "asset-trusted", "claimText": "Delivered trusted TypeScript systems.", "claimStatus": "confirmed", "confidenceScore": 95, "structuredScore": 1, "tags": ["typescript"], "requirementIds": ["typescript-trust"], "sources": [{ "sourceDocumentId": "doc-profile", "sourceReferenceId": "ref-trusted", "locator": "experience:7", "excerpt": "Delivered trusted TypeScript systems." }] },
+        { "id": "claim-needs-review", "knowledgeAssetId": "asset-needs-review", "claimText": "Unreviewed TypeScript claim.", "claimStatus": "needs_review", "confidenceScore": 50, "structuredScore": 1, "tags": ["typescript"], "requirementIds": ["typescript-trust"], "sources": [] },
+        { "id": "claim-rejected", "knowledgeAssetId": "asset-rejected", "claimText": "Rejected TypeScript claim.", "claimStatus": "rejected", "confidenceScore": 20, "structuredScore": 1, "tags": ["typescript"], "requirementIds": ["typescript-trust"], "sources": [] },
+        { "id": "claim-superseded", "knowledgeAssetId": "asset-superseded", "claimText": "Superseded TypeScript claim.", "claimStatus": "superseded", "confidenceScore": 60, "structuredScore": 1, "tags": ["typescript"], "requirementIds": ["typescript-trust"], "sources": [] }
+      ],
+      "expectations": [
+        { "id": "trusted-returned", "stage": "retrieval", "type": "expected_evidence_ids", "evidenceIds": ["claim-trusted"] },
+        { "id": "ineligible-forbidden-retrieval", "stage": "retrieval", "type": "forbidden_evidence_ids", "evidenceIds": ["claim-needs-review", "claim-rejected", "claim-superseded"] },
+        { "id": "ineligible-forbidden-candidates", "stage": "candidate_association", "type": "forbidden_evidence_ids", "evidenceIds": ["claim-needs-review", "claim-rejected", "claim-superseded"] }
+      ],
+      "reasoning": { "provider": "fixture", "model": "golden-reasoner-v1", "promptVersion": "evidence-reasoner-v1", "coverage": [{ "requirementId": "typescript-trust", "coverageStatus": "strong", "selectedEvidenceIds": ["claim-trusted"], "rejectedEvidenceIds": [] }] }
+    }
+  ]
+}

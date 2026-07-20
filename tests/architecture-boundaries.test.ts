@@ -192,4 +192,32 @@ describe("Architecture boundaries", () => {
       }
     }
   });
+
+  it("keeps evaluation domain and application code independent from infrastructure and delivery adapters", async () => {
+    const files = [
+      ...await readTypescriptFiles("src/modules/evaluation/domain"),
+      ...await readTypescriptFiles("src/modules/evaluation/application")
+    ];
+    const forbiddenImports = [
+      "../infrastructure",
+      "../../infrastructure",
+      "shared/database",
+      "drizzle-orm",
+      "postgres",
+      "commander",
+      "langfuse",
+      "llm-providers",
+      "vector-stores",
+      "interfaces/cli"
+    ];
+
+    for (const file of files) {
+      const imports = importedSpecifiers(file.contents);
+      for (const forbiddenImport of forbiddenImports) {
+        for (const importSpecifier of imports) {
+          expect(importSpecifier, `${file.path} imports ${forbiddenImport}`).not.toContain(forbiddenImport);
+        }
+      }
+    }
+  });
 });

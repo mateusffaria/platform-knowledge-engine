@@ -21,6 +21,7 @@ It is a local-first project with multiple capabilities that should remain indepe
 - retrieval;
 - job analysis;
 - document generation;
+- evidence evaluation;
 - observability.
 
 A modular monolith allows the project to keep one runtime and one deployment model while avoiding a disorganized monolith.
@@ -62,7 +63,23 @@ Hybrid Retrieval
         ↓
 Evidence Pack
         ↓
-Agentic Document Generation
+Candidate Evidence Pack
+        ↓
+Curated Evidence Pack
+```
+
+Evaluation executes the retrieval and jobs boundaries against immutable fixtures:
+
+```text
+Versioned Golden Dataset
+        ↓
+Read-only Fixture Pipeline
+        ↓
+Retrieval → Candidate Association → Reasoning
+        ↓
+Deterministic Stage Assertions
+        ↓
+Persisted Evaluation Run + Reports + Optional Telemetry
 ```
 
 Job descriptions follow a separate retrieval-intent flow. They are external requirements, not candidate evidence:
@@ -133,6 +150,14 @@ src/
         use-cases/
         ports/
       infrastructure/
+
+    evaluation/
+      domain/
+      application/
+        use-cases/
+        ports/
+      infrastructure/
+      interfaces/
 ```
 
 ## Dependency Rules
@@ -249,6 +274,10 @@ Examples:
 - cover letters;
 - LinkedIn summaries;
 - interview answers.
+
+### Evaluation
+
+Responsible for versioned golden fixtures, isolated pipeline execution, deterministic stage-scoped expectations, aggregate metrics, immutable run snapshots, reports, and evaluation commands. It consumes retrieval and jobs through application contracts and read-only adapters. It never owns or mutates canonical knowledge, claim lifecycle state, retrieval policy, or reasoning policy.
 
 ## Data Strategy
 

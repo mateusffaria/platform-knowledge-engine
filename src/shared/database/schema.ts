@@ -295,6 +295,45 @@ export const curatedEvidencePacks = pgTable("curated_evidence_packs", {
   uniqueIndex("curated_evidence_packs_job_description_run_identity_unique").on(table.jobDescriptionId, table.runIdentity)
 ]);
 
+export const evaluationRuns = pgTable("evaluation_runs", {
+  id: uuid("id").primaryKey(),
+  datasetId: text("dataset_id").notNull(),
+  datasetVersion: text("dataset_version").notNull(),
+  datasetHash: text("dataset_hash").notNull(),
+  requestedScenarioId: text("requested_scenario_id"),
+  gitSha: text("git_sha").notNull(),
+  provider: text("provider"),
+  model: text("model"),
+  promptVersion: text("prompt_version"),
+  candidatePackVersions: jsonb("candidate_pack_versions").$type<string[]>().notNull().default([]),
+  status: text("status").notNull(),
+  reportSchemaVersion: text("report_schema_version").notNull(),
+  qualityMetrics: jsonb("quality_metrics").$type<Record<string, unknown>>().notNull(),
+  performanceMetrics: jsonb("performance_metrics").$type<Record<string, unknown>>().notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }).notNull()
+}, (table) => [
+  index("evaluation_runs_dataset_version_idx").on(table.datasetId, table.datasetVersion),
+  index("evaluation_runs_completed_at_idx").on(table.completedAt)
+]);
+
+export const evaluationResults = pgTable("evaluation_results", {
+  id: uuid("id").primaryKey(),
+  runId: uuid("run_id")
+    .notNull()
+    .references(() => evaluationRuns.id, { onDelete: "cascade" }),
+  scenarioId: text("scenario_id").notNull(),
+  stage: text("stage").notNull(),
+  status: text("status").notNull(),
+  assertions: jsonb("assertions").$type<Record<string, unknown>[]>().notNull().default([]),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull(),
+  observation: jsonb("observation").$type<Record<string, unknown>>(),
+  diagnostic: jsonb("diagnostic").$type<Record<string, unknown>>()
+}, (table) => [
+  index("evaluation_results_run_id_idx").on(table.runId),
+  uniqueIndex("evaluation_results_run_scenario_stage_unique").on(table.runId, table.scenarioId, table.stage)
+]);
+
 export const experiences = pgTable("experiences", {
   id: uuid("id").primaryKey(),
   knowledgeAssetId: uuid("knowledge_asset_id")
