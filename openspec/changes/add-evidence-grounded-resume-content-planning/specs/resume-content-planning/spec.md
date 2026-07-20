@@ -56,6 +56,10 @@ The LLM-backed planner SHALL reuse the configured `LlmProvider`, request structu
 - **WHEN** UUID-shaped evidence, requirement, and experience identifiers are supplied to the planner
 - **THEN** the provider JSON Schema constrains each output field to the exact eligible identifier namespace derived from the planning input
 
+#### Scenario: Skill-only evidence is available to the planner
+- **WHEN** selected evidence contains skill-only claims alongside experience-capable claims
+- **THEN** the provider JSON Schema permits skill-only IDs in summaries and skill groups but excludes them from planned-experience summaries and bullets, and experience source fields accept only experience-capable source IDs
+
 ### Requirement: Every factual statement is evidence-grounded
 Every factual sentence in a planned summary, experience, bullet, or skill group SHALL reference at least one evidence ID selected by the Curated Evidence Pack. Every supporting and selected evidence ID MUST exist in that pack's recommended evidence, and discarded, rejected, superseded, `needs_review`, or otherwise unselected evidence MUST NOT be used.
 
@@ -100,6 +104,10 @@ The plan MUST preserve the ownership and exaggeration limits of its supporting e
 #### Scenario: Skill evidence becomes an experience claim
 - **WHEN** a generated experience or achievement is supported only by skill-category evidence
 - **THEN** deterministic validation rejects the complete plan for unsupported evidence-type promotion
+
+#### Scenario: Skill promotion accompanies a repairable accounting issue
+- **WHEN** a first draft contains both a skill-to-experience promotion and a selection/omission accounting issue
+- **THEN** the planner receives one bounded full-regeneration repair under the experience-capable evidence schema and the regenerated draft must pass every validation rule
 
 ### Requirement: Missing requirements remain explicit
 Requirements that the Curated Evidence Pack marks missing or leaves uncovered MUST remain in the plan's uncovered requirements and MUST NOT be targeted or described as covered by generated content. Covered target requirement IDs MUST be supported by the bullet's cited evidence selections.

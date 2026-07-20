@@ -6,6 +6,7 @@
 - [x] 1.4 Add strict Zod schemas and JSON Schema output for planner responses and persisted Resume Content Plans, including stable structured diagnostics for malformed or unknown fields.
 - [x] 1.5 Add versioned resume-planning prompts and deterministic serialization/stable ordering tests for English, Portuguese, and all length profiles.
 - [x] 1.6 Derive an input-specific provider JSON Schema whose enums keep evidence, requirement, uncovered-requirement, and source identifiers in their correct namespaces.
+- [x] 1.7 Derive an experience-capable evidence and source namespace that excludes skill-only claims from planned-experience summaries and bullets.
 
 ## 2. Deterministic Grounding Validation
 
@@ -18,6 +19,7 @@
 - [x] 2.7 Report evidence membership failures with indexed paths and offending IDs in actionable content-safe diagnostics.
 - [x] 2.8 Report exact indexed requirement-reference paths and allow one bounded repair for requirement/accounting diagnostics while preserving full validation.
 - [x] 2.9 Include allowlist-filtered offending identifiers and code-specific resolutions in repair feedback without echoing discarded or invented IDs.
+- [x] 2.10 Treat skill-to-experience reference promotion as a bounded repairable relationship while preserving full regenerated-draft validation.
 
 ## 3. Planner and Planning Use Case
 
@@ -33,6 +35,7 @@
 - [x] 3.10 Clarify UUID identifier namespaces in the prompt, bump its version, and add a regression for mixed evidence/requirement IDs matching the observed failure.
 - [x] 3.11 Bump the prompt version and prove a deterministic repeated `selected_and_omitted` overlap receives actionable repair context while invalid repaired output still cannot persist.
 - [x] 3.12 Constrain a `selected_and_omitted` repair schema so the already-used evidence ID cannot be emitted as omitted again.
+- [x] 3.13 Bump the prompt version and add a regression for a draft combining `selected_and_omitted` with `skill_promoted_to_experience`.
 
 ## 4. Persistence and Cross-Module Input Adapters
 

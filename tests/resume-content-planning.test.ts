@@ -90,7 +90,7 @@ describe("Resume Content Plan contracts", () => {
     expect(resumeLengthProfiles).toEqual({ concise: { maxWords: 350, maxBullets: 4 }, standard: { maxWords: 650, maxBullets: 8 }, detailed: { maxWords: 1_000, maxBullets: 12 } })
     expect(resumePlanDraftSchema.parse(validDraft())).toEqual(validDraft())
     expect(resumePlanOutputJsonSchema).toMatchObject({ type: "object", additionalProperties: false })
-    expect(resumePlanningPromptVersion).toBe("resume-planning/v5")
+    expect(resumePlanningPromptVersion).toBe("resume-planning/v6")
     expect(resumePlanOutputJsonSchema.properties).toMatchObject({
       selectedEvidenceIds: { description: expect.stringContaining("used evidence IDs") },
       omittedEvidence: { description: expect.stringContaining("eligibleEvidence") }
@@ -120,9 +120,10 @@ describe("Resume Content Plan contracts", () => {
       curatedEvidencePack: { eligibleEvidence: expect.any(Array) },
       identifierNamespaces: {
         eligibleEvidenceIds: ["ev-1", "ev-2"],
+        experienceEvidenceIds: ["ev-1"],
         targetableRequirementIds: ["req-1"],
         uncoveredRequirementIds: ["req-missing"],
-        sourceIds: ["exp-1", "skill-1"]
+        experienceSourceIds: ["exp-1"]
       }
     })
     expect(payload.curatedEvidencePack).not.toHaveProperty("selectedEvidence")
@@ -143,11 +144,12 @@ describe("Resume Content Plan contracts", () => {
     expect(schema.properties.omittedEvidence.items.$ref).toBe("#/$defs/omitted")
     expect(schema.properties.uncoveredRequirementIds.items.enum).toEqual(["req-missing"])
     expect(schema.$defs.summary.properties.supportingEvidenceIds.items.enum).toEqual(["ev-1", "ev-2"])
-    expect(schema.$defs.bullet.properties.supportingEvidenceIds.items.enum).toEqual(["ev-1", "ev-2"])
+    expect(schema.$defs.experienceSummary.properties.supportingEvidenceIds.items.enum).toEqual(["ev-1"])
+    expect(schema.$defs.bullet.properties.supportingEvidenceIds.items.enum).toEqual(["ev-1"])
     expect(schema.$defs.bullet.properties.targetRequirementIds.items.enum).toEqual(["req-1"])
     expect(schema.$defs.omitted.properties.evidenceId.enum).toEqual(["ev-1", "ev-2"])
-    expect(schema.$defs.experience.properties.sourceExperienceId.enum).toEqual(["exp-1", "skill-1"])
-    expect(schema.$defs.bullet.properties.sourceOrganizationOrExperienceId.enum).toEqual(["exp-1", "skill-1"])
+    expect(schema.$defs.experience.properties.sourceExperienceId.enum).toEqual(["exp-1"])
+    expect(schema.$defs.bullet.properties.sourceOrganizationOrExperienceId.enum).toEqual(["exp-1"])
   })
 
   it("excludes an already-used evidence ID from the repair schema's omission namespace", () => {
@@ -190,6 +192,10 @@ describe("Resume Content Plan deterministic validation", () => {
     skillOnly.plannedExperiences[0].bullets[0].supportingEvidenceIds = ["ev-2"]
     skillOnly.selectedEvidenceIds = ["ev-1", "ev-2"]
     expect(validateResumePlanDraft(skillOnly, planningInput(), "en", "standard").map((issue) => issue.code)).toContain("skill_promoted_to_experience")
+
+    const skillOnlySummary = validDraft()
+    skillOnlySummary.plannedExperiences[0].summary = { text: "TypeScript", supportingEvidenceIds: ["ev-2"] }
+    expect(validateResumePlanDraft(skillOnlySummary, planningInput(), "en", "standard").map((issue) => issue.code)).toContain("skill_promoted_to_experience")
   })
 
   it("reports the exact indexed path and offending evidence ID", () => {
@@ -469,6 +475,41 @@ describe("Plan Resume Content use case", () => {
     expect(repairSchema.$defs.omitted.properties.evidenceId.enum).toEqual(["ev-2"])
     expect(provider.requests).toHaveLength(2)
     expect(saved).toEqual([])
+  })
+
+  it("repairs a selected-and-omitted overlap combined with skill-only experience evidence", async () => {
+    const pack = clone(planningInput().curatedEvidencePack)
+    const experiencePresentation = clone(pack.selectedEvidence[0].presentation)
+    pack.selectedEvidence[1].presentation = experiencePresentation
+    const invalid = validDraft()
+    invalid.plannedExperiences[0].bullets[0] = {
+      text: "TypeScript",
+      supportingEvidenceIds: ["ev-2"],
+      targetRequirementIds: [],
+      sourceOrganizationOrExperienceId: "exp-1",
+      exaggerationRisk: "low",
+      warnings: []
+    }
+    invalid.omittedEvidence = [{ evidenceId: "ev-1", reason: "length", explanation: "Concise limit" }]
+    expect(validateResumePlanDraft(invalid, freezeResumePlanningInput({ curatedEvidencePack: pack }), "en", "concise").map((issue) => issue.code)).toEqual([
+      "selected_and_omitted",
+      "skill_promoted_to_experience"
+    ])
+
+    const { useCase, saved, provider } = harness({ pack })
+    provider.responses = [JSON.stringify(invalid), JSON.stringify(validDraft())]
+
+    await expect(useCase.execute({ jobDescriptionId: "job-1", language: "en", length: "concise" })).resolves.toBeDefined()
+
+    const repairRequest = JSON.parse(provider.requests[1].userPrompt).repairRequest
+    expect(repairRequest.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "selected_and_omitted", value: "ev-1" }),
+      expect.objectContaining({ code: "skill_promoted_to_experience", resolution: expect.stringContaining("experienceEvidenceIds") })
+    ]))
+    const repairSchema = provider.requests[1].responseFormat as any
+    expect(repairSchema.$defs.bullet.properties.supportingEvidenceIds.items.enum).toEqual(["ev-1"])
+    expect(repairSchema.$defs.omitted.properties.evidenceId.enum).toEqual(["ev-2"])
+    expect(saved).toHaveLength(1)
   })
 
   it("returns the repository winner from a concurrent uniqueness race", async () => {

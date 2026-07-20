@@ -57,6 +57,7 @@ function repairResolution(code: ResumePlanValidationError["issues"][number]["cod
     case "selected_set_mismatch": return "Recompute selectedEvidenceIds as the exact unique union of all supportingEvidenceIds."
     case "uncovered_requirement_mismatch": return "Set uncoveredRequirementIds to the exact uncoveredRequirementIds namespace supplied in the prompt."
     case "unsupported_requirement": return "Target only a targetable requirement supported by this bullet's supportingEvidenceIds; never target an uncovered requirement."
+    case "skill_promoted_to_experience": return "Remove skill-only evidence from plannedExperiences. Use only experienceEvidenceIds there, and place supported skill-only content in professionalSummary or plannedSkillGroups."
     default: return "Regenerate the complete response and correct this validation issue."
   }
 }

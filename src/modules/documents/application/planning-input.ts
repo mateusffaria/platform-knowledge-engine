@@ -60,6 +60,10 @@ export interface ResumePlanningInput {
   curatedEvidencePack: CompatibleCuratedEvidencePack
 }
 
+export function isExperienceCapableEvidence(evidence: ResumePlanningEvidence): boolean {
+  return (evidence.claimType ?? evidence.subjectType).normalize("NFKC").trim().toLocaleLowerCase("en") !== "skill"
+}
+
 function freezeArray<T>(values: readonly T[]): readonly T[] {
   return Object.freeze([...values])
 }

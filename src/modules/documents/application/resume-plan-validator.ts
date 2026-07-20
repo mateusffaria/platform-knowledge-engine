@@ -1,5 +1,5 @@
 import { ResumeLength, resumeLengthProfiles } from "../domain/model.js"
-import { ResumePlanningEvidence, ResumePlanningInput } from "./planning-input.js"
+import { isExperienceCapableEvidence, ResumePlanningEvidence, ResumePlanningInput } from "./planning-input.js"
 import { ResumePlanDraft } from "./resume-content-plan-schema.js"
 
 export type ResumePlanValidationIssueCode =
@@ -42,7 +42,8 @@ const repairableEvidenceIssueCodes = new Set<ResumePlanValidationIssueCode>([
   "selected_and_omitted",
   "selected_set_mismatch",
   "uncovered_requirement_mismatch",
-  "unsupported_requirement"
+  "unsupported_requirement",
+  "skill_promoted_to_experience"
 ])
 
 export function isRepairableReferenceIssue(issue: ResumePlanValidationIssue): boolean {
@@ -214,13 +215,19 @@ function addFactIssues(draft: ResumePlanDraft, input: ResumePlanningInput, issue
 function addStrengthIssues(draft: ResumePlanDraft, input: ResumePlanningInput, issues: ResumePlanValidationIssue[]): void {
   const byId = evidenceById(input)
   const riskRank = { low: 0, medium: 1, high: 2 } as const
-  draft.plannedExperiences.forEach((experience, experienceIndex) => experience.bullets.forEach((bullet, bulletIndex) => {
-    const cited = bullet.supportingEvidenceIds.map((id) => byId.get(id)).filter((value): value is ResumePlanningEvidence => value !== undefined)
-    const requiredRisk = cited.reduce<"low" | "medium" | "high">((risk, evidence) => riskRank[evidence.exaggerationRisk] > riskRank[risk] ? evidence.exaggerationRisk : risk, "low")
-    const path = `plannedExperiences.${experienceIndex}.bullets.${bulletIndex}`
-    if (riskRank[bullet.exaggerationRisk] < riskRank[requiredRisk] || (requiredRisk !== "low" && ownershipPattern.test(bullet.text))) issues.push({ code: "evidence_strength_inflation", path, message: "Bullet wording or risk understates the cited evidence's exaggeration risk." })
-    if (cited.length > 0 && cited.every((evidence) => normalized(evidence.claimType ?? evidence.subjectType) === "skill")) issues.push({ code: "skill_promoted_to_experience", path, message: "Skill-only evidence cannot support a production experience bullet." })
-  }))
+  draft.plannedExperiences.forEach((experience, experienceIndex) => {
+    if (experience.summary) {
+      const cited = experience.summary.supportingEvidenceIds.map((id) => byId.get(id)).filter((value): value is ResumePlanningEvidence => value !== undefined)
+      if (cited.length > 0 && cited.every((evidence) => !isExperienceCapableEvidence(evidence))) issues.push({ code: "skill_promoted_to_experience", path: `plannedExperiences.${experienceIndex}.summary`, message: "Skill-only evidence cannot support a production experience summary." })
+    }
+    experience.bullets.forEach((bullet, bulletIndex) => {
+      const cited = bullet.supportingEvidenceIds.map((id) => byId.get(id)).filter((value): value is ResumePlanningEvidence => value !== undefined)
+      const requiredRisk = cited.reduce<"low" | "medium" | "high">((risk, evidence) => riskRank[evidence.exaggerationRisk] > riskRank[risk] ? evidence.exaggerationRisk : risk, "low")
+      const path = `plannedExperiences.${experienceIndex}.bullets.${bulletIndex}`
+      if (riskRank[bullet.exaggerationRisk] < riskRank[requiredRisk] || (requiredRisk !== "low" && ownershipPattern.test(bullet.text))) issues.push({ code: "evidence_strength_inflation", path, message: "Bullet wording or risk understates the cited evidence's exaggeration risk." })
+      if (cited.length > 0 && cited.every((evidence) => !isExperienceCapableEvidence(evidence))) issues.push({ code: "skill_promoted_to_experience", path, message: "Skill-only evidence cannot support a production experience bullet." })
+    })
+  })
 }
 
 function addLanguageAndLengthIssues(draft: ResumePlanDraft, language: "pt-BR" | "en", length: ResumeLength, issues: ResumePlanValidationIssue[]): void {
