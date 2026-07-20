@@ -342,7 +342,7 @@ describe("LlmEvidenceReasoner", () => {
 });
 
 describe("ReasonJobEvidence", () => {
-  it("reuses an equivalent successful run without calling the provider twice", async () => {
+  it("reuses an equivalent successful run unless force requests a fresh immutable run", async () => {
     const document = jobDescription();
     const persisted: CuratedEvidencePack[] = [];
     const llm = provider(validOutput());
@@ -355,10 +355,12 @@ describe("ReasonJobEvidence", () => {
       evidenceReasoner: reasoner
     }).execute;
 
+    const first = await execute({ jobDescriptionId: "job-1", evidencePack: evidencePack() });
     await execute({ jobDescriptionId: "job-1", evidencePack: evidencePack() });
-    await execute({ jobDescriptionId: "job-1", evidencePack: evidencePack() });
-    expect(persisted).toHaveLength(1);
-    expect(llm.generate).toHaveBeenCalledOnce();
+    const forced = await execute({ jobDescriptionId: "job-1", evidencePack: evidencePack(), force: true });
+    expect(persisted).toHaveLength(2);
+    expect(forced.runIdentity).not.toBe(first.runIdentity);
+    expect(llm.generate).toHaveBeenCalledTimes(2);
   });
 
   it("does not persist a conservative fallback, allowing a later valid provider response to recover", async () => {

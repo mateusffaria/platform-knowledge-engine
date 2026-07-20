@@ -46,6 +46,8 @@ Alternative considered: allow the planner to query canonical knowledge or retrie
 
 Provider identity is resolved before lookup. A SHA-256 plan identity covers the Curated Evidence Pack ID, resolved provider, resolved model, resume-planning prompt version, language, and length. The use case returns an existing plan for that identity before calling the provider. A unique database index makes concurrent identical requests converge on the same immutable record; after a uniqueness race, the use case reloads the winner.
 
+Cache-backed generation commands expose `--force`. Normal execution keeps deterministic identity reuse unchanged. Forced execution adds a fresh opaque regeneration ID to the analysis, reasoning, or plan identity, skips the pre-generation reuse lookup, invokes the provider, and persists a distinct immutable snapshot without deleting or overwriting the prior result. `jobs candidates` and `jobs retrieve` have no candidate/result snapshot cache of their own; for those commands `--force` regenerates their job-analysis dependency before rebuilding the retrieval intent. Embedding indexing retains its existing equivalent `--force` behavior.
+
 Alternative considered: key reuse by job and model only. It would incorrectly reuse content after evidence, prompt, language, or length changes.
 
 ### Treat model output as a proposal until deterministic validation succeeds
@@ -73,7 +75,7 @@ Alternative considered: silently remove invalid omitted or selected IDs. This wo
 
 ### Keep generation separate from terminal presentation and future rendering
 
-Register `pke documents resume plan <job-id>` through a documents composition root. Options map to the use-case command: `--model`, `--language <pt-BR|en>`, `--length <concise|standard|detailed>`, `--json`, and `--verbose`. Defaults are `en` and `standard`; provider/model defaults continue to come from existing LLM configuration.
+Register `pke documents resume plan <job-id>` through a documents composition root. Options map to the use-case command: `--model`, `--language <pt-BR|en>`, `--length <concise|standard|detailed>`, `--json`, `--verbose`, and `--force`. Defaults are `en` and `standard`; provider/model defaults continue to come from existing LLM configuration.
 
 `--json` writes exactly the persisted Resume Content Plan as machine-readable JSON and suppresses progress/preview text on stdout. Default output is a compact plan preview; `--verbose` adds IDs, grounding, omissions, uncovered requirements, warnings, and generation identity without exposing prompts or raw provider responses. Both are views over the same validated aggregate and are not renderers.
 

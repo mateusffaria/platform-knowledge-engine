@@ -14,6 +14,7 @@ export interface ResumePlanningCommand {
   language: ResumeLanguage
   length: ResumeLength
   model?: string
+  regenerationId?: string
   repair?: ResumePlanningRepairFeedback
 }
 

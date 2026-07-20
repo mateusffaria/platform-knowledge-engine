@@ -18,12 +18,13 @@ Options:
 --model <model>
 --language pt-BR|en                 default: en
 --length concise|standard|detailed default: standard
+--force
 --json
 --verbose
 --no-progress
 ```
 
-`--json` writes exactly one JSON plan to stdout and suppresses interactive progress. Default output is a compact terminal preview. `--verbose` adds evidence IDs, omissions, uncovered requirements, warnings, and provider/model/prompt provenance; it never prints prompts or raw provider responses. Interactive previews show transient elapsed-time feedback on stderr and automatically suppress it in CI or redirected terminals.
+`--force` bypasses reuse, invokes the provider, and persists a new immutable plan with a fresh identity alongside earlier plans; it never overwrites or deletes cached output. `--json` writes exactly one JSON plan to stdout and suppresses interactive progress. Default output is a compact terminal preview. `--verbose` adds evidence IDs, omissions, uncovered requirements, warnings, and provider/model/prompt provenance; it never prints prompts or raw provider responses. Interactive previews show transient elapsed-time feedback on stderr and automatically suppress it in CI or redirected terminals.
 
 ## Plan model and immutable identity
 
@@ -37,7 +38,7 @@ The plan identity is SHA-256 over:
 - language;
 - length.
 
-An identical identity returns the existing immutable row without invoking the provider. A changed evidence pack, provider, model, prompt, language, or length creates a distinct plan. A database unique index resolves concurrent identical inserts to one stored winner.
+An identical identity returns the existing immutable row without invoking the provider. A changed evidence pack, provider, model, prompt, language, or length creates a distinct plan. With `--force`, a fresh opaque regeneration ID also participates in the hash, guaranteeing a new immutable identity. A database unique index resolves concurrent identical inserts to one stored winner.
 
 ## Deterministic validation
 
@@ -75,6 +76,6 @@ Common failures:
 - “No compatible persisted Curated Evidence Pack” — run `pke jobs reason <job-id>` successfully first.
 - Missing provider configuration — set `LLM_PROVIDER=ollama` and `LLM_MODEL`, or pass `--model` after configuring a provider.
 - Deterministic validation failure — inspect the stable issue code, indexed path, and offending ID in the terminal diagnostic (for example, `discarded_evidence_id@omittedEvidence[2].evidenceId=<id>`); change the prompt/model or source evidence, never bypass persistence validation.
-- Cached output after a request — this is expected for the same immutable identity; change a version input to create a new plan.
+- Cached output after a request — this is expected for the same immutable identity; pass `--force` to regenerate and persist a new plan without deleting the existing one.
 
 PDF, DOCX, HTML, visual templates, cover letters, LinkedIn content, interview answers, ATS scoring, and automated applications are explicitly out of scope.

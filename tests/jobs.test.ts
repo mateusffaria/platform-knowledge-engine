@@ -276,7 +276,7 @@ describe("jobs CLI commands", () => {
     const jobsServices = {
       ingestJobDescription: { execute: vi.fn(async () => ({ jobDescription: document, created: true })) },
       showJobDescription: { execute: vi.fn(async () => document) },
-      analyzeJobDescription: { execute: vi.fn() },
+      analyzeJobDescription: { execute: vi.fn(async () => ({ id: "analysis-forced" })) },
       buildJobRetrievalIntent: { execute: vi.fn(async () => ({
         jobDescriptionId: document.job.id,
         sourceRequirementIds: document.requirements.map((item) => item.id),
@@ -378,6 +378,26 @@ describe("jobs CLI commands", () => {
       model: "override-model"
     }));
     expect(JSON.parse(log.mock.calls[0][0]).promptVersion).toBe("evidence-reasoner-v6");
+    log.mockRestore();
+  });
+
+  it("propagates force to generation caches and refreshes analysis dependencies", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const analyzed = createProgram();
+    await analyzed.program.parseAsync(["node", "pke", "jobs", "analyze", "job-1", "--force", "--json"]);
+    expect(analyzed.jobsServices.analyzeJobDescription.execute).toHaveBeenCalledWith({ jobDescriptionId: "job-1", force: true });
+
+    const reasoned = createProgram();
+    await reasoned.program.parseAsync(["node", "pke", "jobs", "reason", "job-1", "--force", "--json"]);
+    expect(reasoned.jobsServices.reasonJobEvidence.execute).toHaveBeenCalledWith(expect.objectContaining({ force: true }));
+
+    const candidates = createProgram();
+    await candidates.program.parseAsync(["node", "pke", "jobs", "candidates", "job-1", "--force", "--json"]);
+    expect(candidates.jobsServices.analyzeJobDescription.execute).toHaveBeenCalledWith({ jobDescriptionId: "job-1", force: true });
+
+    const retrieved = createProgram();
+    await retrieved.program.parseAsync(["node", "pke", "jobs", "retrieve", "job-1", "--force", "--json"]);
+    expect(retrieved.jobsServices.analyzeJobDescription.execute).toHaveBeenCalledWith({ jobDescriptionId: "job-1", force: true });
     log.mockRestore();
   });
 });

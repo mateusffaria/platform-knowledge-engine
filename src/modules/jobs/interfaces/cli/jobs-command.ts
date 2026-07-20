@@ -16,13 +16,13 @@ export interface JobsServices {
     execute(command: { jobDescriptionId: string }): Promise<JobDescriptionWithRequirements>;
   };
   analyzeJobDescription: {
-    execute(command: { jobDescriptionId: string; model?: string }): Promise<JobAnalysis>;
+    execute(command: { jobDescriptionId: string; model?: string; force?: boolean }): Promise<JobAnalysis>;
   };
   buildJobRetrievalIntent: {
     execute(command: { jobDescriptionId: string }): Promise<JobRetrievalIntent>;
   };
   reasonJobEvidence: {
-    execute(command: { jobDescriptionId: string; evidencePack?: EvidencePack; candidatePack?: ReturnType<typeof buildCandidateEvidencePack>; model?: string }): Promise<CuratedEvidencePack>;
+    execute(command: { jobDescriptionId: string; evidencePack?: EvidencePack; candidatePack?: ReturnType<typeof buildCandidateEvidencePack>; model?: string; force?: boolean }): Promise<CuratedEvidencePack>;
   };
   close(): Promise<void>;
 }
@@ -329,15 +329,20 @@ export function registerJobsCommands(
     .description("Analyze a persisted job description with the configured LLM")
     .argument("<job-id>", "job description id")
     .option("--model <model>", "override the configured LLM model for this analysis")
+    .option("--force", "bypass analysis reuse and persist a fresh immutable snapshot")
     .option("--json", "print machine-readable JSON")
     .option("--verbose", "include analysis source references and execution metadata")
     .option("--no-progress", "disable interactive terminal progress")
-    .action(async (jobDescriptionId: string, options: { model?: string; json?: boolean; verbose?: boolean; progress?: boolean }) => {
+    .action(async (jobDescriptionId: string, options: { model?: string; force?: boolean; json?: boolean; verbose?: boolean; progress?: boolean }) => {
       const progress = createCommandProgress(options);
       const services = createJobsServices();
       try {
         progress.start("Analyzing job description with the configured model");
-        const analysis = await services.analyzeJobDescription.execute({ jobDescriptionId, model: options.model });
+        const analysis = await services.analyzeJobDescription.execute({
+          jobDescriptionId,
+          model: options.model,
+          ...(options.force ? { force: true } : {})
+        });
         progress.succeed("Job analysis complete");
         printJobAnalysis(analysis, options);
       } catch (error) {
@@ -355,6 +360,7 @@ export function registerJobsCommands(
     .option("--min-score <number>", "minimum final ranking score")
     .option("--claim-status <status>", "filter trusted evidence by claim status: confirmed or single_source")
     .option("--subject-type <type>", "filter by subject type: knowledge_asset, evidence_claim, skill, experience, project, achievement")
+    .option("--force", "regenerate job analysis before rebuilding the retrieval intent")
     .option("--verbose", "include identifiers and provenance")
     .option("--json", "print machine-readable JSON")
     .option("--no-progress", "disable interactive terminal progress")
@@ -363,6 +369,7 @@ export function registerJobsCommands(
       minScore?: string;
       claimStatus?: string;
       subjectType?: string;
+      force?: boolean;
       verbose?: boolean;
       json?: boolean;
       progress?: boolean;
@@ -376,6 +383,10 @@ export function registerJobsCommands(
       let retrievalServices: JobRetrievalServices | undefined;
       try {
         progress.start("Loading job and retrieval intent");
+        if (options.force) {
+          progress.update("Regenerating job analysis before retrieval");
+          await jobsServices.analyzeJobDescription.execute({ jobDescriptionId, force: true });
+        }
         const [jobDescription, intent] = await Promise.all([
           jobsServices.showJobDescription.execute({ jobDescriptionId }),
           jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId })
@@ -423,12 +434,13 @@ export function registerJobsCommands(
     .description("Curate bounded canonical evidence for a persisted job description")
     .argument("<job-id>", "job description id")
     .option("--model <model>", "override the configured LLM model for this reasoning run")
+    .option("--force", "bypass reasoning reuse and persist a fresh immutable Curated Evidence Pack")
     .option("--limit-per-requirement <number>", "maximum non-exact candidates sent to the reasoner per requirement", defaultReasoningCandidateLimit)
     .option("--min-candidate-score <number>", "minimum final score for non-exact candidates sent to the reasoner")
     .option("--json", "print machine-readable JSON")
     .option("--verbose", "include canonical evidence provenance, selections, and rejections")
     .option("--no-progress", "disable interactive terminal progress")
-    .action(async (jobDescriptionId: string, options: { model?: string; limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean; progress?: boolean }) => {
+    .action(async (jobDescriptionId: string, options: { model?: string; force?: boolean; limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean; progress?: boolean }) => {
       const selection = parseCandidateSelection(options);
       const progress = createCommandProgress(options);
       const jobsServices = createJobsServices();
@@ -453,7 +465,8 @@ export function registerJobsCommands(
         const curated = await jobsServices.reasonJobEvidence.execute({
           jobDescriptionId,
           candidatePack,
-          model: options.model
+          model: options.model,
+          ...(options.force ? { force: true } : {})
         });
         progress.succeed("Evidence curation complete");
         printCuratedEvidencePack(curated, options);
@@ -473,14 +486,19 @@ export function registerJobsCommands(
     .option("--verbose", "include per-requirement pipeline diagnostics and discard reasons")
     .option("--limit-per-requirement <number>", "maximum non-exact candidates selected for the reasoner per requirement", defaultReasoningCandidateLimit)
     .option("--min-candidate-score <number>", "minimum final score for non-exact candidates selected for the reasoner")
+    .option("--force", "regenerate job analysis before rebuilding candidates")
     .option("--no-progress", "disable interactive terminal progress")
-    .action(async (jobDescriptionId: string, options: { limitPerRequirement: string; minCandidateScore?: string; json?: boolean; verbose?: boolean; progress?: boolean }) => {
+    .action(async (jobDescriptionId: string, options: { limitPerRequirement: string; minCandidateScore?: string; force?: boolean; json?: boolean; verbose?: boolean; progress?: boolean }) => {
       const selection = parseCandidateSelection(options);
       const progress = createCommandProgress(options);
       const jobsServices = createJobsServices();
       let retrievalServices: JobRetrievalServices | undefined;
       try {
         progress.start("Loading job and retrieval intent");
+        if (options.force) {
+          progress.update("Regenerating job analysis before candidate preparation");
+          await jobsServices.analyzeJobDescription.execute({ jobDescriptionId, force: true });
+        }
         const [jobDescription, intent] = await Promise.all([
           jobsServices.showJobDescription.execute({ jobDescriptionId }),
           jobsServices.buildJobRetrievalIntent.execute({ jobDescriptionId })

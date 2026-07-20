@@ -10,6 +10,7 @@ The engine can curate job-specific evidence but cannot yet turn that evidence in
 - Deterministically reject unsupported or altered content, including missing evidence references, fabricated technologies, changed metrics or canonical organization/role data, and falsely covered requirements.
 - Persist plans immutably and reuse an existing plan for an identical curated-pack/provider/model/prompt/language/length identity.
 - Add `pke documents resume plan <job-id>` with model, language, length, JSON, and verbosity options plus an optional compact terminal preview.
+- Add consistent `--force` cache bypass for resume planning and the cache-backed job analysis/reasoning workflows, including analysis refresh for candidate and retrieval commands.
 - Instrument planning with OpenTelemetry and Langfuse and add golden evaluation scenarios for grounding, fabrication, metric preservation, localization, and bounded length.
 - Update architecture, documents, and roadmap documentation for the new planning stage.
 

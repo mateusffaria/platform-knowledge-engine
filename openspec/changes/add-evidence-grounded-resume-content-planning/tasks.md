@@ -36,6 +36,7 @@
 - [x] 3.11 Bump the prompt version and prove a deterministic repeated `selected_and_omitted` overlap receives actionable repair context while invalid repaired output still cannot persist.
 - [x] 3.12 Constrain a `selected_and_omitted` repair schema so the already-used evidence ID cannot be emitted as omitted again.
 - [x] 3.13 Bump the prompt version and add a regression for a draft combining `selected_and_omitted` with `skill_promoted_to_experience`.
+- [x] 3.14 Add optional regeneration IDs to job analysis, evidence reasoning, and resume planning identities so forced runs remain immutable and persist alongside cached snapshots.
 
 ## 4. Persistence and Cross-Module Input Adapters
 
@@ -60,6 +61,8 @@
 - [x] 6.3 Implement exact single-document JSON output, compact terminal preview, and verbose traceability/omission/coverage/provenance output with no prompt or raw provider response leakage.
 - [x] 6.4 Register the documents command tree in the CLI and add command tests for defaults, every option, invalid values, JSON stdout purity, previews, actionable missing-pack errors, cached reuse, and non-zero failures.
 - [x] 6.5 Add a human feedback for long running processing as we have in `pke -- eval run` command
+- [x] 6.6 Add and propagate `--force` through `jobs analyze`, `jobs reason`, `jobs candidates`, `jobs retrieve`, and `documents resume plan`, preserving the existing indexing flag.
+- [x] 6.7 Add CLI and use-case regressions proving default reuse, forced provider invocation, fresh immutable persistence, and candidate/retrieval analysis refresh.
 
 ## 7. Golden Evaluation
 
@@ -74,6 +77,7 @@
 - [x] 8.2 Document plan schema/identity, deterministic validators, CLI examples/options, provider/model/prompt configuration, migration operation, immutable reuse, and troubleshooting.
 - [x] 8.3 Update evaluation and observability/privacy documentation with resume golden scenarios, safe attributes/metrics, content-capture defaults, and failure isolation.
 - [x] 8.4 Update the AEM-010 knowledge-products roadmap material to match JSON content planning acceptance criteria and explicitly defer rendering and other document generators.
+- [x] 8.5 Document cache bypass semantics and distinguish generation reuse from ingestion idempotency, historical reads, and embedding indexing.
 
 ## 9. Verification and Regression Safety
 

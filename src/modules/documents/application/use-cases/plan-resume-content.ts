@@ -13,6 +13,7 @@ export interface PlanResumeContentCommand {
   language: ResumeLanguage
   length: ResumeLength
   model?: string
+  force?: boolean
   onProgress?: (stage: ResumePlanningProgressStage) => void
 }
 
@@ -79,17 +80,27 @@ export function createPlanResumeContentUseCase(dependencies: PlanResumeContentDe
         const pack = await observability.run("input_loading", { jobDescriptionId: command.jobDescriptionId }, () => dependencies.curatedEvidenceReader.findLatestCompatible(command.jobDescriptionId))
         if (!pack) throw new CompatibleCuratedEvidencePackNotFoundError(command.jobDescriptionId)
         const input = freezeResumePlanningInput({ curatedEvidencePack: pack })
-        const plannerCommand = { input, language: command.language, length: command.length, model: command.model }
+        const plannerCommand = {
+          input,
+          language: command.language,
+          length: command.length,
+          model: command.model,
+          ...(command.force ? { regenerationId: randomUUID() } : {})
+        }
         const identity = dependencies.planner.getIdentity(plannerCommand)
         const attributes = { provider: identity.provider, model: identity.model, prompt_version: identity.promptVersion, language: command.language, length: command.length }
-        reportProgress(command, "checking_existing_plan")
-        const existing = await observability.run("identity_lookup", { planIdentity: identity.planIdentity }, () => dependencies.planRepository.findByPlanIdentity(identity.planIdentity))
-        if (existing) {
-          reportProgress(command, "reusing_existing_plan")
-          outcome = "cache_hit"
-          observability.record("cacheHits", 1, attributes)
-          await trace.event("cache_hit", { planIdentity: identity.planIdentity, curatedEvidencePackId: pack.id })
-          return existing
+        if (!command.force) {
+          reportProgress(command, "checking_existing_plan")
+          const existing = await observability.run("identity_lookup", { planIdentity: identity.planIdentity }, () => dependencies.planRepository.findByPlanIdentity(identity.planIdentity))
+          if (existing) {
+            reportProgress(command, "reusing_existing_plan")
+            outcome = "cache_hit"
+            observability.record("cacheHits", 1, attributes)
+            await trace.event("cache_hit", { planIdentity: identity.planIdentity, curatedEvidencePackId: pack.id })
+            return existing
+          }
+        } else {
+          await trace.event("cache_bypassed", { planIdentity: identity.planIdentity, curatedEvidencePackId: pack.id })
         }
 
         let generated: Awaited<ReturnType<ResumeContentPlanner["plan"]>> | undefined

@@ -361,6 +361,18 @@ describe("Plan Resume Content use case", () => {
     expect(second.saved).toHaveLength(0)
   })
 
+  it("bypasses a cached plan with force and persists a fresh immutable identity", async () => {
+    const initial = harness()
+    const cached = await initial.useCase.execute({ jobDescriptionId: "job-1", language: "en", length: "standard" })
+    const forced = harness({ cached })
+
+    const regenerated = await forced.useCase.execute({ jobDescriptionId: "job-1", language: "en", length: "standard", force: true })
+
+    expect(forced.provider.requests).toHaveLength(1)
+    expect(forced.saved).toHaveLength(1)
+    expect(regenerated.planIdentity).not.toBe(cached.planIdentity)
+  })
+
   it("persists nothing when deterministic validation fails", async () => {
     const invalid = validDraft()
     invalid.plannedExperiences[0].bullets[0].text = "Improved API latency by 99% with Kubernetes."

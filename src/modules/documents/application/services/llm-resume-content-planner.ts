@@ -16,6 +16,7 @@ export function buildResumePlanIdentity(input: {
   promptVersion: string
   language: string
   length: string
+  regenerationId?: string
 }): string {
   return createHash("sha256").update(JSON.stringify(input)).digest("hex")
 }
@@ -38,7 +39,8 @@ export class LlmResumeContentPlanner implements ResumeContentPlanner {
         model: identity.model,
         promptVersion: resumePlanningPromptVersion,
         language: command.language,
-        length: command.length
+        length: command.length,
+        regenerationId: command.regenerationId
       })
     }
   }

@@ -7,7 +7,13 @@ export interface JobAnalysisRunIdentity {
   promptVersion: string;
 }
 
+export interface JobAnalysisCommand {
+  jobDescription: JobDescriptionWithRequirements;
+  model?: string;
+  regenerationId?: string;
+}
+
 export interface JobAnalyzer {
-  getRunIdentity(command: { jobDescription: JobDescriptionWithRequirements; model?: string }): JobAnalysisRunIdentity;
-  analyze(command: { jobDescription: JobDescriptionWithRequirements; model?: string }): Promise<JobAnalysis>;
+  getRunIdentity(command: JobAnalysisCommand): JobAnalysisRunIdentity;
+  analyze(command: JobAnalysisCommand): Promise<JobAnalysis>;
 }

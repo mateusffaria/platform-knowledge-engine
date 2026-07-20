@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { JobAnalyzer } from "../ports/job-analyzer.js";
 import { JobAnalysisRepository } from "../ports/job-analysis-repository.js";
 import { JobDescriptionRepository } from "../ports/job-description-repository.js";
@@ -8,17 +10,24 @@ export function createAnalyzeJobDescriptionUseCase(dependencies: {
   jobAnalyzer: JobAnalyzer;
 }) {
   return {
-    async execute(command: { jobDescriptionId: string; model?: string }) {
+    async execute(command: { jobDescriptionId: string; model?: string; force?: boolean }) {
       const jobDescription = await dependencies.jobDescriptionRepository.findById(command.jobDescriptionId);
       if (!jobDescription) {
         throw new Error(`Job description not found: ${command.jobDescriptionId}`);
       }
-      const runIdentity = dependencies.jobAnalyzer.getRunIdentity({ jobDescription, model: command.model });
-      const existing = await dependencies.jobAnalysisRepository.findByAnalysisIdentity(jobDescription.job.id, runIdentity.analysisIdentity);
-      if (existing) {
-        return existing;
+      const analyzerCommand = {
+        jobDescription,
+        model: command.model,
+        ...(command.force ? { regenerationId: randomUUID() } : {})
+      };
+      const runIdentity = dependencies.jobAnalyzer.getRunIdentity(analyzerCommand);
+      if (!command.force) {
+        const existing = await dependencies.jobAnalysisRepository.findByAnalysisIdentity(jobDescription.job.id, runIdentity.analysisIdentity);
+        if (existing) {
+          return existing;
+        }
       }
-      const analysis = await dependencies.jobAnalyzer.analyze({ jobDescription, model: command.model });
+      const analysis = await dependencies.jobAnalyzer.analyze(analyzerCommand);
       try {
         await dependencies.jobAnalysisRepository.save(analysis);
       } catch (error) {

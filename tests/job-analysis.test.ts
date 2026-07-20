@@ -343,7 +343,7 @@ describe("Job Analyzer", () => {
     expect(content.crossTeamCollaborationSignals).toEqual([]);
   });
 
-  it("reuses an exact analysis identity and creates a new snapshot when the model changes", async () => {
+  it("reuses an exact analysis identity and creates fresh snapshots for model changes or forced runs", async () => {
     const document = jobDescription();
     const provider = providerWith(validAnalysisOutput());
     const analyses = new MemoryAnalysisRepository();
@@ -356,10 +356,13 @@ describe("Job Analyzer", () => {
     const first = await useCase.execute({ jobDescriptionId: document.job.id });
     const repeated = await useCase.execute({ jobDescriptionId: document.job.id });
     const changedModel = await useCase.execute({ jobDescriptionId: document.job.id, model: "llama3.3" });
+    const forced = await useCase.execute({ jobDescriptionId: document.job.id, force: true });
     expect(repeated.id).toBe(first.id);
     expect(changedModel.id).not.toBe(first.id);
-    expect(provider.generate).toHaveBeenCalledTimes(2);
-    expect(analyses.saved).toHaveLength(2);
+    expect(forced.id).not.toBe(first.id);
+    expect(forced.analysisIdentity).not.toBe(first.analysisIdentity);
+    expect(provider.generate).toHaveBeenCalledTimes(3);
+    expect(analyses.saved).toHaveLength(3);
   });
 
   it("returns the matching persisted snapshot after a concurrent identity conflict", async () => {

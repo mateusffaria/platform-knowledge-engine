@@ -20,7 +20,8 @@ export class JobAnalyzerAgent implements JobAnalyzer {
         contentHash: command.jobDescription.job.contentHash,
         promptVersion: jobAnalyzerPromptVersion,
         provider: provider.provider,
-        model: provider.model
+        model: provider.model,
+        regenerationId: command.regenerationId
       }))
       .digest("hex");
     return { analysisIdentity, promptVersion: jobAnalyzerPromptVersion, ...provider };

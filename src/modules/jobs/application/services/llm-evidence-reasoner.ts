@@ -108,7 +108,8 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
       candidatePackHash: command.candidatePack.hash,
       provider: identity.provider,
       model: identity.model,
-      promptVersion: evidenceReasoningPromptVersion
+      promptVersion: evidenceReasoningPromptVersion,
+      regenerationId: command.regenerationId
     })).digest("hex");
     return { ...identity, runIdentity, promptVersion: evidenceReasoningPromptVersion };
   }

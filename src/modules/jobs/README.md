@@ -8,7 +8,7 @@ The parser recognizes common requirements, qualifications, responsibilities, and
 
 Job analysis is enrichment, not extraction. `JobAnalyzerAgent` receives only the canonical job source and deterministic provenance through application ports. It returns Zod-validated inferred requirements plus distinct cross-team collaboration and leadership signals, canonicalized domain signals that preserve source wording, and source-aware seniority signals. It makes the narrowest defensible inference, prefers omission to unsupported competency expansion, and never treats a source reference or warning as proof of an unsupported claim.
 
-Successful outputs are immutable snapshots in `job_analyses`; malformed provider output is rejected without modifying the canonical job or any prior analysis. Existing v2 snapshots remain readable through the current analysis view. An identical v3 request—same canonical content hash, prompt version, provider, and resolved model—reuses its existing snapshot; changing any of those inputs creates a distinct snapshot.
+Successful outputs are immutable snapshots in `job_analyses`; malformed provider output is rejected without modifying the canonical job or any prior analysis. Existing v2 snapshots remain readable through the current analysis view. An identical v3 request—same canonical content hash, prompt version, provider, and resolved model—reuses its existing snapshot; changing any of those inputs creates a distinct snapshot. `jobs analyze --force` bypasses reuse by adding a fresh opaque regeneration ID to the identity, so the provider runs and a new immutable snapshot is stored alongside the earlier one.
 
 Analysis-derived signals are marked inferred and can only enrich semantic retrieval text. They do not change deterministic PKQL filters, professional `EvidenceClaim` records, conflict resolution, Evidence Pack generation, or retrieval ownership. The agent does not access PostgreSQL, pgvector, repositories, or Ollama directly.
 
@@ -26,7 +26,9 @@ Candidate selection is mechanical model-context control, not qualitative reasoni
 
 The model returns only requirement/evidence identifiers and bounded reasons. Zod validation rejects malformed, unknown, contradictory, or out-of-scope references; the application rebuilds selections and rejections from canonical input, preserves objective signals and provenance, and deterministically removes redundant cross-requirement selections. Every requirement remains explicit as `strong`, `partial`, `weak`, or `missing`; qualitative coverage and the optional display score are not hiring-fit proof.
 
-Successful runs are immutable in `curated_evidence_packs` and record the job, selected analysis when present, candidate-pack version/hash, provider, model, prompt version, and creation time. An equivalent run is reused. Invalid provider output persists nothing and leaves the Candidate Evidence Pack unchanged.
+Successful runs are immutable in `curated_evidence_packs` and record the job, selected analysis when present, candidate-pack version/hash, provider, model, prompt version, and creation time. An equivalent run is reused. `jobs reason --force` derives a fresh run identity, invokes the provider, and persists another immutable Curated Evidence Pack. Invalid provider output persists nothing and leaves the Candidate Evidence Pack unchanged.
+
+`jobs candidates` and `jobs retrieve` do not cache their deterministic result payloads. Their `--force` option regenerates the persisted job-analysis dependency first, then rebuilds the retrieval intent and candidate/retrieval result from that new analysis. Ingestion content-hash deduplication is idempotency rather than a response cache and is not bypassed. Embedding indexing keeps its existing `pke index --force` behavior.
 
 ## CLI workflow
 
@@ -43,6 +45,11 @@ npm run pke -- jobs retrieve <job-id> --verbose
 npm run pke -- jobs candidates <job-id> --verbose
 npm run pke -- jobs candidates <job-id> --limit-per-requirement 3 --min-candidate-score 0.5 --json
 npm run pke -- jobs reason <job-id> --limit-per-requirement 3 --min-candidate-score 0.5 --verbose
+
+# Bypass generated-snapshot reuse without deleting prior immutable results.
+npm run pke -- jobs analyze <job-id> --force
+npm run pke -- jobs candidates <job-id> --force
+npm run pke -- jobs reason <job-id> --force
 ```
 
 `analyze` requires `LLM_PROVIDER=ollama` and `LLM_MODEL=<model>`. It returns clear setup guidance when either value is absent. A failed model call or invalid structured output does not persist a new analysis. Retrieval uses the latest valid snapshot and includes analysis only as semantic enrichment; deterministic PKQL filters remain unchanged.

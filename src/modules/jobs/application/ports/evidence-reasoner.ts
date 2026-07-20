@@ -7,7 +7,13 @@ export interface EvidenceReasoningRunIdentity {
   promptVersion: string;
 }
 
+export interface EvidenceReasoningCommand {
+  candidatePack: CandidateEvidencePack;
+  model?: string;
+  regenerationId?: string;
+}
+
 export interface EvidenceReasoner {
-  getRunIdentity(command: { candidatePack: CandidateEvidencePack; model?: string }): EvidenceReasoningRunIdentity;
-  reason(command: { candidatePack: CandidateEvidencePack; model?: string }): Promise<EvidenceReasoningResult>;
+  getRunIdentity(command: EvidenceReasoningCommand): EvidenceReasoningRunIdentity;
+  reason(command: EvidenceReasoningCommand): Promise<EvidenceReasoningResult>;
 }

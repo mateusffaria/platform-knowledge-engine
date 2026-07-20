@@ -68,10 +68,11 @@ export function registerDocumentsCommands(
     .option("--model <model>", "override the configured LLM model")
     .option("--language <language>", "plan language: pt-BR or en", parseLanguage, "en")
     .option("--length <length>", "plan length: concise, standard, or detailed", parseLength, "standard")
+    .option("--force", "bypass plan reuse and persist a fresh immutable plan")
     .option("--json", "print exactly one machine-readable plan")
     .option("--verbose", "include grounding and generation details in the terminal preview")
     .option("--no-progress", "disable interactive terminal progress")
-    .action(async (jobDescriptionId: string, options: { model?: string; language: ResumeLanguage; length: ResumeLength; json?: boolean; verbose?: boolean; progress?: boolean }) => {
+    .action(async (jobDescriptionId: string, options: { model?: string; language: ResumeLanguage; length: ResumeLength; force?: boolean; json?: boolean; verbose?: boolean; progress?: boolean }) => {
       const progressEnabled = options.json !== true && options.progress !== false
       const progress = createProgress({ enabled: progressEnabled })
       let services: ReturnType<DocumentsServicesFactory> | undefined
@@ -86,6 +87,7 @@ export function registerDocumentsCommands(
           model: options.model,
           language: options.language,
           length: options.length,
+          ...(options.force ? { force: true } : {}),
           ...(onProgress ? { onProgress } : {})
         })
         progress.update("Flushing planning telemetry and closing resources")

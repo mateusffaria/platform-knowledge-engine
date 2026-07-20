@@ -34,7 +34,9 @@ describe("documents resume CLI", () => {
     expect(execute).toHaveBeenLastCalledWith({ jobDescriptionId: "job-1", language: "en", length: "standard" })
     await program(services).parseAsync(["node", "pke", "documents", "resume", "plan", "job-1", "--language", "pt-BR", "--length", "detailed", "--model", "custom", "--no-progress"])
     expect(execute).toHaveBeenLastCalledWith({ jobDescriptionId: "job-1", language: "pt-BR", length: "detailed", model: "custom" })
-    expect(services.close).toHaveBeenCalledTimes(2)
+    await program(services).parseAsync(["node", "pke", "documents", "resume", "plan", "job-1", "--force", "--no-progress"])
+    expect(execute).toHaveBeenLastCalledWith({ jobDescriptionId: "job-1", language: "en", length: "standard", force: true })
+    expect(services.close).toHaveBeenCalledTimes(3)
   })
 
   it("prints one lossless JSON document with no preview text", async () => {

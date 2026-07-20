@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { EvidencePack } from "../../../retrieval/application/types.js";
 import { CandidateEvidencePack, isDegradedEvidenceReasoningResult } from "../../domain/model.js";
 import { CandidateEvidencePackBuilder } from "../ports/candidate-evidence-pack-builder.js";
@@ -30,7 +32,7 @@ export function createReasonJobEvidenceUseCase(dependencies: {
 }) {
   const telemetry = dependencies.telemetry ?? new NoopReasoningWorkflowTelemetry();
   return {
-    async execute(command: { jobDescriptionId: string; evidencePack?: EvidencePack; candidatePack?: CandidateEvidencePack; model?: string }) {
+    async execute(command: { jobDescriptionId: string; evidencePack?: EvidencePack; candidatePack?: CandidateEvidencePack; model?: string; force?: boolean }) {
       const startedAt = performance.now();
       let runIdentity: { provider: string; model: string; promptVersion: string } | undefined;
       const event: ReasonCommandEvent = {
@@ -65,21 +67,29 @@ export function createReasonJobEvidenceUseCase(dependencies: {
           telemetry.record("candidateEvidence", candidateCount);
           telemetry.record("candidatePackBytes", Buffer.byteLength(JSON.stringify(candidatePack)));
           for (const requirement of candidatePack.requirements) telemetry.record("evidencePerRequirement", requirement.reasonerCandidateIds.length);
-          const run = dependencies.evidenceReasoner.getRunIdentity({ candidatePack, model: command.model });
+          const reasoningCommand = {
+            candidatePack,
+            model: command.model,
+            ...(command.force ? { regenerationId: randomUUID() } : {})
+          };
+          const run = dependencies.evidenceReasoner.getRunIdentity(reasoningCommand);
           runIdentity = run;
           event.run_identity = run.runIdentity;
           event.provider = run.provider;
           event.model = run.model;
           event.prompt_version = run.promptVersion;
-          const existing = await dependencies.curatedEvidencePackRepository.findByRunIdentity(command.jobDescriptionId, run.runIdentity);
-          if (existing) {
-            event.outcome = "reused";
-            event.cached = true;
-            event.display_score = existing.displayScore;
-            telemetry.record("commandDuration", performance.now() - startedAt, { provider: run.provider, model: run.model, prompt_version: run.promptVersion, outcome: "reused" });
-            return existing;
+          event.cache_bypassed = command.force === true;
+          if (!command.force) {
+            const existing = await dependencies.curatedEvidencePackRepository.findByRunIdentity(command.jobDescriptionId, run.runIdentity);
+            if (existing) {
+              event.outcome = "reused";
+              event.cached = true;
+              event.display_score = existing.displayScore;
+              telemetry.record("commandDuration", performance.now() - startedAt, { provider: run.provider, model: run.model, prompt_version: run.promptVersion, outcome: "reused" });
+              return existing;
+            }
           }
-          const reasoningResult = await dependencies.evidenceReasoner.reason({ candidatePack, model: command.model });
+          const reasoningResult = await dependencies.evidenceReasoner.reason(reasoningCommand);
           if (isDegradedEvidenceReasoningResult(reasoningResult)) {
             const { curatedEvidencePack: curated, fallbackDiagnostic } = reasoningResult;
             event.outcome = "degraded";

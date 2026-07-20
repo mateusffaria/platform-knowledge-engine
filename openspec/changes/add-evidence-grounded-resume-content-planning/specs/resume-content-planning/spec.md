@@ -192,8 +192,16 @@ The system SHALL persist a plan only after all validation succeeds. It MUST deri
 - **WHEN** concurrent requests race to save the same unique plan identity
 - **THEN** storage retains one immutable row and both requests return that stored plan
 
+#### Scenario: Cached generation is explicitly bypassed
+- **WHEN** the user supplies `--force` to resume planning, job analysis, or evidence reasoning
+- **THEN** the system skips reuse, derives a fresh immutable generation identity, invokes the provider, persists the new validated snapshot alongside prior snapshots, and returns the new result
+
+#### Scenario: Candidate or retrieval analysis is explicitly refreshed
+- **WHEN** the user supplies `--force` to `jobs candidates` or `jobs retrieve`
+- **THEN** the system regenerates and persists job analysis before rebuilding the retrieval intent and deterministic candidate or retrieval result
+
 ### Requirement: Documents CLI exposes resume planning
-The CLI SHALL provide `pke documents resume plan <job-id>` with `--model`, `--language pt-BR|en`, `--length concise|standard|detailed`, `--json`, and `--verbose`. Language SHALL default to `en`, length SHALL default to `standard`, and invalid option values MUST fail before planning begins.
+The CLI SHALL provide `pke documents resume plan <job-id>` with `--model`, `--language pt-BR|en`, `--length concise|standard|detailed`, `--json`, `--verbose`, and `--force`. Language SHALL default to `en`, length SHALL default to `standard`, and invalid option values MUST fail before planning begins.
 
 #### Scenario: JSON output is requested
 - **WHEN** a user runs `pke documents resume plan <job-id> --json`
