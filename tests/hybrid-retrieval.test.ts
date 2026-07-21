@@ -105,7 +105,7 @@ function structuredCandidate(overrides: Partial<HybridSearchCandidate> = {}): Hy
       section: "Skills",
       locator: "line:1",
       excerpt: "TypeScript",
-      sourcePath: "examples/profile.md",
+      sourcePath: "examples/profiles/canonical-professional-profile-v1.md",
       sourceLanguage: "en",
       originalSectionLabel: "Skills"
     }],
@@ -131,7 +131,7 @@ function semanticResult(overrides: Partial<SearchResult> = {}): SearchResult {
       "related_asset_id: skill-typescript",
       "source_document_id: source-1",
       "source_reference_id: reference-1",
-      "source_path: examples/profile.md",
+      "source_path: examples/profiles/canonical-professional-profile-v1.md",
       "source_section: Skills",
       "source_locator: line:1",
       "source_language: en",

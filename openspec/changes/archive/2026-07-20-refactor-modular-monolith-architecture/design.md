@@ -10,7 +10,7 @@ This layout is sufficient for the current single ingestion flow, but it will bec
 
 - Organize `src/` around business capabilities: `ingestion`, `knowledge`, `retrieval`, `jobs`, `documents`, and `shared`.
 - Apply hexagonal architecture inside modules using domain, application use cases, application ports, infrastructure adapters, and CLI interfaces.
-- Keep `pke ingest ./examples/profile.md` behavior unchanged.
+- Keep `pke ingest ./examples/profiles/canonical-professional-profile-v1.md` behavior unchanged.
 - Keep Drizzle migrations and database schema compatibility intact.
 - Make CLI code depend on application use cases rather than parsers, repositories, database clients, telemetry clients, or providers directly.
 - Add tests that exercise ingestion through ports.
@@ -84,7 +84,7 @@ Alternative considered: add a full architecture linting tool immediately. That m
 - [Risk] Drizzle migration tooling may expect current schema locations -> Mitigation: update `drizzle.config.ts` deliberately and verify migration-related scripts still load.
 - [Risk] Hexagonal folders can become ceremony if added ahead of behavior -> Mitigation: create only folders containing actual code or near-term ports/use cases required by the refactor.
 - [Risk] Cross-module imports may creep back through infrastructure -> Mitigation: document dependency rules and add tests/import checks around the most important CLI and domain boundaries.
-- [Risk] Behavior-preserving refactors can hide regressions -> Mitigation: keep the example ingestion test, add port-level tests, and manually verify or test `pke ingest ./examples/profile.md`.
+- [Risk] Behavior-preserving refactors can hide regressions -> Mitigation: keep the example ingestion test, add port-level tests, and manually verify or test `pke ingest ./examples/profiles/canonical-professional-profile-v1.md`.
 
 ## Migration Plan
 

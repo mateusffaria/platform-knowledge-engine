@@ -21,7 +21,7 @@
 
 ## 4. Markdown Ingestion
 
-- [x] 4.1 Add an example Markdown source at `examples/profile.md`.
+- [x] 4.1 Add an example Markdown source at `examples/profiles/canonical-professional-profile-v1.md`.
 - [x] 4.2 Implement Markdown file validation for existing `.md` or `.markdown` files.
 - [x] 4.3 Implement deterministic Markdown parsing for supported profile sections.
 - [x] 4.4 Map parsed Markdown sections into the Canonical Career Document representation.
@@ -45,8 +45,8 @@
 
 ## 7. Tests and Documentation
 
-- [x] 7.1 Add parser tests covering `examples/profile.md` and Canonical Career Document output.
+- [x] 7.1 Add parser tests covering `examples/profiles/canonical-professional-profile-v1.md` and Canonical Career Document output.
 - [x] 7.2 Add tests for missing-file and unsupported-file CLI error paths.
 - [x] 7.3 Add ingestion or persistence orchestration tests verifying evidence-linked career records.
-- [x] 7.4 Add README documentation for project purpose, local setup, migrations, `pke ingest ./examples/profile.md`, and tests.
+- [x] 7.4 Add README documentation for project purpose, local setup, migrations, `pke ingest ./examples/profiles/canonical-professional-profile-v1.md`, and tests.
 - [x] 7.5 Document why Postgres is the source of truth and pgvector is included for future retrieval rather than authoritative career facts.

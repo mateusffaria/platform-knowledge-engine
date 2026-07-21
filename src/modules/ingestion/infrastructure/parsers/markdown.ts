@@ -13,6 +13,8 @@ import {
   assertCanonicalCareerDocument
 } from "../../../knowledge/domain/model.js";
 import { CareerDocumentSourceParser } from "../../application/ports/career-document-source-parser.js";
+import { claimsProfessionalProfileSchema, parseMarkdownFrontmatter } from "./frontmatter.js";
+import { parseProfessionalProfileV1 } from "./professional-profile-v1.js";
 
 export interface MarkdownIngestionResult {
   document: CanonicalCareerDocument;
@@ -55,7 +57,7 @@ export async function readMarkdownSource(filePath: string): Promise<{
 export function validateMarkdownPath(filePath: string): void {
   const extension = path.extname(filePath).toLowerCase();
   if (!supportedMarkdownExtensions.has(extension)) {
-    throw new Error("Only Markdown ingestion is supported. Use a .md or .markdown file.");
+    throw new Error("Only Markdown ingestion is supported. Normalize PDF or DOCX resumes into a professional-profile/v1 .md or .markdown file first.");
   }
 }
 
@@ -74,7 +76,11 @@ export class MarkdownCareerDocumentParser implements CareerDocumentSourceParser 
 }
 
 export function parseMarkdownCareerDocument(filePath: string, rawContent: string): CanonicalCareerDocument {
-  const { metadata, body } = parseFrontmatter(rawContent);
+  const frontmatter = parseMarkdownFrontmatter(rawContent);
+  if (claimsProfessionalProfileSchema(frontmatter)) {
+    return parseProfessionalProfileV1(filePath, rawContent, frontmatter);
+  }
+  const { metadata, body } = frontmatter;
   const sections = splitSections(body);
   const now = new Date();
   const sourceDocumentId = randomUUID();
@@ -366,47 +372,6 @@ export function parseMarkdownCareerDocument(filePath: string, rawContent: string
 
 export function contentHash(rawContent: string): string {
   return createHash("sha256").update(rawContent, "utf8").digest("hex");
-}
-
-function parseFrontmatter(rawContent: string): {
-  metadata: Record<string, string | string[]>;
-  body: string;
-} {
-  if (!rawContent.startsWith("---\n")) {
-    return { metadata: {}, body: rawContent };
-  }
-
-  const end = rawContent.indexOf("\n---", 4);
-  if (end === -1) {
-    return { metadata: {}, body: rawContent };
-  }
-
-  const frontmatter = rawContent.slice(4, end).trim();
-  const metadata: Record<string, string | string[]> = {};
-
-  for (const line of frontmatter.split(/\r?\n/)) {
-    const separator = line.indexOf(":");
-    if (separator === -1) {
-      continue;
-    }
-
-    const key = line.slice(0, separator).trim();
-    const value = line.slice(separator + 1).trim();
-    if (value.startsWith("[") && value.endsWith("]")) {
-      metadata[key] = value
-        .slice(1, -1)
-        .split(",")
-        .map((item) => item.trim().replace(/^["']|["']$/g, ""))
-        .filter(Boolean);
-    } else {
-      metadata[key] = value.replace(/^["']|["']$/g, "");
-    }
-  }
-
-  return {
-    metadata,
-    body: rawContent.slice(end + 4).replace(/^\r?\n/, "")
-  };
 }
 
 function sourceReliability(metadata: Record<string, string | string[]>): number {

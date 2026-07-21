@@ -45,7 +45,7 @@ function input(bulletCount: number): ResumeGenerationInput {
   return {
     plan,
     source: { curatedEvidencePack: { id: plan.curatedEvidencePackId, jobDescriptionId: plan.jobDescriptionId, requirementCoverage: [] }, selectedEvidenceIds: [evidenceId], discardedEvidenceIds: [], sourceDocumentIds: ["source-1"] },
-    candidate: { name: { value: "Alex Morgan", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] }, email: { value: "alex@example.com", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] }, links: [{ label: "Portfolio", value: "https://example.com/alex", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] }], education: [], certifications: [], profileSourceDocumentId: "source-1" }
+    candidate: { name: { value: "Mateus Faria", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] }, email: { value: "mateus@example.com", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] }, links: [{ label: "GitHub", value: "https://github.com/mateusfaria", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] }], profileSourceDocumentId: "source-1", profileKnowledgeAssetId: "profile-1" }
   }
 }
 
@@ -60,7 +60,7 @@ describe.sequential("real ATS PDF rendering", () => {
     const result = await renderer.render(buildResumeDocument(input(2)))
     expect(Buffer.from(result.bytes.slice(0, 4)).toString("ascii")).toBe("%PDF")
     expect(result.pageCount).toBe(1)
-    expect(result.extractedText).toContain("Alex Morgan")
+    expect(result.extractedText).toContain("Mateus Faria")
     expect(result.extractedText).toContain("PROFESSIONAL EXPERIENCE")
     expect(result.extractedText).toContain("Achievement 2")
   }, 30_000)
@@ -70,6 +70,6 @@ describe.sequential("real ATS PDF rendering", () => {
     expect(result.pageCount).toBeGreaterThan(1)
     expect(result.extractedText).toContain("Achievement 1")
     expect(result.extractedText).toContain("Achievement 12")
-    expect(await annotationUrls(result.bytes)).toContain("https://example.com/alex")
+    expect(await annotationUrls(result.bytes)).toContain("https://github.com/mateusfaria")
   }, 30_000)
 })

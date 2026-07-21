@@ -7,7 +7,7 @@ The core problem is not resume generation. The core problem is transforming hete
 ## Current Scope
 
 - TypeScript/Node.js CLI with a `pke` executable.
-- Markdown ingestion through `pke ingest ./examples/profile.md`.
+- Markdown ingestion through `pke ingest ./examples/profiles/canonical-professional-profile-v1.md`.
 - Trusted-knowledge review through `pke claims review`, `pke claims confirm`, and `pke claims reject`.
 - Canonical job-description ingestion, deterministic requirement extraction, and LLM-assisted job analysis through `pke jobs`.
 - Evidence-grounded Resume Content Planning and deterministic `ats-clean-v1` artifact generation through `pke documents resume`.
@@ -61,11 +61,13 @@ Current exclusions include PDF/DOCX source parsing, DOCX resume output, multiple
 
    The initial SQL migration is also available under `drizzle/`.
 
-5. Ingest the example profile:
+5. Ingest the canonical example profile:
 
    ```bash
-   npm run pke -- ingest ./examples/profile.md
+   npm run pke -- ingest ./examples/profiles/canonical-professional-profile-v1.md
    ```
+
+   Resume generation requires a `professional-profile/v1` Markdown source with explicit `schema` and `language` front matter plus a Candidate `Name`. Existing PDF or DOCX resumes must be manually normalized first; see [Canonical Professional Profile](docs/canonical-professional-profile.md). Generic undeclared Markdown remains supported, but the canonical example is the documented ingestion path.
 
 6. Optional: enable semantic retrieval, job analysis, and evidence reasoning with Ollama.
 
@@ -178,6 +180,8 @@ Source Resume → Canonical Knowledge → Job Analysis → Candidate Evidence Pa
 → Curated Evidence Pack → Resume Content Plan → ResumeDocument
 → Markdown / HTML / PDF + manifest
 ```
+
+Candidate presentation metadata comes only from an ingested `professional-profile/v1` source. `Name` is required; Headline, Location, Email, Phone, LinkedIn, GitHub, and Website are optional. Header/contact values are metadata rather than evidence claims, while the rendered resume body remains bounded by the compatible `ResumeContentPlan`.
 
 Create the LLM-backed content plan first, then render it deterministically:
 
@@ -298,7 +302,7 @@ Dependency rules:
 - CLI command handlers call application-facing contracts only; they do not call repositories, database clients, parsers, telemetry clients, or providers directly.
 - Cross-module collaboration happens through explicit application services or ports, not infrastructure imports.
 
-The top-level `src/cli/index.ts` remains the executable command registry. The ingest command is registered through the ingestion module, and production infrastructure is wired behind the module boundary so `pke ingest ./examples/profile.md` keeps the same user-facing behavior while the ingestion use case remains testable through ports.
+The top-level `src/cli/index.ts` remains the executable command registry. The ingest command is registered through the ingestion module, and production infrastructure is wired behind the module boundary so `pke ingest ./examples/profiles/canonical-professional-profile-v1.md` keeps the same user-facing behavior while the ingestion use case remains testable through ports.
 
 ## Why Postgres + pgvector
 

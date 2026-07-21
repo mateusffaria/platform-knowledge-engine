@@ -1,7 +1,7 @@
 import { Command } from "commander";
 
 export interface IngestCommandRunner {
-  run(sourcePath: string): Promise<void>;
+  run(sourcePath: string, options?: { json?: boolean }): Promise<void>;
 }
 
 export function registerIngestCommand(program: Command, runner: IngestCommandRunner): void {
@@ -9,7 +9,8 @@ export function registerIngestCommand(program: Command, runner: IngestCommandRun
     .command("ingest")
     .description("Ingest a Markdown professional knowledge source")
     .argument("<path>", "Path to a .md or .markdown source file")
-    .action(async (sourcePath: string) => {
-      await runner.run(sourcePath);
+    .option("--json", "print one machine-readable ingestion result or error")
+    .action(async (sourcePath: string, options: { json?: boolean }) => {
+      await runner.run(sourcePath, options);
     });
 }

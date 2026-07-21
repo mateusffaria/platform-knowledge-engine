@@ -8,7 +8,7 @@ Source Resume → Canonical Knowledge → Job Analysis → Candidate Evidence Pa
 → Markdown / standalone HTML / selectable-text PDF
 ```
 
-Content planning is LLM-backed and ends at the immutable `ResumeContentPlan`. Generation loads that plan, its exact Curated Evidence Pack, and allowlisted candidate presentation metadata. It does not call an LLM, run retrieval, translate, repair, enrich, or introduce facts.
+Content planning is LLM-backed and ends at the immutable `ResumeContentPlan`. Generation loads that plan, its exact Curated Evidence Pack, and allowlisted candidate presentation metadata from an ingested `professional-profile/v1` Markdown source. It does not call an LLM, run retrieval, translate, repair, enrich, or introduce facts.
 
 ## Prerequisites and commands
 
@@ -23,6 +23,8 @@ npm run pdf:install
 Markdown and HTML generation are lazy and do not launch or require Chromium. Given a job that has completed evidence reasoning, create a plan and generate an artifact:
 
 ```bash
+npm run pke -- ingest examples/profiles/canonical-professional-profile-v1.md
+
 npm run pke -- documents resume plan <job-id> \
   --language en \
   --length concise
@@ -48,9 +50,11 @@ Generation options and defaults are:
 
 The requested language and length must have a compatible persisted plan. If none exists, the error prints the exact planning command to run. `--json` emits exactly one generation result on stdout and disables interactive progress.
 
+Generation requires an explicit Candidate `Name` from the canonical profile and never falls back to an asset title, document heading, filename, raw prose, flat legacy metadata, or evidence claim. Optional contact values are simply omitted. A missing name produces `missing_candidate_name`; a plan without a template-valid experience produces `missing_renderable_experience`. These issues have separate paths and corrective guidance and can be returned together.
+
 ## ResumeDocument and template boundary
 
-One immutable `ResumeDocument` drives all formats. Its fixed `ats-clean-v1` section order is Candidate Header, Professional Summary, Technical Skills, Professional Experience, Education, and Certifications. Header and experience are required; empty optional sections are omitted. Experience entries are reverse chronological, bullets retain planner relevance order, and internal evidence IDs never appear in the body.
+One immutable `ResumeDocument` drives all formats. Its fixed `ats-clean-v1` section order is Candidate Header, Professional Summary, Technical Skills, Professional Experience, Education, and Certifications. Header and experience are required; empty optional sections are omitted. In `resume-content-plan/v2`, summary, skills, and experience body text come only from the plan; canonical profile Education and Certifications remain evidence-bearing knowledge and are not copied directly into the artifact. Experience entries are reverse chronological, bullets retain planner relevance order, and internal evidence IDs never appear in the body.
 
 The template owns localized headings, normalized dates, deterministic whitespace, escaping, and single-column A4 print CSS. Markdown and HTML traverse the same document. PDF delegates the standalone HTML to Playwright through `HtmlToPdfConverter`, then verifies page count and extracted text through `PdfInspector`. Browser and PDF libraries remain infrastructure details behind application ports.
 
@@ -101,4 +105,4 @@ It applies to a migrated database and proves persisted plan/source loading, Mark
 
 ## MVP limitations
 
-The MVP supports one ATS-oriented template and Markdown, HTML, and PDF only. It does not support DOCX, multiple visual templates, source-resume reproduction, a template editor, cloud storage, ATS scoring, cover letters, LinkedIn/interview output, automated applications, factual enrichment, planning-on-missing, or automatic reruns of ingestion/job analysis/evidence reasoning. PDF layout can vary slightly with host fonts even with a pinned browser; logical determinism is defined by normalized inputs, while every concrete byte result has its own checksum.
+The MVP supports one ATS-oriented template and Markdown, HTML, and PDF output only. Profile input is canonical Markdown only: direct PDF/DOCX parsing, OCR/conversion, localized schema labels, schema inference, content translation, and arbitrary profile-section copying are unsupported. It also does not support multiple visual templates, source-resume reproduction, a template editor, cloud storage, ATS scoring, cover letters, LinkedIn/interview output, automated applications, factual enrichment, planning-on-missing, or automatic reruns of ingestion/job analysis/evidence reasoning. PDF layout can vary slightly with host fonts even with a pinned browser; logical determinism is defined by normalized inputs, while every concrete byte result has its own checksum.

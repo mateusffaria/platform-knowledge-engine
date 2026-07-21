@@ -8,7 +8,7 @@ import { DrizzleCandidateResumeMetadataReader } from "../src/modules/documents/i
 import { DrizzleGeneratedResumeArtifactRepository } from "../src/modules/documents/infrastructure/repositories/drizzle-generated-resume-artifact-repository.js"
 import { DrizzleResumeContentPlanRepository } from "../src/modules/documents/infrastructure/repositories/drizzle-resume-content-plan-repository.js"
 import { DrizzleResumeGenerationSourceReader } from "../src/modules/documents/infrastructure/repositories/drizzle-resume-generation-source-reader.js"
-import { curatedEvidencePacks, evidenceClaims, generatedResumeArtifacts, knowledgeAssets, resumeContentPlans, sourceDocuments } from "../src/shared/database/schema.js"
+import { curatedEvidencePacks, generatedResumeArtifacts, knowledgeAssets, resumeContentPlans, sourceDocuments } from "../src/shared/database/schema.js"
 
 function plan(id = "00000000-0000-4000-8000-000000000001", createdAt = new Date("2026-07-21T10:00:00Z")): ResumeContentPlan {
   return { id, planIdentity: id.replaceAll("-", "").padEnd(64, "a"), schemaVersion: "resume-content-plan/v2", jobDescriptionId: "00000000-0000-4000-8000-000000000002", curatedEvidencePackId: "00000000-0000-4000-8000-000000000003", language: "en", length: "standard", professionalSummary: { text: "Summary", supportingEvidenceIds: ["ev-1"] }, plannedExperiences: [], plannedSkillGroups: [], selectedEvidenceIds: ["ev-1"], omittedEvidence: [], uncoveredRequirementIds: [], warnings: [], provider: "ollama", model: "qwen", promptVersion: "v1", createdAt }
@@ -56,15 +56,27 @@ describe("Resume generation repositories and projections", () => {
     expect(JSON.stringify(source)).not.toContain("private")
   })
 
-  it("projects candidate name precedence and evidence-backed optional sections from one profile", async () => {
-    const documentRow = { id: "source-1", metadata: { name: "Explicit Name", email: "person@example.com", github: "github.com/person" }, ingestedAt: new Date("2026-07-21T10:00:00Z") }
-    const profile = { id: "profile-1", sourceDocumentId: "source-1", assetType: "professional_profile", title: "Fallback Title", summary: null, createdAt: new Date("2026-07-21T10:00:00Z") }
-    const education = { id: "education-1", sourceDocumentId: "source-1", assetType: "education", title: "BSc", summary: "University", createdAt: new Date("2026-07-21T10:00:00Z") }
-    const claim = { id: "claim-1", subjectAssetId: "education-1", knowledgeAssetId: "education-1", sourceReferenceId: "ref-education", status: "confirmed" }
-    const db: any = { select: () => ({ from: (table: any) => ({ where: () => table === sourceDocuments ? { orderBy: async () => [documentRow] } : Promise.resolve(table === knowledgeAssets ? [profile, education] : table === evidenceClaims ? [claim] : []) }) }) }
-    const metadata = await new DrizzleCandidateResumeMetadataReader(db).read({ curatedEvidencePack: { id: "pack", jobDescriptionId: "job", requirementCoverage: [] }, selectedEvidenceIds: ["ev-1"], discardedEvidenceIds: [], sourceDocumentIds: ["source-1"] })
-    expect(metadata).toMatchObject({ name: { value: "Explicit Name" }, email: { value: "person@example.com" }, education: [{ title: { value: "BSc" }, details: { value: "University" } }] })
-    expect(metadata?.education[0].title.provenance[0]).toMatchObject({ sourceReferenceId: "ref-education", knowledgeAssetId: "education-1" })
+  it("selects canonical Candidate metadata deterministically without claim traversal or title fallback", async () => {
+    const canonical = { schema: "professional-profile/v1", language: "en", candidate: { name: "Explicit Name", email: "person@example.com", github: "https://github.com/person" } }
+    const documents = [
+      { id: "legacy-source", metadata: { name: "Legacy Name" }, ingestedAt: new Date("2026-07-21T12:00:00Z") },
+      { id: "source-2", metadata: { professionalProfile: canonical }, ingestedAt: new Date("2026-07-21T11:00:00Z") },
+      { id: "source-1", metadata: { professionalProfile: { ...canonical, candidate: { name: "Older Name" } } }, ingestedAt: new Date("2026-07-21T10:00:00Z") }
+    ]
+    const profiles = documents.map((document, index) => ({ id: `profile-${index}`, sourceDocumentId: document.id, assetType: "professional_profile", title: "Fallback Title", summary: null, createdAt: document.ingestedAt }))
+    const selectedTables: any[] = []
+    const db: any = { select: () => ({ from: (table: any) => { selectedTables.push(table); return { where: () => table === sourceDocuments ? { orderBy: async () => documents } : Promise.resolve(profiles) } } }) }
+    const metadata = await new DrizzleCandidateResumeMetadataReader(db).read({ curatedEvidencePack: { id: "pack", jobDescriptionId: "job", requirementCoverage: [] }, selectedEvidenceIds: ["ev-1"], discardedEvidenceIds: [], sourceDocumentIds: documents.map((document) => document.id) })
+    expect(metadata).toMatchObject({ name: { value: "Explicit Name" }, email: { value: "person@example.com" }, links: [{ label: "GitHub", value: "https://github.com/person" }], profileSourceDocumentId: "source-2" })
+    expect(metadata.name?.provenance).toEqual([{ sourceDocumentId: "source-2", knowledgeAssetId: "profile-1" }])
+    expect(selectedTables).toEqual([sourceDocuments, knowledgeAssets])
+  })
+
+  it("returns an empty Candidate projection when only legacy flat metadata and an asset title exist", async () => {
+    const documentRow = { id: "source-1", metadata: { name: "Legacy Name" }, ingestedAt: new Date("2026-07-21T10:00:00Z") }
+    const profile = { id: "profile-1", sourceDocumentId: "source-1", assetType: "professional_profile", title: "Fallback Title", summary: null, createdAt: documentRow.ingestedAt }
+    const db: any = { select: () => ({ from: (table: any) => ({ where: () => table === sourceDocuments ? { orderBy: async () => [documentRow] } : Promise.resolve([profile]) }) }) }
+    await expect(new DrizzleCandidateResumeMetadataReader(db).read({ curatedEvidencePack: { id: "pack", jobDescriptionId: "job", requirementCoverage: [] }, selectedEvidenceIds: [], discardedEvidenceIds: [], sourceDocumentIds: ["source-1"] })).resolves.toEqual({ links: [] })
   })
 
   it("persists immutable artifact metadata and returns the concurrent winner", async () => {

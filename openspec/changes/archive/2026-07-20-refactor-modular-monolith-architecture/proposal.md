@@ -26,4 +26,4 @@ None.
 - Affected code: `src/cli`, `src/config`, `src/db`, `src/domain`, `src/ingestion`, `src/observability`, and related imports.
 - Affected tests: Markdown ingestion tests and new/updated tests around the ingestion use case and ports.
 - Affected docs: README and a new ADR under `docs/adr` or the repository’s documented ADR location.
-- Runtime behavior should remain unchanged: `pke ingest ./examples/profile.md` must continue to work and Drizzle migrations must remain compatible.
+- Runtime behavior should remain unchanged: `pke ingest ./examples/profiles/canonical-professional-profile-v1.md` must continue to work and Drizzle migrations must remain compatible.

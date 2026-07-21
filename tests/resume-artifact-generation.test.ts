@@ -65,13 +65,12 @@ function generationInput(planOverrides: Partial<ResumeContentPlan> = {}): Resume
       sourceDocumentIds: ["source-1"]
     },
     candidate: {
-      name: { value: "Alex *Morgan*", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] },
+      name: { value: "Mateus *Faria*", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] },
       headline: { value: "Staff Engineer", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] },
-      email: { value: "alex@example.com", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] },
-      links: [{ label: "GitHub", value: "https://github.com/alex", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] }],
-      education: [{ title: { value: "BSc Computer Science", provenance: [{ sourceDocumentId: "source-1", sourceReferenceId: "education-ref" }] } }],
-      certifications: [],
-      profileSourceDocumentId: "source-1"
+      email: { value: "mateus@example.com", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] },
+      links: [{ label: "GitHub", value: "https://github.com/mateusfaria", provenance: [{ sourceDocumentId: "source-1", knowledgeAssetId: "profile-1" }] }],
+      profileSourceDocumentId: "source-1",
+      profileKnowledgeAssetId: "profile-1"
     }
   }
 }
@@ -81,13 +80,12 @@ describe("ResumeDocument construction and deterministic renderers", () => {
     const document = buildResumeDocument(freezeResumeGenerationInput(generationInput()))
     expect(document.experiences.map((item) => item.organization)).toEqual(["Acme", "Northstar"])
     expect(document.experiences[0]).toMatchObject({ startDate: "Jan 2022", endDate: "Present" })
-    expect(document.education).toEqual([{ title: "BSc Computer Science" }])
+    expect(document.education).toEqual([])
     expect(document.provenance).toMatchObject({ resumeContentPlanId: plan().id, selectedEvidenceIds: [ev1, ev2], jobAnalysisId: expect.any(String) })
   })
 
   it("uses Portuguese labels and omits empty optional sections", async () => {
     const input = generationInput({ language: "pt-BR", plannedSkillGroups: [], professionalSummary: { text: "Resumo comprovado.", supportingEvidenceIds: [ev1] } })
-    input.candidate.education = []
     const document = buildResumeDocument(input)
     const markdown = new TextDecoder().decode((await new MarkdownResumeRenderer().render(document)).bytes)
     expect(markdown).toContain("Resumo Profissional")
@@ -107,6 +105,47 @@ describe("ResumeDocument construction and deterministic renderers", () => {
     }
   })
 
+  it("reports missing canonical name and missing renderable experience as independent issues", () => {
+    const invalid = generationInput({ plannedExperiences: [] })
+    delete invalid.candidate.name
+    try {
+      buildResumeDocument(invalid)
+      throw new Error("Expected validation to fail")
+    } catch (error) {
+      expect(error).toBeInstanceOf(ResumeGenerationValidationError)
+      expect((error as ResumeGenerationValidationError).issues).toEqual(expect.arrayContaining([
+        expect.objectContaining({ code: "missing_candidate_name", path: "candidate.name" }),
+        expect.objectContaining({ code: "missing_renderable_experience", path: "plan.plannedExperiences" })
+      ]))
+    }
+  })
+
+  it.each([
+    { label: "candidate name", removeName: true, removeExperiences: false, expected: "missing_candidate_name", absent: "missing_renderable_experience" },
+    { label: "renderable experience", removeName: false, removeExperiences: true, expected: "missing_renderable_experience", absent: "missing_candidate_name" }
+  ])("reports only the $label issue when the other required input is valid", ({ removeName, removeExperiences, expected, absent }) => {
+    const invalid = generationInput(removeExperiences ? { plannedExperiences: [] } : {})
+    if (removeName) delete invalid.candidate.name
+    try {
+      buildResumeDocument(invalid)
+      throw new Error("Expected validation to fail")
+    } catch (error) {
+      const codes = (error as ResumeGenerationValidationError).issues.map((issue) => issue.code)
+      expect(codes).toContain(expected)
+      expect(codes).not.toContain(absent)
+    }
+  })
+
+  it("omits every optional Candidate field and keeps the resume body plan-bounded", () => {
+    const input = generationInput()
+    input.candidate = { name: input.candidate.name, links: [], profileSourceDocumentId: "source-1", profileKnowledgeAssetId: "profile-1" }
+    const document = buildResumeDocument(input)
+    expect(document.header).toEqual({ name: "Mateus *Faria*", links: [] })
+    expect(document.education).toEqual([])
+    expect(document.certifications).toEqual([])
+    expect(JSON.stringify(document)).not.toContain("education-ref")
+  })
+
   it("escapes Markdown and HTML and repeats byte-identically", async () => {
     expect(escapeMarkdown("A * B")).toBe("A \\* B")
     expect(escapeHtml("A < B & C")).toBe("A &lt; B &amp; C")
@@ -117,7 +156,7 @@ describe("ResumeDocument construction and deterministic renderers", () => {
     expect(md1.bytes).toEqual(md2.bytes)
     expect(html1.bytes).toEqual(html2.bytes)
     const htmlText = new TextDecoder().decode(html1.bytes)
-    expect(htmlText).toContain("Alex *Morgan*")
+    expect(htmlText).toContain("Mateus *Faria*")
     expect(htmlText).toContain("@page { size: A4")
     expect(htmlText).not.toMatch(/<script|@import|url\s*\(\s*https?:/u)
     expect(htmlText).not.toContain(ev1)
@@ -126,7 +165,7 @@ describe("ResumeDocument construction and deterministic renderers", () => {
   it("builds PDF from the same HTML through replaceable ports", async () => {
     const document = buildResumeDocument(generationInput())
     const converter = { convert: vi.fn(async (html: string) => { expect(html).toContain("Professional Experience"); return new TextEncoder().encode("%PDF-fake") }), close: vi.fn() }
-    const inspector = { inspect: vi.fn(async () => ({ pageCount: 2, text: "Alex Morgan Professional Summary Technical Skills Professional Experience Education Improved latency" })) }
+    const inspector = { inspect: vi.fn(async () => ({ pageCount: 2, text: "Mateus Faria Professional Summary Technical Skills Professional Experience Education Improved latency" })) }
     const result = await new PdfResumeRenderer(new HtmlResumeRenderer(), converter, inspector).render(document)
     expect(result).toMatchObject({ format: "pdf", mediaType: "application/pdf", pageCount: 2 })
     expect(converter.convert).toHaveBeenCalledTimes(1)
@@ -142,6 +181,7 @@ describe("Resume artifact identity and local storage", () => {
     const base = { plan: input.plan, candidate: input.candidate, format: "pdf" as const, language: "en" as const, length: "standard" as const, templateId: "ats-clean-v1" as const, templateVersion: "ats-clean-v1/1" }
     const identity = buildResumeRenderingIdentity(base)
     expect(buildResumeRenderingIdentity({ ...base })).toBe(identity)
+    expect(buildResumeRenderingIdentity({ ...base, candidate: { ...input.candidate, name: { ...input.candidate.name!, value: "Changed Name" } } })).not.toBe(identity)
     expect(buildResumeGenerationIdentity(identity)).toBe(buildResumeGenerationIdentity(identity))
     expect(buildResumeGenerationIdentity(identity, "force-1")).not.toBe(buildResumeGenerationIdentity(identity, "force-2"))
   })
@@ -178,7 +218,7 @@ describe("Resume artifact identity and local storage", () => {
 })
 
 describe("GenerateResume orchestration", () => {
-  function harness(options: { missingPlan?: boolean; corruptCache?: boolean; storageFailure?: boolean; persistenceFailure?: boolean; telemetryFailure?: boolean; planOverrides?: Partial<ResumeContentPlan> } = {}) {
+  function harness(options: { missingPlan?: boolean; missingCandidate?: boolean; corruptCache?: boolean; storageFailure?: boolean; persistenceFailure?: boolean; telemetryFailure?: boolean; planOverrides?: Partial<ResumeContentPlan> } = {}) {
     const input = generationInput(options.planOverrides)
     const artifacts: GeneratedResumeArtifact[] = []
     const files = new Map<string, Uint8Array>()
@@ -189,7 +229,7 @@ describe("GenerateResume orchestration", () => {
     const pdf = new PdfResumeRenderer(
       html,
       { convert: vi.fn(async () => new TextEncoder().encode("%PDF-fake")), close: vi.fn() },
-      { inspect: vi.fn(async () => ({ pageCount: 1, text: "Alex Morgan Professional Summary Technical Skills Professional Experience Education Improved latency" })) }
+      { inspect: vi.fn(async () => ({ pageCount: 1, text: "Mateus Faria Professional Summary Technical Skills Professional Experience Education Improved latency" })) }
     )
     const remove = vi.fn(async ({ artifactPath, manifestPath }: any) => { files.delete(artifactPath); files.delete(manifestPath) })
     const storage = {
@@ -216,7 +256,7 @@ describe("GenerateResume orchestration", () => {
     const useCase = createGenerateResumeUseCase({
       planRepository: { findByPlanIdentity: vi.fn(), findLatestCompatible: vi.fn(async () => options.missingPlan ? undefined : input.plan), save: vi.fn() },
       sourceReader: { findById: vi.fn(async () => input.source) },
-      candidateReader: { read: vi.fn(async () => input.candidate) },
+      candidateReader: { read: vi.fn(async () => options.missingCandidate ? { links: [] } : input.candidate) },
       artifactRepository: { findLatestByRenderingIdentity: vi.fn(async (identity) => artifacts.filter((item) => item.renderingIdentity === identity).at(-1)), save },
       storage,
       renderers: new DefaultResumeRendererRegistry([markdown, html, pdf]),
@@ -245,6 +285,17 @@ describe("GenerateResume orchestration", () => {
     expect(artifacts).toHaveLength(2)
     expect(artifacts[0].renderingIdentity).toBe(artifacts[1].renderingIdentity)
     expect(artifacts[0].generationIdentity).not.toBe(artifacts[1].generationIdentity)
+  })
+
+  it.each([
+    { label: "missing canonical candidate name", options: { missingCandidate: true }, code: "missing_candidate_name" },
+    { label: "missing renderable experience", options: { planOverrides: { plannedExperiences: [] } }, code: "missing_renderable_experience" }
+  ])("writes no artifact for $label", async ({ options, code }) => {
+    const { useCase, render, save, storage } = harness(options)
+    await expect(useCase.execute(command)).rejects.toMatchObject({ issues: expect.arrayContaining([expect.objectContaining({ code })]) })
+    expect(render).not.toHaveBeenCalled()
+    expect(storage.write).not.toHaveBeenCalled()
+    expect(save).not.toHaveBeenCalled()
   })
 
   it("generates Markdown, HTML, and PDF through the selected renderer", async () => {

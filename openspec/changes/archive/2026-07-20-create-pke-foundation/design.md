@@ -8,7 +8,7 @@ The project thesis is that generated career outputs must be composed from verifi
 
 **Goals:**
 
-- Create a TypeScript/Node.js CLI project with a working `pke ingest ./examples/profile.md` path.
+- Create a TypeScript/Node.js CLI project with a working `pke ingest ./examples/profiles/canonical-professional-profile-v1.md` path.
 - Run locally with Docker Compose Postgres and pgvector.
 - Use Drizzle ORM for schema definition, migrations, and typed database access.
 - Persist Markdown source metadata, raw content, canonical career records, evidence claims, and source references.

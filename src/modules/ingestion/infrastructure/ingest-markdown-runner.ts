@@ -9,10 +9,23 @@ import { configureLogger, errorLogFields, logEvent, shutdownLogger } from "../..
 import { createLangfuseClient } from "../../../shared/observability/langfuse.js";
 import { createTelemetry } from "../../../shared/observability/tracing.js";
 import { MarkdownCareerDocumentParser } from "./parsers/markdown.js";
+import { ProfessionalProfileValidationError } from "../../knowledge/domain/professional-profile.js";
+
+export function ingestionErrorPayload(error: unknown): {
+  error: { name: string; message: string; issues?: ProfessionalProfileValidationError["issues"] }
+} {
+  return {
+    error: {
+      name: error instanceof Error ? error.name : "Error",
+      message: error instanceof Error ? error.message : String(error),
+      ...(error instanceof ProfessionalProfileValidationError ? { issues: error.issues } : {})
+    }
+  };
+}
 
 export function createProductionIngestMarkdownRunner(): IngestCommandRunner {
   return {
-    async run(sourcePath: string): Promise<void> {
+    async run(sourcePath: string, options: { json?: boolean } = {}): Promise<void> {
       const config = loadConfig();
       const logger = configureLogger(config);
       const telemetry = createTelemetry({
@@ -62,7 +75,16 @@ export function createProductionIngestMarkdownRunner(): IngestCommandRunner {
             sourceDocumentId: result.document.source.id,
             evidenceClaims: result.document.evidenceClaims.length
           });
-          console.log(result.created ? `Ingested ${sourcePath}` : `Already ingested ${sourcePath}`);
+          if (options.json) {
+            console.log(JSON.stringify({
+              created: result.created,
+              sourceDocumentId: result.document.source.id,
+              schema: (result.document.source.metadata.professionalProfile as { schema?: string } | undefined)?.schema,
+              evidenceClaimCount: result.document.evidenceClaims.length
+            }));
+          } else {
+            console.log(result.created ? `Ingested ${sourcePath}` : `Already ingested ${sourcePath}`);
+          }
         } finally {
           await database.close();
           await trace.flush();
@@ -72,7 +94,9 @@ export function createProductionIngestMarkdownRunner(): IngestCommandRunner {
         Object.assign(wideEvent, { outcome: "failure", ...errorLogFields(error) });
         await trace.event("ingest.command.failed", { error: message });
         await trace.flush();
-        console.error(message);
+        if (options.json) console.error(JSON.stringify(ingestionErrorPayload(error)));
+        else if (error instanceof ProfessionalProfileValidationError) console.error(error.issues.map((issue) => `${issue.code} ${issue.path}: ${issue.message}`).join("\n"));
+        else console.error(message);
         process.exitCode = 1;
       } finally {
         wideEvent.duration_ms = performance.now() - startedAt;

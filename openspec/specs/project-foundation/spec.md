@@ -21,7 +21,7 @@ The system SHALL document the project purpose, local setup steps, required envir
 
 #### Scenario: Developer reads setup documentation
 - **WHEN** a developer opens the README
-- **THEN** the documentation explains how to start infrastructure, run migrations, execute `pke ingest ./examples/profile.md`, and run tests
+- **THEN** the documentation explains how to start infrastructure, run migrations, execute `pke ingest ./examples/profiles/canonical-professional-profile-v1.md`, and run tests
 
 #### Scenario: Storage choice is documented
 - **WHEN** a developer reviews the README

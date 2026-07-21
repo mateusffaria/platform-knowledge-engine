@@ -6,6 +6,7 @@ import { ResumeGenerationProgressStage } from "../../application/use-cases/gener
 import { ResumeContentPlan, ResumeLanguage, ResumeLength } from "../../domain/model.js"
 import { GenerateResumeResult, ResumeFormat, resumeFormats, ResumeTemplateId, resumeTemplateIds } from "../../domain/resume-document.js"
 import { createProductionDocumentsServices } from "../../infrastructure/documents-runner.js"
+import { ResumeGenerationValidationError } from "../../application/resume-generation-validator.js"
 
 export type DocumentsServicesFactory = typeof createProductionDocumentsServices
 export type DocumentsProgressFactory = typeof createTerminalProgress
@@ -84,8 +85,12 @@ function printCompactPlan(plan: ResumeContentPlan, verbose: boolean): void {
   console.log(`Generation: ${plan.provider}/${plan.model}, ${plan.promptVersion}`)
 }
 
-function reportError(error: unknown): void {
-  console.error(error instanceof Error ? error.message : String(error))
+function reportError(error: unknown, json = false): void {
+  const name = error instanceof Error ? error.name : "Error"
+  const message = error instanceof Error ? error.message : String(error)
+  if (json) console.error(JSON.stringify({ error: { name, message, ...(error instanceof ResumeGenerationValidationError ? { issues: error.issues } : {}) } }))
+  else if (error instanceof ResumeGenerationValidationError) console.error(error.issues.map((issue) => `${issue.code} ${issue.path}: ${issue.message}`).join("\n"))
+  else console.error(message)
   process.exitCode = 1
 }
 
@@ -144,7 +149,7 @@ export function registerDocumentsCommands(
         else printCompactPlan(plan, options.verbose === true)
       } catch (error) {
         progress.fail("Resume content planning failed")
-        reportError(error)
+        reportError(error, options.json === true)
       } finally { await services?.close() }
     })
 
@@ -186,7 +191,7 @@ export function registerDocumentsCommands(
         else printGenerationResult(result)
       } catch (error) {
         terminal.fail("Resume generation failed")
-        reportError(error)
+        reportError(error, options.json === true)
       } finally { await services?.close() }
     })
 }

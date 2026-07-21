@@ -33,14 +33,14 @@ class RecordingPersistence implements KnowledgePersistence {
 
 describe("Markdown ingestion", () => {
   it("converts the example profile into a Canonical Career Document", async () => {
-    const rawContent = await readFile("examples/profile.md", "utf8");
-    const document = parseMarkdownCareerDocument("examples/profile.md", rawContent);
+    const rawContent = await readFile("examples/profiles/canonical-professional-profile-v1.md", "utf8");
+    const document = parseMarkdownCareerDocument("examples/profiles/canonical-professional-profile-v1.md", rawContent);
 
     expect(document.source.sourceType).toBe("markdown");
     expect(document.source.sourceReliability).toBe(50);
     expect(document.source.contentHash).toMatch(/^[a-f0-9]{64}$/);
-    expect(document.source.rawContent).toContain("# Alex Morgan");
-    expect(document.asset.title).toBe("Alex Morgan Professional Profile");
+    expect(document.source.rawContent).toContain("# Candidate");
+    expect(document.asset.title).toBe("Mateus Faria");
     expect(document.asset.assetType).toBe("professional_profile");
     expect(document.assets.map((asset) => asset.assetType)).toEqual(expect.arrayContaining([
       "professional_profile",
@@ -48,23 +48,22 @@ describe("Markdown ingestion", () => {
       "organization",
       "professional_experience",
       "role",
-      "project"
+      "education"
     ]));
     expect(document.skills.map((skill) => skill.name)).toContain("TypeScript");
     expect(document.experiences[0]).toMatchObject({
       role: "Senior Software Engineer",
-      organization: "Acme Knowledge Systems"
+      organization: "VTEX"
     });
-    expect(document.projects[0].technologies).toContain("pgvector");
-    expect(document.achievements).toHaveLength(2);
+    expect(document.projects).toEqual([]);
+    expect(document.achievements).toHaveLength(3);
     expect(document.evidenceClaims.length).toBeGreaterThan(
       document.skills.length + document.experiences.length + document.projects.length + document.achievements.length
     );
     expect(document.evidenceClaims).toEqual(expect.arrayContaining([
       expect.objectContaining({ claimCategory: "capability", predicate: "demonstrates" }),
       expect.objectContaining({ claimCategory: "relationship", predicate: "works_at" }),
-      expect.objectContaining({ claimCategory: "relationship", predicate: "uses_technology" }),
-      expect.objectContaining({ claimCategory: "metric", predicate: "reduced_processing_time", valueText: "60%" })
+      expect.objectContaining({ claimCategory: "relationship", predicate: "uses_technology" })
     ]));
     expect(document.evidenceClaims.every((claim) => claim.subjectAssetId.length > 0)).toBe(true);
     expect(document.evidenceClaims.every((claim) => claim.originalSectionLabel.length > 0)).toBe(true);
@@ -134,7 +133,7 @@ describe("Markdown ingestion", () => {
       claimAssessment
     });
 
-    const result = await useCase.execute({ sourcePath: "examples/profile.md" });
+    const result = await useCase.execute({ sourcePath: "examples/profiles/canonical-professional-profile-v1.md" });
 
     expect(result.created).toBe(true);
     expect(persistence.saved).toHaveLength(1);
@@ -151,22 +150,22 @@ describe("Markdown ingestion", () => {
       persistence
     });
 
-    const first = await useCase.execute({ sourcePath: "examples/profile.md" });
-    const second = await useCase.execute({ sourcePath: "examples/profile.md" });
+    const first = await useCase.execute({ sourcePath: "examples/profiles/canonical-professional-profile-v1.md" });
+    const second = await useCase.execute({ sourcePath: "examples/profiles/canonical-professional-profile-v1.md" });
 
     expect(first.created).toBe(true);
     expect(second.created).toBe(false);
     expect(persistence.saved).toHaveLength(1);
-    expect(persistence.saved[0].source.path).toBe("examples/profile.md");
+    expect(persistence.saved[0].source.path).toBe("examples/profiles/canonical-professional-profile-v1.md");
     expect(second.document.source.contentHash).toBe(first.document.source.contentHash);
   });
 
   it("persists a new source version when the same path has changed content", async () => {
-    const rawContent = await readFile("examples/profile.md", "utf8");
-    const original = parseMarkdownCareerDocument("examples/profile.md", rawContent);
+    const rawContent = await readFile("examples/profiles/canonical-professional-profile-v1.md", "utf8");
+    const original = parseMarkdownCareerDocument("examples/profiles/canonical-professional-profile-v1.md", rawContent);
     const changed = parseMarkdownCareerDocument(
-      "examples/profile.md",
-      `${rawContent}\n\n## Achievements\n- New measurable outcome\n`
+      "examples/profiles/canonical-professional-profile-v1.md",
+      `${rawContent}\n\n# Additional Notes\n\nNew source-version content.\n`
     );
     const persistence = new RecordingPersistence();
 

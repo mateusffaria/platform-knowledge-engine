@@ -6,7 +6,7 @@ export type ResumeGenerationIssueCode =
   | "incompatible_plan"
   | "source_mismatch"
   | "missing_candidate_name"
-  | "missing_experience"
+  | "missing_renderable_experience"
   | "missing_required_field"
   | "empty_placeholder"
   | "unknown_evidence_id"
@@ -55,8 +55,9 @@ export function assertRenderableInput(input: ResumeGenerationInput): void {
   if (plan.curatedEvidencePackId !== source.curatedEvidencePack.id || plan.jobDescriptionId !== source.curatedEvidencePack.jobDescriptionId) {
     issues.push({ code: "source_mismatch", path: "plan.curatedEvidencePackId", value: plan.curatedEvidencePackId, message: "Resume Content Plan does not match its Curated Evidence Pack." })
   }
-  if (!candidate.name.value.trim()) issues.push({ code: "missing_candidate_name", path: "candidate.name", message: "Trusted candidate name is required. Add an explicit profile name and ingest the profile again." })
-  if (plan.plannedExperiences.length === 0) issues.push({ code: "missing_experience", path: "plan.plannedExperiences", message: "At least one evidence-backed professional experience is required." })
+  if (!candidate.name?.value.trim()) issues.push({ code: "missing_candidate_name", path: "candidate.name", message: "Candidate Name is required. Ingest or correct a professional-profile/v1 Markdown document with an explicit - Name: value." })
+  const renderableExperience = plan.plannedExperiences.some((experience) => [experience.role, experience.organization, experience.startDate, experience.endDate].every((value) => value?.trim() && !placeholder.test(value.trim())))
+  if (!renderableExperience) issues.push({ code: "missing_renderable_experience", path: "plan.plannedExperiences", message: "At least one renderable planned experience with role, organization, start date, and end date is required. Correct or regenerate the Resume Content Plan." })
   const eligible = new Set(source.selectedEvidenceIds)
   const omitted = new Set(plan.omittedEvidence.map((item) => item.evidenceId))
   for (const id of plan.selectedEvidenceIds) {
@@ -98,7 +99,7 @@ function visibleDocumentText(document: ResumeDocument): string {
 export function assertValidResumeDocument(document: ResumeDocument): void {
   const issues: ResumeGenerationIssue[] = []
   requiredText(document.header.name, "document.header.name", issues)
-  if (document.experiences.length === 0) issues.push({ code: "missing_experience", path: "document.experiences", message: "Professional Experience is required." })
+  if (document.experiences.length === 0) issues.push({ code: "missing_renderable_experience", path: "document.experiences", message: "Professional Experience is required." })
   const visible = visibleDocumentText(document)
   for (const id of document.provenance.selectedEvidenceIds) {
     if (visible.includes(id)) issues.push({ code: "invalid_output", path: "document", value: id, message: "Internal evidence identifiers must not appear in the resume body." })

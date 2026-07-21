@@ -22,7 +22,7 @@
 
 - [x] 4.1 Move ingest command action logic into an ingestion CLI interface module that calls the ingestion application use case
 - [x] 4.2 Keep `src/cli/index.ts` as the executable command registry and remove direct command-handler imports of repositories, database clients, parsers, telemetry clients, and providers
-- [x] 4.3 Verify `pke ingest ./examples/profile.md` keeps the same user-visible behavior
+- [x] 4.3 Verify `pke ingest ./examples/profiles/canonical-professional-profile-v1.md` keeps the same user-visible behavior
 
 ## 5. Add Tests and Boundary Checks
 

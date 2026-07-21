@@ -21,23 +21,49 @@ import { DrizzleGeneratedResumeArtifactRepository } from "../src/modules/documen
 import { DrizzleResumeContentPlanRepository } from "../src/modules/documents/infrastructure/repositories/drizzle-resume-content-plan-repository.js"
 import { DrizzleResumeGenerationSourceReader } from "../src/modules/documents/infrastructure/repositories/drizzle-resume-generation-source-reader.js"
 import { LocalResumeArtifactStorage } from "../src/modules/documents/infrastructure/storage/local-resume-artifact-storage.js"
+import { parseMarkdownCareerDocument } from "../src/modules/ingestion/infrastructure/parsers/markdown.js"
+import { DrizzleKnowledgePersistence } from "../src/modules/knowledge/infrastructure/repositories/drizzle-knowledge-persistence.js"
 import { createDatabase } from "../src/shared/database/client.js"
-import { curatedEvidencePacks, generatedResumeArtifacts, jobAnalyses, jobDescriptions, knowledgeAssets, sourceDocuments } from "../src/shared/database/schema.js"
+import { curatedEvidencePacks, generatedResumeArtifacts, jobAnalyses, jobDescriptions, sourceDocuments } from "../src/shared/database/schema.js"
 
 const databaseIntegrationEnabled = process.env.PKE_DATABASE_INTEGRATION === "1"
 const databaseUrl = process.env.DATABASE_URL ?? "postgres://pke:pke@localhost:5432/pke"
 
 describe.skipIf(!databaseIntegrationEnabled)("persisted resume generation end to end", () => {
+  const sourceOnlyText = "PRIVATE SOURCE DETAIL THAT MUST NOT ENTER THE RESUME"
+  const profileDocument = parseMarkdownCareerDocument(`e2e://${randomUUID()}/profile.md`, [
+    "---",
+    "schema: professional-profile/v1",
+    "language: en",
+    "---",
+    "",
+    "# Candidate",
+    "- Name: Mateus Faria",
+    "",
+    "# Professional Summary",
+    sourceOnlyText,
+    "",
+    "# Professional Experience",
+    "## Acme Systems",
+    "- Role: Staff Software Engineer",
+    "- Start Date: 2021-01",
+    "- End Date: Present",
+    "",
+    "### Achievements",
+    `- ${sourceOnlyText}`,
+    "",
+    "### Technologies",
+    "- TypeScript"
+  ].join("\n"))
   const ids = {
-    sourceDocument: randomUUID(),
-    profileAsset: randomUUID(),
+    sourceDocument: profileDocument.source.id,
+    profileAsset: profileDocument.asset.id,
     jobDescription: randomUUID(),
     jobAnalysis: randomUUID(),
     curatedEvidencePack: randomUUID(),
     resumeContentPlan: randomUUID()
   }
   const evidenceId = `evidence-${randomUUID()}`
-  const sourceOnlyText = "PRIVATE SOURCE DETAIL THAT MUST NOT ENTER THE RESUME"
   const plannedBullet = "Reduced deployment recovery time through deterministic platform automation."
   const providerCall = vi.fn()
   const retrievalCall = vi.fn()
@@ -121,17 +147,7 @@ describe.skipIf(!databaseIntegrationEnabled)("persisted resume generation end to
     outputRoot = await mkdtemp(path.join(os.tmpdir(), "pke-resume-e2e-"))
     converter = new PlaywrightHtmlToPdfConverter()
     const { db } = database
-    await db.insert(sourceDocuments).values({
-      id: ids.sourceDocument,
-      sourceType: "markdown",
-      path: `e2e://${ids.sourceDocument}/profile.md`,
-      contentHash: randomUUID().replaceAll("-", ""),
-      sourceReliability: 100,
-      metadata: { name: "Alex Morgan", headline: "Staff Engineer", email: "alex@example.com", github: "https://github.com/alex" },
-      rawContent: sourceOnlyText,
-      ingestedAt: new Date("2026-07-21T10:00:00.000Z")
-    })
-    await db.insert(knowledgeAssets).values({ id: ids.profileAsset, sourceDocumentId: ids.sourceDocument, assetType: "professional_profile", title: "Alex Morgan", summary: "Trusted profile", createdAt: new Date("2026-07-21T10:00:00.000Z") })
+    await new DrizzleKnowledgePersistence(db).saveCanonicalCareerDocument(profileDocument)
     await db.insert(jobDescriptions).values({ id: ids.jobDescription, sourceType: "plain_text", sourcePath: `e2e://${ids.jobDescription}`, rawContent: "Seeking a TypeScript platform engineer.", contentHash: randomUUID().replaceAll("-", ""), title: "Platform Engineer", ingestedAt: new Date("2026-07-21T10:30:00.000Z") })
     await db.insert(jobAnalyses).values({ id: ids.jobAnalysis, jobDescriptionId: ids.jobDescription, provider: "fixture-provider", model: "fixture-model", promptVersion: "job-analysis/e2e", analysisIdentity: randomUUID().replaceAll("-", ""), analysis: {}, createdAt: new Date("2026-07-21T11:00:00.000Z") })
     await db.insert(curatedEvidencePacks).values({
@@ -202,11 +218,14 @@ describe.skipIf(!databaseIntegrationEnabled)("persisted resume generation end to
     expect(capturedDocuments).toHaveLength(3)
     expect(capturedDocuments[1]).toEqual(capturedDocuments[0])
     expect(capturedDocuments[2]).toEqual(capturedDocuments[0])
+    expect(capturedDocuments[0].header).toEqual({ name: "Mateus Faria", links: [] })
+    expect(profileDocument.evidenceClaims.length).toBeGreaterThan(0)
+    expect(profileDocument.evidenceClaims.every((claim) => claim.originalSectionLabel !== "Candidate")).toBe(true)
     const markdownText = await readFile(markdown.outputPath, "utf8")
     const htmlText = await readFile(html.outputPath, "utf8")
     const pdfInspection = await new PdfJsInspector().inspect(await readFile(pdf.outputPath))
     for (const body of [markdownText, htmlText, pdfInspection.text]) {
-      expect(body).toContain("Alex Morgan")
+      expect(body).toContain("Mateus Faria")
       expect(body).toContain("Staff Software Engineer")
       expect(body).toContain("Acme Systems")
       expect(body).toContain(plannedBullet.slice(0, -1))

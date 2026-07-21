@@ -1,4 +1,4 @@
-import { CandidateResumeMetadata } from "../domain/resume-document.js"
+import { CandidateResumeMetadata, ProvenancedText } from "../domain/resume-document.js"
 import { ResumeContentPlan } from "../domain/model.js"
 
 export interface ResumeGenerationRequirementComponent {
@@ -35,6 +35,9 @@ export interface ResumeGenerationInput {
 }
 
 export function freezeResumeGenerationInput(input: ResumeGenerationInput): ResumeGenerationInput {
+  const freezeText = <T extends ProvenancedText>(value: T | undefined): T | undefined => value
+    ? Object.freeze({ ...value, provenance: Object.freeze(value.provenance.map((item) => Object.freeze({ ...item }))) }) as T
+    : undefined
   return Object.freeze({
     plan: Object.freeze({ ...input.plan }),
     source: Object.freeze({
@@ -43,6 +46,14 @@ export function freezeResumeGenerationInput(input: ResumeGenerationInput): Resum
       discardedEvidenceIds: Object.freeze([...input.source.discardedEvidenceIds]) as unknown as string[],
       sourceDocumentIds: Object.freeze([...input.source.sourceDocumentIds]) as unknown as string[]
     }),
-    candidate: Object.freeze({ ...input.candidate })
+    candidate: Object.freeze({
+      ...input.candidate,
+      ...(freezeText(input.candidate.name) ? { name: freezeText(input.candidate.name) } : {}),
+      ...(freezeText(input.candidate.headline) ? { headline: freezeText(input.candidate.headline) } : {}),
+      ...(freezeText(input.candidate.location) ? { location: freezeText(input.candidate.location) } : {}),
+      ...(freezeText(input.candidate.email) ? { email: freezeText(input.candidate.email) } : {}),
+      ...(freezeText(input.candidate.phone) ? { phone: freezeText(input.candidate.phone) } : {}),
+      links: Object.freeze(input.candidate.links.map((link) => freezeText(link)!)) as unknown as typeof input.candidate.links
+    })
   })
 }

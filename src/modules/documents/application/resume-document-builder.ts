@@ -20,7 +20,7 @@ export function formatResumeDate(value: string, language: ResumeDocument["langua
 }
 
 function candidateProvenance(input: ResumeGenerationInput): ResumeSourceProvenance[] {
-  const fields = [input.candidate.name, input.candidate.headline, input.candidate.location, input.candidate.email, input.candidate.phone, ...input.candidate.links, ...input.candidate.education.flatMap((entry) => [entry.title, entry.details]), ...input.candidate.certifications.flatMap((entry) => [entry.title, entry.details])]
+  const fields = [input.candidate.name, input.candidate.headline, input.candidate.location, input.candidate.email, input.candidate.phone, ...input.candidate.links]
   const byIdentity = new Map<string, ResumeSourceProvenance>()
   for (const field of fields) for (const item of field?.provenance ?? []) byIdentity.set(`${item.sourceDocumentId}:${item.sourceReferenceId ?? ""}:${item.knowledgeAssetId ?? ""}`, item)
   return [...byIdentity.values()].sort((left, right) => `${left.sourceDocumentId}:${left.sourceReferenceId ?? ""}`.localeCompare(`${right.sourceDocumentId}:${right.sourceReferenceId ?? ""}`))
@@ -36,7 +36,7 @@ export function buildResumeDocument(input: ResumeGenerationInput): ResumeDocumen
     templateId: "ats-clean-v1",
     templateVersion: atsCleanTemplateVersion,
     header: {
-      name: candidate.name.value,
+      name: candidate.name!.value,
       ...(candidate.headline ? { headline: candidate.headline.value } : {}),
       ...(candidate.location ? { location: candidate.location.value } : {}),
       ...(candidate.email ? { email: candidate.email.value } : {}),
@@ -54,8 +54,8 @@ export function buildResumeDocument(input: ResumeGenerationInput): ResumeDocumen
       ...(experience.summary ? { summary: { text: experience.summary.text, supportingEvidenceIds: [...experience.summary.supportingEvidenceIds] } } : {}),
       achievements: experience.bullets.map((bullet) => ({ text: bullet.text, supportingEvidenceIds: [...bullet.supportingEvidenceIds] }))
     })),
-    education: candidate.education.map((entry) => ({ title: entry.title.value, ...(entry.details ? { details: entry.details.value } : {}) })),
-    certifications: candidate.certifications.map((entry) => ({ title: entry.title.value, ...(entry.details ? { details: entry.details.value } : {}) })),
+    education: [],
+    certifications: [],
     provenance: {
       jobDescriptionId: plan.jobDescriptionId,
       ...(source.curatedEvidencePack.jobAnalysisId ? { jobAnalysisId: source.curatedEvidencePack.jobAnalysisId } : {}),

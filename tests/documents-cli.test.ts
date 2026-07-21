@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ResumeContentPlan } from "../src/modules/documents/domain/model.js"
 import { registerDocumentsCommands } from "../src/modules/documents/interfaces/cli/documents-command.js"
+import { ResumeGenerationValidationError } from "../src/modules/documents/application/resume-generation-validator.js"
 
 function samplePlan(): ResumeContentPlan {
   return {
@@ -175,5 +176,23 @@ describe("documents resume CLI", () => {
     await program(services).parseAsync(["node", "pke", "documents", "resume", "generate", "job-1", "--no-progress"])
     expect(error).toHaveBeenCalledWith(expect.stringContaining("documents resume plan job-1"))
     expect(process.exitCode).toBe(1)
+  })
+
+  it("prints distinct actionable generation issues in human and machine-readable modes", async () => {
+    const validation = new ResumeGenerationValidationError([
+      { code: "missing_candidate_name", path: "candidate.name", message: "Ingest a professional-profile/v1 document with an explicit Name." },
+      { code: "missing_renderable_experience", path: "plan.plannedExperiences", message: "Correct or regenerate the Resume Content Plan." }
+    ])
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined)
+    const services = { generateResume: { execute: vi.fn(async () => { throw validation }) }, close: vi.fn(async () => undefined) }
+    await program(services).parseAsync(["node", "pke", "documents", "resume", "generate", "job-1", "--no-progress"])
+    expect(String(error.mock.calls[0][0])).toContain("missing_candidate_name candidate.name")
+    expect(String(error.mock.calls[0][0])).toContain("missing_renderable_experience plan.plannedExperiences")
+
+    error.mockClear()
+    process.exitCode = undefined
+    await program(services).parseAsync(["node", "pke", "documents", "resume", "generate", "job-1", "--json"])
+    expect(error).toHaveBeenCalledTimes(1)
+    expect(JSON.parse(String(error.mock.calls[0][0]))).toMatchObject({ error: { name: "ResumeGenerationValidationError", issues: [{ code: "missing_candidate_name" }, { code: "missing_renderable_experience" }] } })
   })
 })

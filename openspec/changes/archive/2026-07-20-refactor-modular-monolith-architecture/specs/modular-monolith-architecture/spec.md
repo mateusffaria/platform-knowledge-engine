@@ -30,7 +30,7 @@ Each business module SHALL separate domain, application, infrastructure, and int
 The CLI SHALL invoke module application use cases through interface or composition code and MUST NOT call repositories, database clients, parsers, telemetry clients, or providers directly from command handlers.
 
 #### Scenario: Ingest command dependency path
-- **WHEN** `pke ingest ./examples/profile.md` is executed
+- **WHEN** `pke ingest ./examples/profiles/canonical-professional-profile-v1.md` is executed
 - **THEN** the command path delegates to the ingestion application use case and infrastructure is accessed through ports
 
 #### Scenario: CLI behavior is preserved

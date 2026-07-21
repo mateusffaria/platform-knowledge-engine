@@ -27,21 +27,15 @@ export interface CandidateLink extends ProvenancedText {
   label: string
 }
 
-export interface CandidateResumeEntry {
-  title: ProvenancedText
-  details?: ProvenancedText
-}
-
 export interface CandidateResumeMetadata {
-  name: ProvenancedText
+  name?: ProvenancedText
   headline?: ProvenancedText
   location?: ProvenancedText
   email?: ProvenancedText
   phone?: ProvenancedText
   links: CandidateLink[]
-  education: CandidateResumeEntry[]
-  certifications: CandidateResumeEntry[]
-  profileSourceDocumentId: string
+  profileSourceDocumentId?: string
+  profileKnowledgeAssetId?: string
 }
 
 export interface ResumeDocumentHeader {

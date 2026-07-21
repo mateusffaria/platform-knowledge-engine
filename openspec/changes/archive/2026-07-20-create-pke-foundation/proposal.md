@@ -5,7 +5,7 @@ Professional knowledge is currently described as a goal but has no executable lo
 ## What Changes
 
 - Add a TypeScript/Node.js project foundation with a CLI-first entry point.
-- Add a `pke ingest <path>` command that ingests Markdown files, starting with `./examples/profile.md`.
+- Add a `pke ingest <path>` command that ingests Markdown files, starting with `./examples/profiles/canonical-professional-profile-v1.md`.
 - Add Docker Compose support for Postgres with pgvector enabled.
 - Add Drizzle ORM configuration and initial database migrations.
 - Introduce the initial canonical career domain model:

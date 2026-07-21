@@ -9,7 +9,7 @@ Defines the required behavior for the `markdown-ingestion` capability.
 The system SHALL provide a CLI command `pke ingest <path>` that accepts a Markdown file path and runs the Markdown ingestion pipeline.
 
 #### Scenario: Example profile is ingested
-- **WHEN** a developer runs `pke ingest ./examples/profile.md`
+- **WHEN** a developer runs `pke ingest ./examples/profiles/canonical-professional-profile-v1.md`
 - **THEN** the system parses the Markdown file, persists the source document and derived career knowledge, and reports a successful ingestion result
 
 #### Scenario: Missing file fails clearly
@@ -47,7 +47,7 @@ The system SHALL include automated tests for the Markdown ingestion pipeline.
 
 #### Scenario: Parser test covers example profile
 - **WHEN** the test suite runs
-- **THEN** it verifies that `examples/profile.md` is converted into the expected Canonical Career Document shape
+- **THEN** it verifies that `examples/profiles/canonical-professional-profile-v1.md` is converted into the expected Canonical Career Document shape
 
 #### Scenario: Persistence orchestration test covers evidence
 - **WHEN** the ingestion pipeline is tested

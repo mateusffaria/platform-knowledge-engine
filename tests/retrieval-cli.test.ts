@@ -56,7 +56,7 @@ const rankedSearchResult: SearchKnowledgeResult = {
       sourceDocumentId: "source-1",
       sourceReferenceId: "reference-1",
       similarityScore: 0.91,
-      text: "claim_text: Built a pgvector retrieval service. | source_path: examples/profile.md"
+      text: "claim_text: Built a pgvector retrieval service. | source_path: examples/profiles/canonical-professional-profile-v1.md"
     }
   ]
 };
@@ -84,7 +84,7 @@ const evidencePack: EvidencePack = {
         section: "Skills",
         locator: "line:1",
         excerpt: "TypeScript",
-        sourcePath: "examples/profile.md"
+        sourcePath: "examples/profiles/canonical-professional-profile-v1.md"
       }],
       retrievalStrategies: ["structured", "semantic"]
     }

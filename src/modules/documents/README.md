@@ -24,7 +24,9 @@ Markdown / standalone HTML / selectable-text PDF
 immutable artifact metadata + provenance manifest
 ```
 
-The planner is closed-world. It cannot access repositories, retrieval, pgvector, external search, raw source documents, unrestricted tools, or unrelated canonical knowledge. Generation is a separate deterministic boundary: it loads the latest compatible plan, exact referenced pack, and allowlisted candidate metadata, then constructs one `ResumeDocument`. Renderers receive only that document and cannot call an LLM, retrieve evidence, or change facts.
+The planner is closed-world. It cannot access repositories, retrieval, pgvector, external search, raw source documents, unrestricted tools, or unrelated canonical knowledge. Generation is a separate deterministic boundary: it loads the latest compatible plan, exact referenced pack, and allowlisted Candidate metadata from a `professional-profile/v1` source, then constructs one `ResumeDocument`. The explicit Candidate Name is required; optional contact values are omitted when absent. Asset titles, filenames, raw prose, legacy flat metadata, and evidence claims are never name fallbacks. Renderers receive only the document and cannot call an LLM, retrieve evidence, or change facts.
+
+The profile contributes only presentation fields to the header. Summary, skills, experience, and other body content remain bounded by `ResumeContentPlan`; canonical profile sections are not copied into the artifact. Candidate fields are not evidence claims and do not enter reconciliation or retrieval.
 
 ## Hexagonal ownership
 

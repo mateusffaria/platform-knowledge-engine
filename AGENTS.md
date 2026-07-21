@@ -18,7 +18,7 @@ Tests live in `tests/`. Database schema is in `src/shared/database/schema.ts`, m
 - `npm run db:migrate`: build and apply SQL migrations.
 - `npm run db:studio`: open Drizzle Studio.
 
-Example: `npm run pke -- ingest examples/profile.md`.
+Example: `npm run pke -- ingest examples/profiles/canonical-professional-profile-v1.md`.
 
 ## Coding Style & Naming Conventions
 

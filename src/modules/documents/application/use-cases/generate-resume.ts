@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { buildResumeArtifactManifest, artifactFromManifest } from "../resume-artifact-manifest.js"
 import { buildResumeGenerationIdentity, buildResumeRenderingIdentity, resumeFormatMetadata, sha256 } from "../resume-artifact-identity.js"
 import { buildResumeDocument } from "../resume-document-builder.js"
-import { assertCompatibleResumePlan } from "../resume-generation-validator.js"
+import { assertCompatibleResumePlan, assertRenderableInput } from "../resume-generation-validator.js"
 import { freezeResumeGenerationInput } from "../generation-input.js"
 import { CandidateResumeMetadataReader } from "../ports/candidate-resume-metadata-reader.js"
 import { GeneratedResumeArtifactRepository } from "../ports/generated-resume-artifact-repository.js"
@@ -65,10 +65,6 @@ export class ResumeGenerationSourceNotFoundError extends Error {
   constructor(id: string) { super(`The Curated Evidence Pack ${id} referenced by the Resume Content Plan is missing or incompatible.`); this.name = "ResumeGenerationSourceNotFoundError" }
 }
 
-export class CandidateResumeMetadataNotFoundError extends Error {
-  constructor() { super("Trusted candidate presentation metadata could not be loaded. Ingest a profile with an explicit name and evidence-backed experience first."); this.name = "CandidateResumeMetadataNotFoundError" }
-}
-
 export class CorruptCachedResumeArtifactError extends Error {
   constructor(filePath: string) { super(`Cached resume artifact is missing or has an invalid checksum: ${filePath}. Re-run with --force.`); this.name = "CorruptCachedResumeArtifactError" }
 }
@@ -98,8 +94,9 @@ export function createGenerateResumeUseCase(dependencies: GenerateResumeDependen
           if (!source) throw new ResumeGenerationSourceNotFoundError(plan.curatedEvidencePackId)
           progress(command, "loading_candidate")
           const candidate = await observability.run("load-candidate", { resumeContentPlanId: plan.id }, () => dependencies.candidateReader.read(source))
-          if (!candidate) throw new CandidateResumeMetadataNotFoundError()
           const input = freezeResumeGenerationInput({ plan, source, candidate })
+          progress(command, "validating_input")
+          assertRenderableInput(input)
           const renderingIdentity = buildResumeRenderingIdentity({ plan, candidate, format: command.format, language: command.language, length: command.length, templateId: command.templateId, templateVersion: atsCleanTemplateVersion })
           const generationIdentity = buildResumeGenerationIdentity(renderingIdentity, command.force ? newRegenerationId() : undefined)
           const formatMetadata = resumeFormatMetadata[command.format]
@@ -120,7 +117,6 @@ export function createGenerateResumeUseCase(dependencies: GenerateResumeDependen
               return { artifact: existing, outputPath: materialized.artifactPath, manifestPath: materialized.manifestPath, reused: true, selectedEvidenceCount: plan.selectedEvidenceIds.length }
             }
           }
-          progress(command, "validating_input")
           progress(command, "building_document")
           const document = await observability.run("build-document", { resumeContentPlanId: plan.id }, async () => buildResumeDocument(input))
           const renderer = dependencies.renderers.get(command.format)

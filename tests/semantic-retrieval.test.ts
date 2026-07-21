@@ -20,12 +20,12 @@ const asset: IndexableKnowledgeAsset = {
   id: "asset-1",
   sourceDocumentId: "source-1",
   assetType: "professional_profile",
-  title: "Alex Morgan Professional Profile",
+  title: "Mateus Faria Professional Profile",
   summary: "Staff engineer focused on retrieval systems.",
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   source: {
     id: "source-1",
-    path: "examples/profile.md",
+    path: "examples/profiles/canonical-professional-profile-v1.md",
     contentHash: "abc123",
     sourceType: "markdown"
   }
@@ -48,14 +48,14 @@ const claim: IndexableEvidenceClaim = {
   conflictSeverity: "none",
   asset: {
     id: "asset-1",
-    title: "Alex Morgan Professional Profile",
+    title: "Mateus Faria Professional Profile",
     summary: "Staff engineer focused on retrieval systems.",
     assetType: "professional_profile",
     sourceDocumentId: "source-1"
   },
   source: {
     id: "source-1",
-    path: "examples/profile.md",
+    path: "examples/profiles/canonical-professional-profile-v1.md",
     contentHash: "abc123",
     sourceType: "markdown"
   },
@@ -193,7 +193,7 @@ describe("Semantic retrieval", () => {
     expect(secondAssetDocument).toEqual(firstAssetDocument);
     expect(firstAssetDocument.text).toContain("knowledge_asset_id: asset-1");
     expect(firstAssetDocument.text).toContain("source_document_id: source-1");
-    expect(firstAssetDocument.text).toContain("title: Alex Morgan Professional Profile");
+    expect(firstAssetDocument.text).toContain("title: Mateus Faria Professional Profile");
 
     expect(claimDocument.text).toContain("evidence_claim_id: claim-1");
     expect(claimDocument.text).toContain("knowledge_asset_id: asset-1");
