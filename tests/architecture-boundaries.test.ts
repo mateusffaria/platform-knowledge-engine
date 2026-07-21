@@ -28,6 +28,30 @@ function importedSpecifiers(contents: string): string[] {
 }
 
 describe("Architecture boundaries", () => {
+  it("keeps resume rendering domain and application independent from infrastructure SDKs", async () => {
+    const files = [
+      ...(await readTypescriptFiles("src/modules/documents/domain")),
+      ...(await readTypescriptFiles("src/modules/documents/application"))
+    ]
+    const forbiddenImports = [
+      "/infrastructure/",
+      "shared/database",
+      "node:fs",
+      "playwright",
+      "pdfjs-dist",
+      "drizzle-orm",
+      "postgres",
+      "@opentelemetry",
+      "pino"
+    ]
+
+    for (const file of files) {
+      for (const imported of importedSpecifiers(file.contents)) {
+        for (const forbiddenImport of forbiddenImports) expect(imported, `${file.path} imports ${forbiddenImport}`).not.toContain(forbiddenImport)
+      }
+    }
+  })
+
   it("keeps knowledge domain independent from application, infrastructure, shared services, and SDKs", async () => {
     const files = await readTypescriptFiles("src/modules/knowledge/domain");
     const forbiddenImports = [
@@ -221,7 +245,7 @@ describe("Architecture boundaries", () => {
     }
   });
 
-  it("keeps documents domain and application code inside the closed planning boundary", async () => {
+  it("keeps documents domain and application code inside explicit planning and rendering ports", async () => {
     const files = [
       ...await readTypescriptFiles("src/modules/documents/domain"),
       ...await readTypescriptFiles("src/modules/documents/application")
@@ -238,8 +262,7 @@ describe("Architecture boundaries", () => {
       "@opentelemetry",
       "langfuse",
       "commander",
-      "interfaces/cli",
-      "renderer"
+      "interfaces/cli"
     ];
 
     for (const file of files) {

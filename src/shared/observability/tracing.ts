@@ -43,9 +43,22 @@ export const documentMetricNames = {
   cacheHits: "pke.documents.resume.plan.cache_hits"
 } as const;
 
+export const resumeGenerationMetricNames = {
+  generationDuration: "pke.documents.resume.generate.duration",
+  renderingDuration: "pke.documents.resume.generate.render.duration",
+  outputSize: "pke.documents.resume.generate.output.bytes",
+  pageCount: "pke.documents.resume.generate.pages",
+  evidenceCount: "pke.documents.resume.generate.evidence",
+  sectionCount: "pke.documents.resume.generate.sections",
+  failures: "pke.documents.resume.generate.failures",
+  validationFailures: "pke.documents.resume.generate.validation_failures",
+  cacheHits: "pke.documents.resume.generate.cache_hits"
+} as const;
+
 export type MetricAttributes = Partial<Record<"provider" | "model" | "prompt_version" | "outcome" | "failure_class", string>>;
 export type EvaluationMetricAttributes = Partial<Record<"dataset_version" | "stage" | "provider" | "model" | "prompt_version" | "outcome", string>>;
 export type DocumentMetricAttributes = Partial<Record<"provider" | "model" | "prompt_version" | "outcome" | "language" | "length", string>>;
+export type ResumeGenerationMetricAttributes = Partial<Record<"format" | "language" | "length" | "template_id" | "outcome" | "failure_class", string>>;
 export type TraceAttributes = Attributes;
 
 export interface Telemetry {
@@ -56,6 +69,7 @@ export interface Telemetry {
   recordEvaluation(name: keyof typeof evaluationMetricNames, value: number, attributes?: EvaluationMetricAttributes): void;
   countEvaluation(name: "run" | "stage" | "assertion", attributes?: EvaluationMetricAttributes): void;
   recordDocument(name: keyof typeof documentMetricNames, value: number, attributes?: DocumentMetricAttributes): void;
+  recordResumeGeneration(name: keyof typeof resumeGenerationMetricNames, value: number, attributes?: ResumeGenerationMetricAttributes): void;
   traceId(): string | undefined;
   shutdown(): Promise<void>;
 }
@@ -78,6 +92,7 @@ class NoopTelemetry implements Telemetry {
   recordEvaluation(_name: keyof typeof evaluationMetricNames, _value: number, _attributes?: EvaluationMetricAttributes): void {}
   countEvaluation(_name: "run" | "stage" | "assertion", _attributes?: EvaluationMetricAttributes): void {}
   recordDocument(_name: keyof typeof documentMetricNames, _value: number, _attributes?: DocumentMetricAttributes): void {}
+  recordResumeGeneration(_name: keyof typeof resumeGenerationMetricNames, _value: number, _attributes?: ResumeGenerationMetricAttributes): void {}
   traceId(): string | undefined { return undefined; }
   async shutdown(): Promise<void> {}
 }
@@ -138,6 +153,13 @@ class OTelTelemetry implements Telemetry {
   recordDocument(name: keyof typeof documentMetricNames, value: number, attributes: DocumentMetricAttributes = {}): void {
     const metric = documentMetricNames[name];
     const instrument = this.histograms.get(metric) ?? this.meter.createHistogram(metric, { unit: name.includes("Duration") ? "ms" : "1" });
+    this.histograms.set(metric, instrument);
+    instrument.record(value, safeAttributes(attributes));
+  }
+
+  recordResumeGeneration(name: keyof typeof resumeGenerationMetricNames, value: number, attributes: ResumeGenerationMetricAttributes = {}): void {
+    const metric = resumeGenerationMetricNames[name];
+    const instrument = this.histograms.get(metric) ?? this.meter.createHistogram(metric, { unit: name.toLowerCase().includes("duration") ? "ms" : name === "outputSize" ? "By" : "1" });
     this.histograms.set(metric, instrument);
     instrument.record(value, safeAttributes(attributes));
   }

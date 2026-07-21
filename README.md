@@ -1,6 +1,6 @@
 # Professional Knowledge Engine
 
-Professional Knowledge Engine is a local-first CLI for turning professional source material into structured, auditable career knowledge. The first supported workflow ingests Markdown, normalizes it into a Canonical Career Document, and stores raw source content plus evidence-backed career records in Postgres.
+Professional Knowledge Engine is a local-first CLI for turning professional source material into structured, auditable career knowledge and evidence-grounded job-specific resumes. It ingests Markdown, normalizes it into a Canonical Career Document, plans bounded resume content, and deterministically renders Markdown, standalone HTML, or selectable-text PDF artifacts.
 
 The core problem is not resume generation. The core problem is transforming heterogeneous professional sources into verified knowledge that future retrieval and generation workflows can cite.
 
@@ -10,18 +10,20 @@ The core problem is not resume generation. The core problem is transforming hete
 - Markdown ingestion through `pke ingest ./examples/profile.md`.
 - Trusted-knowledge review through `pke claims review`, `pke claims confirm`, and `pke claims reject`.
 - Canonical job-description ingestion, deterministic requirement extraction, and LLM-assisted job analysis through `pke jobs`.
+- Evidence-grounded Resume Content Planning and deterministic `ats-clean-v1` artifact generation through `pke documents resume`.
 - Postgres plus pgvector local infrastructure with Docker Compose.
 - Drizzle ORM schema and initial SQL migration.
 - Canonical career model covering source documents, knowledge assets, evidence claims, source references, skills, experiences, projects, and achievements.
 - Structured logging, OpenTelemetry hooks, and a no-op Langfuse abstraction.
 
-Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion, resume generation, cover letter generation, multi-agent orchestration, hosted deployment, and LLM benchmarking.
+Current exclusions include PDF/DOCX source parsing, DOCX resume output, multiple visual templates, source-resume reproduction, cover letters, LinkedIn/interview generation, universal ATS scoring, automated applications, multi-agent orchestration, hosted deployment, and LLM benchmarking.
 
 ## Requirements
 
 - Node.js 22 or newer.
 - npm 11 or newer.
 - Docker with Docker Compose.
+- The pinned Playwright Chromium build for PDF output (`npm run pdf:install`). Markdown and HTML generation do not require a browser.
 
 ## Local Setup
 
@@ -29,7 +31,10 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
 
    ```bash
    npm install
+   npm run pdf:install
    ```
+
+   `pdf:install` is needed only for PDF generation and real PDF integration tests.
 
 2. Copy the example environment file:
 
@@ -118,10 +123,26 @@ Out of scope for this foundation: PDF parsing, DOCX parsing, LinkedIn ingestion,
 
    Use the `jobDescription.job.id` returned by the ingest JSON output. `analyze` stores a separately validated `JobAnalysis`; it never changes the canonical job description or deterministic requirements. `reason` retrieves preselected canonical evidence, validates a bounded LLM curation, and persists an immutable Curated Evidence Pack. Use `--json` for the complete payload or `--model <model>` to override `LLM_MODEL` for one run. Add `--force` to `jobs analyze`, `jobs reason`, or `documents resume plan` to bypass snapshot reuse and persist a fresh immutable result; on `jobs candidates` and `jobs retrieve`, it refreshes analysis before rebuilding the deterministic result. Existing snapshots are never overwritten.
 
-8. Run tests:
+8. Plan and generate a resume from the persisted Curated Evidence Pack:
 
    ```bash
+   npm run pke -- documents resume plan <job-id> --language en --length standard
+   npm run pke -- documents resume generate <job-id> --format pdf --language en --length standard
+   ```
+
+   Planning uses the configured LLM. Generation is deterministic and makes no LLM or retrieval call. The default artifact and its neighboring manifest are written under `artifacts/resumes/`.
+
+9. Run tests:
+
+   ```bash
+   npm run typecheck
    npm test
+   ```
+
+   To run the persisted Postgres/Chromium end-to-end fixture against a migrated local database:
+
+   ```bash
+   PKE_DATABASE_INTEGRATION=1 npm test -- --run tests/resume-generation-e2e.test.ts
    ```
 
 ## Configuration
@@ -146,7 +167,37 @@ Environment variables:
 - `OLLAMA_BASE_URL`: Ollama API base URL. Defaults to `http://localhost:11434`.
 - `SEMANTIC_SEARCH_MIN_SCORE`: optional minimum similarity score for relevant semantic search evidence. Leave unset to preserve unfiltered ranked search behavior.
 
-`EMBEDDING_*` configuration is used for semantic indexing and retrieval. `LLM_*` configuration is used for bounded job analysis and evidence reasoning; ingestion, show, and deterministic retrieval remain usable without LLM configuration.
+`EMBEDDING_*` configuration is used for semantic indexing and retrieval. `LLM_*` configuration is used for bounded job analysis, evidence reasoning, and Resume Content Planning. Ingestion, show, deterministic retrieval, and resume generation from an existing compatible plan remain usable without LLM or embedding credentials.
+
+## Resume planning and artifact generation
+
+The end-to-end resume flow is:
+
+```text
+Source Resume → Canonical Knowledge → Job Analysis → Candidate Evidence Pack
+→ Curated Evidence Pack → Resume Content Plan → ResumeDocument
+→ Markdown / HTML / PDF + manifest
+```
+
+Create the LLM-backed content plan first, then render it deterministically:
+
+```bash
+npm run pke -- documents resume plan <job-id> \
+  --language en \
+  --length concise
+
+npm run pke -- documents resume generate <job-id> \
+  --format pdf \
+  --language en \
+  --length concise \
+  --template ats-clean-v1
+```
+
+Generation defaults to `pdf`, `en`, `standard`, and `ats-clean-v1`. Supported formats are `markdown`, `html`, and `pdf`; languages are `en` and `pt-BR`; length profiles are `concise`, `standard`, and `detailed`. Use `--output <matching-extension-path>` to materialize a copy elsewhere, `--json` for exactly one machine-readable result, `--no-progress` to suppress interactive feedback, or `--force` to create a new immutable generation instead of reusing a checksum-valid artifact.
+
+Default artifacts use an identity-suffixed name under `artifacts/resumes/`, with a neighboring `<artifact>.manifest.json`. The manifest preserves the job, analysis, Curated Evidence Pack, Resume Content Plan, renderer/template versions, evidence accounting, candidate-field provenance, requirement/component coverage, known gaps, checksum, and storage metadata. Its renderability checks are not a job-fit or universal ATS score.
+
+If no compatible plan exists, generation stops before rendering and prints the matching planning command. If cached bytes are missing or corrupt, rerun with `--force` to create an immutable successor. See [Deterministic Resume Artifact Generation](docs/resume-artifact-generation.md) for architecture, PDF/CI prerequisites, storage, recovery/rollback, privacy-safe observability, and MVP limitations; see [Evidence-Grounded Resume Content Planning](docs/resume-content-planning.md) for the LLM-backed planning contract.
 
 ## Evidence evaluation
 
@@ -163,7 +214,7 @@ Evaluation reports retrieval, Candidate Evidence Pack association, and reasoning
 
 ## Terminal progress
 
-Long-running interactive commands (`index`, `search`, `retrieve`, `jobs analyze`, `jobs retrieve`, `jobs candidates`, `jobs reason`, and `eval run`) show transient stage feedback with elapsed time when stderr is a TTY. Evaluation progress covers dataset/runtime loading, scenario execution, report storage, telemetry flush, and resource shutdown. This feedback is written directly to the terminal, never through Pino or OpenTelemetry, so it is not exported to Grafana. It is disabled automatically for machine-readable evaluation formats, redirected output, CI, and non-interactive containers; use `--no-progress` to suppress it explicitly.
+Long-running interactive commands (`index`, `search`, `retrieve`, `jobs analyze`, `jobs retrieve`, `jobs candidates`, `jobs reason`, `documents resume plan`, `documents resume generate`, and `eval run`) show transient stage feedback with elapsed time when stderr is a TTY. Resume generation progress covers compatible input loading, reuse checks, deterministic document construction, rendering/inspection, storage, and persistence. This feedback is written directly to the terminal, never through Pino or OpenTelemetry, so it is not exported to Grafana. It is disabled automatically for machine-readable output, redirected output, CI, and non-interactive containers; use `--no-progress` to suppress it explicitly.
 
 ## Local reasoning observability
 

@@ -102,7 +102,7 @@ Current limitations:
 
 - parsing is deterministic and conservative; unknown or ambiguous requirements remain semantic text;
 - qualitative evidence coverage is not a hiring-fit score or proof of qualification;
-- no URL scraping, ATS scoring, resume or cover-letter generation, automatic applications, multi-agent orchestration, or benchmarking;
+- no URL scraping, ATS scoring, cover-letter generation, automatic applications, multi-agent orchestration, or benchmarking; resume artifact generation is owned by the later AEM-010B documents boundary;
 - job descriptions are external requirements, never verified professional knowledge or evidence claims.
 
 ## AEM-007 — Knowledge Products
@@ -116,7 +116,7 @@ Capabilities:
 - LinkedIn update;
 - interview answers.
 
-Status: the evidence-grounded Resume Content Planning slice is implemented in AEM-010; rendering and other generators remain deferred.
+Status: evidence-grounded Resume Content Planning is implemented in AEM-010, and deterministic resume rendering is implemented in AEM-010B. Other document generators remain deferred.
 
 ## AEM-008 — AI Observability
 
@@ -161,7 +161,22 @@ Capabilities:
 - immutable identity reuse, OpenTelemetry/Langfuse instrumentation, and golden evaluation.
 - parent-preserving atomic job requirements with component-scoped retrieval, reasoning, and resume safety validation (AEM010A-2).
 
-Out of scope: PDF/DOCX/HTML rendering, visual templates, cover letters, LinkedIn/interview content, ATS scoring, automated applications, and provider benchmarking.
+The planning use case does not render. AEM-010B consumes its persisted output; DOCX, multiple visual templates, cover letters, LinkedIn/interview content, ATS scoring, automated applications, and provider benchmarking remain out of scope.
+
+## AEM-010B — Resume Rendering and End-to-End Generation
+
+Transform a compatible persisted Resume Content Plan plus trusted candidate metadata into one canonical `ResumeDocument`, then deterministically render it with `ats-clean-v1`.
+
+Capabilities:
+
+- Markdown, standalone semantic HTML, and selectable-text A4 PDF;
+- lazy browser/PDF adapters behind documents application ports;
+- immutable artifact and provenance-manifest persistence;
+- checksum-valid reuse, identity-neutral custom output, and force-aware immutable regeneration;
+- `pke documents resume generate <job-id>` with privacy-safe observability;
+- end-to-end provenance, evidence/coverage/gap reporting, and separate renderability/alignment semantics.
+
+Out of scope: factual enrichment, retrieval or LLM calls during generation, DOCX, additional visual templates, source-resume reproduction, ATS scoring, cloud storage, and automated applications.
 
 ## AEM-011 — Intelligence Benchmarking
 

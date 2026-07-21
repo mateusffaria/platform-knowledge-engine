@@ -23,11 +23,13 @@ The end user needs outputs such as resumes and cover letters, but these outputs 
 - SaaS editing interface
 - automated job application submission
 
-## Implemented slice: AEM-010
+## Implemented slices: AEM-010 and AEM-010B
 
 AEM-010 implements JSON Resume Content Planning only. It consumes the latest compatible Curated Evidence Pack through a closed documents boundary, validates every factual field against selected canonical evidence, persists immutable versioned plans, and exposes `pke documents resume plan <job-id>`.
 
-Deferred from AEM-010: PDF, DOCX, HTML and visual rendering; cover letters; LinkedIn and interview content; subjective writing or ATS scoring; provider benchmarking; and automated applications.
+AEM-010B implements deterministic `ResumeDocument` construction, `ats-clean-v1`, Markdown/standalone HTML/selectable-text PDF rendering, immutable artifact/manifest persistence and reuse, and `pke documents resume generate <job-id>`. It consumes an existing plan and trusted candidate metadata without an LLM or retrieval.
+
+Still deferred: DOCX and additional visual templates; cover letters; LinkedIn and interview content; subjective writing or ATS scoring; provider benchmarking; cloud storage; and automated applications.
 
 ## Architectural Decisions
 
@@ -45,10 +47,10 @@ Document rendering should be behind a port so implementation can change.
 
 ## Acceptance Criteria
 
-- The system can generate a validated JSON Resume Content Plan from a Curated Evidence Pack.
+- The system can generate a validated JSON Resume Content Plan and deterministic Markdown, HTML, and PDF artifacts from a Curated Evidence Pack.
 - Every factual bullet is traceable to selected canonical evidence.
 - Unsupported claims and altered metrics are rejected before persistence.
-- Rendering and additional professional artifacts remain explicit later milestones.
+- Additional document types and templates remain explicit later milestones.
 
 ## Risks
 

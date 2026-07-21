@@ -1,6 +1,6 @@
 # Evidence-Grounded Resume Content Planning
 
-Resume planning converts the latest compatible persisted Curated Evidence Pack for a job into a validated JSON Resume Content Plan. It does not render a resume.
+Resume planning converts the latest compatible persisted Curated Evidence Pack for a job into a validated JSON Resume Content Plan. This is the LLM-backed content-decision boundary; deterministic AEM-010B generation subsequently converts a compatible persisted plan into a `ResumeDocument` and Markdown, HTML, or PDF without invoking the planner, an LLM, or retrieval.
 
 ## CLI
 
@@ -79,6 +79,6 @@ Common failures:
 - Deterministic validation failure — inspect the stable issue code, indexed path, and offending ID in the terminal diagnostic (for example, `discarded_evidence_id@omittedEvidence[2].evidenceId=<id>`); change the prompt/model or source evidence, never bypass persistence validation.
 - Cached output after a request — this is expected for the same immutable identity; pass `--force` to regenerate and persist a new plan without deleting the existing one.
 
-PDF, DOCX, HTML, visual templates, cover letters, LinkedIn content, interview answers, ATS scoring, and automated applications are explicitly out of scope.
+Artifact rendering remains outside the planning use case but is implemented as the separate AEM-010B generation use case. DOCX, multiple visual templates, source-resume reproduction, cover letters, LinkedIn content, interview answers, ATS scoring, automated applications, and planning-on-missing remain out of scope.
 
-See [Atomic Job Requirements](atomic-job-requirements.md) for component aggregation, legacy compatibility, CLI traceability, and the closed evidence boundary.
+See [Deterministic Resume Artifact Generation](resume-artifact-generation.md) for the plan-to-artifact contract, CLI, template/version boundaries, persistence, and operations. See [Atomic Job Requirements](atomic-job-requirements.md) for component aggregation, legacy compatibility, CLI traceability, and the closed evidence boundary.

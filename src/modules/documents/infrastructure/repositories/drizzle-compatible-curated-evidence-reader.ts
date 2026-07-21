@@ -117,7 +117,7 @@ export function mapCompatibleCuratedEvidencePack(pack: CuratedEvidencePack, rows
   }
 }
 
-function toPack(row: typeof curatedEvidencePacks.$inferSelect): CuratedEvidencePack {
+export function hydrateCuratedEvidencePack(row: typeof curatedEvidencePacks.$inferSelect): CuratedEvidencePack {
   return normalizeStoredCuratedEvidencePack({
     id: row.id,
     runIdentity: row.runIdentity,
@@ -141,7 +141,7 @@ export class DrizzleCompatibleCuratedEvidenceReader implements CompatibleCurated
       .orderBy(desc(curatedEvidencePacks.createdAt), desc(curatedEvidencePacks.id))
     let pack: CuratedEvidencePack | undefined
     for (const row of storedRows) {
-      try { pack = toPack(row); break } catch { continue }
+      try { pack = hydrateCuratedEvidencePack(row); break } catch { continue }
     }
     if (!pack) return undefined
     const evidenceIds = [...new Set(pack.recommendedEvidence.map((selection) => selection.evidenceClaimId))]

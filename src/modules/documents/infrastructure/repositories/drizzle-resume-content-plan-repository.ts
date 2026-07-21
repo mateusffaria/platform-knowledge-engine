@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm"
+import { and, desc, eq, inArray } from "drizzle-orm"
 
 import { ResumeContentPlanRepository } from "../../application/ports/resume-content-plan-repository.js"
 import { parsePersistedResumeContentPlan } from "../../application/resume-content-plan-schema.js"
@@ -20,6 +20,22 @@ export class DrizzleResumeContentPlanRepository implements ResumeContentPlanRepo
   async findByPlanIdentity(planIdentity: string): Promise<ResumeContentPlan | undefined> {
     const rows = await this.db.select().from(resumeContentPlans).where(eq(resumeContentPlans.planIdentity, planIdentity)).limit(1)
     return rows[0] ? hydrateResumeContentPlan(rows[0]) : undefined
+  }
+
+  async findLatestCompatible(input: Parameters<ResumeContentPlanRepository["findLatestCompatible"]>[0]): Promise<ResumeContentPlan | undefined> {
+    if (input.schemaVersions.length === 0) return undefined
+    const rows = await this.db.select().from(resumeContentPlans)
+      .where(and(
+        eq(resumeContentPlans.jobDescriptionId, input.jobDescriptionId),
+        eq(resumeContentPlans.language, input.language),
+        eq(resumeContentPlans.length, input.length),
+        inArray(resumeContentPlans.schemaVersion, [...input.schemaVersions])
+      ))
+      .orderBy(desc(resumeContentPlans.createdAt), desc(resumeContentPlans.id))
+    for (const row of rows) {
+      try { return hydrateResumeContentPlan(row) } catch { continue }
+    }
+    return undefined
   }
 
   async save(plan: ResumeContentPlan): Promise<ResumeContentPlan> {

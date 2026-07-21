@@ -71,7 +71,11 @@ Resume Content Planner (closed evidence boundary)
         ↓
 Validated, immutable Resume Content Plan
         ↓
-Renderer (future milestone)
+ResumeDocument (deterministic canonical projection)
+        ↓
+Markdown / standalone HTML / selectable-text PDF
+        ↓
+Immutable artifact metadata + provenance manifest
 ```
 
 Evaluation executes the retrieval and jobs boundaries against immutable fixtures:
@@ -273,13 +277,19 @@ The initial parser supports local Markdown and plain text. It detects common req
 
 ### Documents
 
-Responsible for planning professional documents from curated evidence without becoming a knowledge source or renderer.
+Responsible for planning professional documents from curated evidence and deterministically rendering final artifacts without becoming a knowledge source.
 
 The initial documents capability is resume content planning. Its application use case loads the latest compatible Curated Evidence Pack through a documents-owned port, freezes a closed-world `ResumePlanningInput`, resolves an immutable plan identity, invokes a schema-bound planner, applies deterministic grounding validation, and persists the valid aggregate. The planner receives no repository, retrieval, pgvector, search, raw-document, or unrestricted-tool port.
 
-The `ResumeContentPlan` contains typed summary, experience, bullet, skill, omission, uncovered-requirement, warning, evidence-traceability, and generation-provenance data. Content selection and rewriting end at this boundary. A future renderer may consume the plan, but it must not add facts, query canonical knowledge, or change content decisions.
+The `ResumeContentPlan` contains typed summary, experience, bullet, skill, omission, uncovered-requirement, warning, evidence-traceability, and generation-provenance data. LLM-backed content selection and rewriting end at this boundary.
 
-Documents domain and application code depend only on documents domain types and application ports. Infrastructure owns Drizzle, provider, OpenTelemetry, and Langfuse adapters; CLI interfaces call only the planning use case.
+`GenerateResume` loads the latest compatible plan plus the exact referenced Curated Evidence Pack and an allowlisted, source-provenanced candidate metadata snapshot. Pure application code validates those frozen inputs and constructs one versioned `ResumeDocument`. The `ats-clean-v1` template fixes localized section order, dates, escaping, whitespace, and A4 single-column layout. Markdown and HTML render the same document directly; PDF reuses standalone HTML through an `HtmlToPdfConverter` port and validates output through a `PdfInspector` port. Generation has no LLM, embedding, retrieval, vector-store, search, or content-repair dependency, so it cannot add facts or change plan decisions.
+
+Artifact storage and persistence remain separate ports. Canonical rendering identity covers plan/candidate content, format, locale/length, and template/renderer versions while excluding paths and timestamps. The local filesystem adapter commits artifact/manifest pairs with temporary files and rollback; the Drizzle adapter persists immutable `generated_resume_artifacts` rows after successful storage and converges concurrent normal generations on one generation identity. `--force` creates a distinct immutable generation under the same logical rendering identity.
+
+The manifest preserves every available upstream ID, content-level evidence references, candidate-field provenance, selected/omitted accounting, requirement/component coverage, known gaps, version boundaries, checksum, and paths. Renderability and PDF extraction validation remain distinct from evidence-based job alignment, and no universal ATS score is claimed.
+
+Documents domain and application code depend only on documents domain types and application ports. Infrastructure owns Drizzle, local filesystem, Markdown/HTML, Playwright/PDF.js, provider, OpenTelemetry, and Langfuse adapters; browser, PDF, database, filesystem, SDK, LLM, and retrieval implementations cannot enter domain/application rendering code. CLI interfaces call only the planning and generation use cases. Generation telemetry is fail-open and metadata-only by default: stable identities, versions, format, counts, paths, timings, cache outcome, and errors are allowed, while professional content and contact data are excluded.
 
 ### Evaluation
 

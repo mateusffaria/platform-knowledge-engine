@@ -339,6 +339,42 @@ export const resumeContentPlans = pgTable("resume_content_plans", {
   uniqueIndex("resume_content_plans_plan_identity_unique").on(table.planIdentity)
 ]);
 
+export const generatedResumeArtifacts = pgTable("generated_resume_artifacts", {
+  id: uuid("id").primaryKey(),
+  renderingIdentity: text("rendering_identity").notNull(),
+  generationIdentity: text("generation_identity").notNull(),
+  jobDescriptionId: uuid("job_description_id")
+    .notNull()
+    .references(() => jobDescriptions.id, { onDelete: "cascade" }),
+  jobAnalysisId: uuid("job_analysis_id")
+    .references(() => jobAnalyses.id, { onDelete: "set null" }),
+  curatedEvidencePackId: uuid("curated_evidence_pack_id")
+    .notNull()
+    .references(() => curatedEvidencePacks.id, { onDelete: "cascade" }),
+  resumeContentPlanId: uuid("resume_content_plan_id")
+    .notNull()
+    .references(() => resumeContentPlans.id, { onDelete: "cascade" }),
+  format: text("format").notNull(),
+  language: text("language").notNull(),
+  length: text("length").notNull(),
+  templateId: text("template_id").notNull(),
+  templateVersion: text("template_version").notNull(),
+  rendererVersion: text("renderer_version").notNull(),
+  artifactPath: text("artifact_path").notNull(),
+  manifestPath: text("manifest_path").notNull(),
+  mediaType: text("media_type").notNull(),
+  checksum: text("checksum").notNull(),
+  byteCount: integer("byte_count").notNull(),
+  pageCount: integer("page_count"),
+  manifest: jsonb("manifest").$type<Record<string, unknown>>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull()
+}, (table) => [
+  index("generated_resume_artifacts_rendering_identity_idx").on(table.renderingIdentity, table.createdAt),
+  index("generated_resume_artifacts_job_description_idx").on(table.jobDescriptionId, table.createdAt),
+  index("generated_resume_artifacts_resume_content_plan_idx").on(table.resumeContentPlanId),
+  uniqueIndex("generated_resume_artifacts_generation_identity_unique").on(table.generationIdentity)
+]);
+
 export const evaluationRuns = pgTable("evaluation_runs", {
   id: uuid("id").primaryKey(),
   datasetId: text("dataset_id").notNull(),

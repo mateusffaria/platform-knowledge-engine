@@ -18,6 +18,7 @@ The roadmap is not only a feature list. It is a record of the architectural evol
 8. AI Observability
 9. AI Evaluation
 10. Evidence-Grounded Resume Content Planning
+   - AEM-010B: Resume Rendering and End-to-End Generation
 11. Intelligence Benchmarking
 
 ## How to read this roadmap

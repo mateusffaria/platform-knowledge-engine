@@ -7,7 +7,7 @@ Create a structured Resume Content Plan exclusively from the latest compatible C
 ## Architecture
 
 ```text
-Curated Evidence Pack → Resume Content Planner → validated immutable Resume Content Plan → future Renderer
+Curated Evidence Pack → Resume Content Planner → validated immutable Resume Content Plan → AEM-010B deterministic generation
 ```
 
 The planner is closed-world and has no repository, retrieval, pgvector, external-search, raw-document, or unrestricted-tool access. The documents use case supplies only curated selections and canonical presentation metadata required for validation and later rendering.
@@ -33,13 +33,13 @@ The planner is closed-world and has no repository, retrieval, pgvector, external
 - Existing ingestion, claims, retrieval, jobs, and evidence-evaluation workflows remain functional.
 - Compound job sentences retain parent provenance while component IDs trace through candidates, reasoning, and resume output.
 
-## Out of Scope
+## AEM-010 planning exclusions
 
-- PDF, DOCX, HTML, and visual templates;
+- Artifact rendering is deliberately outside the planning use case. Markdown, HTML, and PDF are delivered separately by AEM-010B; DOCX and multiple visual templates remain excluded.
 - cover letters, LinkedIn content, and interview answers;
 - ATS/subjective scoring, provider benchmarking, and LLM-as-judge;
 - automated applications.
 
-## Next Milestone
+## Follow-on milestone
 
-AEM-011 — Intelligence Benchmarking.
+AEM-010B — Resume Rendering and End-to-End Generation, followed by AEM-011 — Intelligence Benchmarking.
