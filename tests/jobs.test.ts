@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
+import { readFileSync } from "node:fs";
 
 import { JobDescriptionRepository } from "../src/modules/jobs/application/ports/job-description-repository.js";
 import { createBuildJobRetrievalIntentUseCase } from "../src/modules/jobs/application/use-cases/build-job-retrieval-intent.js";
@@ -10,6 +11,7 @@ import { DeterministicJobSourceParser, parseJobSource } from "../src/modules/job
 import { DrizzleJobDescriptionRepository } from "../src/modules/jobs/infrastructure/repositories/drizzle-job-description-repository.js";
 import { registerJobsCommands } from "../src/modules/jobs/interfaces/cli/jobs-command.js";
 import { EvidencePack } from "../src/modules/retrieval/application/types.js";
+import { atomicComponentsOf, normalizeWarnings, singletonAtomicRequirement, validateAtomicComponents } from "../src/modules/jobs/domain/atomic-job-requirement.js";
 
 function makeJobDescription(): JobDescriptionWithRequirements {
   return {
@@ -149,6 +151,53 @@ describe("deterministic job parser", () => {
     ]));
   });
 
+  it.each([
+    ["Strong knowledge of Go and PostgreSQL", ["Go", "PostgreSQL"]],
+    ["Terraform and AWS", ["Terraform", "AWS"]],
+    ["Docker and Kubernetes", ["Docker", "Kubernetes"]]
+  ])("decomposes independently testable coordinated values in %s", (text, expected) => {
+    const parsed = parseJobSource("examples/job.md", `## Requirements\n- ${text}`);
+    const requirement = parsed.requirements[0];
+    const components = atomicComponentsOf(requirement);
+    expect(requirement.originalText).toBe(text);
+    expect(components.map((component) => component.normalizedValue)).toEqual(expected);
+    expect(components.map((component) => requirement.originalText.slice(component.sourceTextStart, component.sourceTextEnd))).toEqual(expected);
+    expect(components.every((component) => component.jobRequirementId === requirement.id)).toBe(true);
+  });
+
+  it.each([
+    "Design and build distributed systems",
+    "Strong knowledge of Go and Rust",
+    "Collaborate with product and design teams"
+  ])("keeps non-atomic or unsupported coordination as a singleton: %s", (text) => {
+    const section = text.startsWith("Design") || text.startsWith("Collaborate") ? "Responsibilities" : "Requirements";
+    const requirement = parseJobSource("examples/job.md", `## ${section}\n- ${text}`).requirements[0];
+    expect(atomicComponentsOf(requirement)).toHaveLength(1);
+    expect(atomicComponentsOf(requirement)[0].originalText).toBe(text);
+  });
+
+  it("derives stable singleton identities without mutating a legacy requirement", () => {
+    const requirement = makeJobDescription().requirements[0];
+    const snapshot = structuredClone(requirement);
+    expect(singletonAtomicRequirement(requirement).id).toBe(singletonAtomicRequirement(requirement).id);
+    expect(requirement).toEqual(snapshot);
+  });
+
+  it("rejects invalid component provenance and preserves warnings with distinct codes", () => {
+    const document = parseJobSource("compound.md", "## Requirements\n- Go and PostgreSQL");
+    const requirement = document.requirements[0];
+    requirement.components![0] = { ...requirement.components![0], sourceTextEnd: requirement.originalText.length + 1 };
+    expect(() => validateAtomicComponents(requirement)).toThrow("invalid source span");
+    expect(normalizeWarnings([
+      { code: "retrieval_timeout", message: "Partial results." },
+      { code: "canonical_hydration", message: "Partial results." },
+      { code: "retrieval_timeout", message: "Partial results." }
+    ])).toEqual([
+      { code: "canonical_hydration", message: "Partial results." },
+      { code: "retrieval_timeout", message: "Partial results." }
+    ]);
+  });
+
   it("rejects unsupported and empty sources before persistence", async () => {
     const parser = new DeterministicJobSourceParser();
     await expect(parser.parse("examples/job.pdf")).rejects.toThrow("Only Markdown");
@@ -193,7 +242,8 @@ describe("job application use cases", () => {
 
   it("persists the job and all of its requirements in one transaction", async () => {
     const document = makeJobDescription();
-    const values = vi.fn(async () => undefined);
+    const requirementValues = vi.fn(async () => undefined);
+    const componentValues = vi.fn(async () => undefined);
     const insert = vi.fn()
       .mockReturnValueOnce({
         values: vi.fn(() => ({
@@ -202,15 +252,84 @@ describe("job application use cases", () => {
           }))
         }))
       })
-      .mockReturnValueOnce({ values });
+      .mockReturnValueOnce({ values: requirementValues })
+      .mockReturnValueOnce({ values: componentValues });
     const transaction = vi.fn(async (handler: (tx: { insert: typeof insert }) => Promise<void>) => handler({ insert }));
     const repository = new DrizzleJobDescriptionRepository({ select: vi.fn(), transaction } as never);
 
     await repository.save(document);
 
     expect(transaction).toHaveBeenCalledOnce();
-    expect(insert).toHaveBeenCalledTimes(2);
-    expect(values).toHaveBeenCalledOnce();
+    expect(insert).toHaveBeenCalledTimes(3);
+    expect(requirementValues).toHaveBeenCalledOnce();
+    expect(componentValues).toHaveBeenCalledOnce();
+    expect(componentValues).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ jobRequirementId: "requirement-typescript", componentIndex: 0, originalText: "TypeScript" })
+    ]));
+  });
+
+  it("loads stored components in source order and adapts legacy rows without writing", async () => {
+    const parsed = parseJobSource("compound.md", "## Requirements\n- Go and PostgreSQL");
+    const requirement = parsed.requirements[0];
+    const requirementRow = {
+      id: requirement.id,
+      jobDescriptionId: parsed.job.id,
+      requirementType: requirement.requirementType,
+      importance: requirement.importance,
+      normalizedValue: requirement.normalizedValue ?? null,
+      originalText: requirement.originalText,
+      sourceExcerpt: requirement.sourceExcerpt,
+      sourceStartLine: requirement.sourceLocation.startLine,
+      sourceEndLine: requirement.sourceLocation.endLine,
+      sectionLabel: requirement.sectionLabel ?? null,
+      inferred: requirement.inferred
+    };
+    const componentRows = atomicComponentsOf(requirement).map((component) => ({
+      id: component.id,
+      jobRequirementId: component.jobRequirementId,
+      componentIndex: component.componentIndex,
+      originalText: component.originalText,
+      requirementType: component.requirementType,
+      importance: component.importance,
+      normalizedValue: component.normalizedValue ?? null,
+      sourceExcerpt: component.sourceExcerpt,
+      sourceStartLine: component.sourceLocation.startLine,
+      sourceEndLine: component.sourceLocation.endLine,
+      sourceTextStart: component.sourceTextStart,
+      sourceTextEnd: component.sourceTextEnd
+    })).reverse();
+    const database = (storedComponents: typeof componentRows) => {
+      let phase = 0;
+      return {
+        select: vi.fn(() => {
+          const current = phase++ % 3;
+          if (current === 0) return { from: () => ({ where: () => ({ limit: async () => [parsed.job] }) }) };
+          if (current === 1) return { from: () => ({ where: () => ({ orderBy: async () => [requirementRow] }) }) };
+          return { from: () => ({ where: () => ({ orderBy: async () => storedComponents }) }) };
+        }),
+        transaction: vi.fn()
+      };
+    };
+
+    const stored = await new DrizzleJobDescriptionRepository(database(componentRows) as never).findById(parsed.job.id);
+    expect(stored?.requirements[0].components?.map((component) => component.originalText)).toEqual(["Go", "PostgreSQL"]);
+
+    const legacyDb = database([]);
+    const legacyRepository = new DrizzleJobDescriptionRepository(legacyDb as never);
+    const first = await legacyRepository.findById(parsed.job.id);
+    const second = await legacyRepository.findById(parsed.job.id);
+    expect(first?.requirements[0].components).toEqual(second?.requirements[0].components);
+    expect(first?.requirements[0].components).toHaveLength(1);
+    expect(legacyDb.transaction).not.toHaveBeenCalled();
+  });
+
+  it("keeps the atomic-component migration additive and leaves parent rows untouched", () => {
+    const migration = readFileSync(new URL("../drizzle/0012_add_job_requirement_components.sql", import.meta.url), "utf8");
+    expect(migration).toContain('CREATE TABLE "job_requirement_components"');
+    expect(migration).toContain('UNIQUE INDEX "job_requirement_components_requirement_order_unique"');
+    expect(migration).toContain('REFERENCES "public"."job_requirements"("id") ON DELETE cascade');
+    expect(migration).not.toContain('ALTER TABLE "job_requirements"');
+    expect(migration).not.toMatch(/^(?:DROP|UPDATE|DELETE)\b/m);
   });
 
   it("builds a deterministic, deduplicated intent with semantic fallback and traceability", async () => {
@@ -234,6 +353,21 @@ describe("job application use cases", () => {
     expect(first.inferredRequirementIds).toEqual(["requirement-inferred"]);
     expect(first.warnings).toContain("1 inferred job requirement signal(s) are included in retrieval intent.");
     await expect(buildIntent.execute({ jobDescriptionId: "missing" })).rejects.toThrow("Job description not found: missing");
+  });
+
+  it("builds ordered component retrieval intents while retaining the parent requirement", async () => {
+    const repository = new RecordingJobRepository();
+    const document = parseJobSource("compound.md", "## Requirements\n- Strong knowledge of Go and PostgreSQL");
+    await repository.save(document);
+
+    const intent = await createBuildJobRetrievalIntentUseCase(repository).execute({ jobDescriptionId: document.job.id });
+    const components = atomicComponentsOf(document.requirements[0]);
+    expect(intent.sourceRequirementIds).toEqual([document.requirements[0].id]);
+    expect(intent.componentIntents).toEqual([
+      expect.objectContaining({ requirementId: document.requirements[0].id, componentId: components[0].id, componentText: "Go", query: 'technology:"Go" Go' }),
+      expect.objectContaining({ requirementId: document.requirements[0].id, componentId: components[1].id, componentText: "PostgreSQL", query: 'technology:"PostgreSQL" PostgreSQL' })
+    ]);
+    expect(intent.filters.map((filter) => [filter.value, filter.sourceComponentIds])).toEqual([["Go", [components[0].id]], ["PostgreSQL", [components[1].id]]]);
   });
 });
 
@@ -260,7 +394,7 @@ describe("jobs CLI commands", () => {
     candidatePackHash: "pack-hash",
     provider: "ollama",
     model: "test-model",
-    promptVersion: "evidence-reasoner-v6",
+    promptVersion: "evidence-reasoner-v8",
     createdAt: new Date("2026-07-16T00:00:00.000Z"),
     overallCoverageSummary: "Partial coverage.",
     requirementCoverage: [],
@@ -377,7 +511,7 @@ describe("jobs CLI commands", () => {
       }),
       model: "override-model"
     }));
-    expect(JSON.parse(log.mock.calls[0][0]).promptVersion).toBe("evidence-reasoner-v6");
+    expect(JSON.parse(log.mock.calls[0][0]).promptVersion).toBe("evidence-reasoner-v8");
     log.mockRestore();
   });
 

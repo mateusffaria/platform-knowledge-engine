@@ -1,6 +1,7 @@
 import { buildCandidateEvidencePack, candidateEvidencePackVersion, toCandidateEvidence } from "../../../jobs/application/candidate-evidence-pack.js"
 import { EvidenceReasoner } from "../../../jobs/application/ports/evidence-reasoner.js"
 import { CandidateEvidencePack, isDegradedEvidenceReasoningResult, JobDescriptionWithRequirements } from "../../../jobs/domain/model.js"
+import { atomicRequirementComponentId } from "../../../jobs/domain/atomic-job-requirement.js"
 import { MetadataMatcher } from "../../../retrieval/application/ports/metadata-matcher.js"
 import { StructuredKnowledgeSearch } from "../../../retrieval/application/ports/structured-knowledge-search.js"
 import { createHybridSearchUseCase } from "../../../retrieval/application/use-cases/hybrid-search.js"
@@ -284,7 +285,10 @@ export class FixtureEvaluationPipeline implements EvaluationPipeline {
           promptVersion: scenario.reasoning?.promptVersion ?? "fixture-reasoning-v1",
           requirements: scenario.requirements.map((requirement) => {
             const observed = coverage.find((entry) => entry.requirementId === requirement.id)
-            return { requirementId: requirement.id, requirementText: requirement.text, importance: requirement.importance, coverageStatus: observed?.coverageStatus ?? "missing", selectedEvidenceIds: observed?.selectedEvidenceIds ?? [] }
+            const componentId = atomicRequirementComponentId({ requirementId: requirement.id, index: 0, originalText: requirement.text, sourceTextStart: 0, sourceTextEnd: requirement.text.length })
+            const coverageStatus = observed?.coverageStatus ?? "missing"
+            const selectedEvidenceIds = observed?.selectedEvidenceIds ?? []
+            return { requirementId: requirement.id, requirementText: requirement.text, importance: requirement.importance, coverageStatus, selectedEvidenceIds, components: [{ componentId, componentIndex: 0, componentText: requirement.text, coverageStatus, selectedEvidenceIds }] }
           }),
           selectedEvidence: scenario.evidence.filter((evidence) => selectedIds.has(evidence.id)).map((evidence) => ({
             evidenceClaimId: evidence.id,
@@ -296,11 +300,21 @@ export class FixtureEvaluationPipeline implements EvaluationPipeline {
             contribution: evidence.claimText,
             exaggerationRisk: evidence.exaggerationRisk ?? "low",
             requirementIds: evidence.requirementIds,
+            componentIds: evidence.requirementIds.map((requirementId) => {
+              const requirement = scenario.requirements.find((candidate) => candidate.id === requirementId)
+              const text = requirement?.text ?? requirementId
+              return atomicRequirementComponentId({ requirementId, index: 0, originalText: text, sourceTextStart: 0, sourceTextEnd: text.length })
+            }),
             presentation: evidence.presentation ?? { sourceOrganizationOrExperienceId: evidence.knowledgeAssetId, technologies: evidence.tags, metrics: [] },
             provenance: evidence.sources.map((source) => ({ sourceDocumentId: source.sourceDocumentId, sourceReferenceId: source.sourceReferenceId, locator: source.locator }))
           })),
           discardedEvidenceIds: scenario.evidence.filter((evidence) => !selectedIds.has(evidence.id)).map((evidence) => evidence.id),
           missingRequirementIds: coverage.filter((entry) => entry.coverageStatus === "missing").map((entry) => entry.requirementId),
+          missingComponentIds: coverage.filter((entry) => entry.coverageStatus === "missing").map((entry) => {
+            const requirement = scenario.requirements.find((candidate) => candidate.id === entry.requirementId)
+            const text = requirement?.text ?? entry.requirementId
+            return atomicRequirementComponentId({ requirementId: entry.requirementId, index: 0, originalText: text, sourceTextStart: 0, sourceTextEnd: text.length })
+          }),
           warnings: [],
           limitations: []
         }
@@ -316,7 +330,7 @@ export class FixtureEvaluationPipeline implements EvaluationPipeline {
         schemaValid = false
         validationIssues = [{ code: error instanceof ResumePlanSchemaError ? error.diagnostic.errorCode : "evaluation_error", path: "root" }]
       }
-      const identityInput = { curatedEvidencePackId: input.curatedEvidencePack.id, provider: "fixture", model: "fixture-resume-planner", promptVersion: "resume-planning/v1", language: planning.language, length: planning.length }
+      const identityInput = { curatedEvidencePackId: input.curatedEvidencePack.id, provider: "fixture", model: "fixture-resume-planner", promptVersion: "resume-planning/v7", language: planning.language, length: planning.length }
       executions.push({
         stage: "resume_planning",
         observation: {
@@ -330,7 +344,7 @@ export class FixtureEvaluationPipeline implements EvaluationPipeline {
           validationIssues,
           planIdentityStable: planning.identityReuse ? buildResumePlanIdentity(identityInput) === buildResumePlanIdentity(identityInput) : undefined
         },
-        metadata: { provider: "fixture", model: "fixture-resume-planner", promptVersion: "resume-planning/v1", durationMs: this.now() - started }
+        metadata: { provider: "fixture", model: "fixture-resume-planner", promptVersion: "resume-planning/v7", durationMs: this.now() - started }
       })
     }
 

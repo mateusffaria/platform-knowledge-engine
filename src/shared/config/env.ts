@@ -97,7 +97,7 @@ export function loadConfig(): AppConfig {
     llmModel: process.env.LLM_MODEL || undefined,
     ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434",
     ollamaMaxPredict: readPositiveInteger("OLLAMA_MAX_PREDICT", 4096),
-    reasoningCandidateLimit: readPositiveInteger("REASONING_CANDIDATE_LIMIT", 3),
+    reasoningCandidateLimit: readPositiveInteger("REASONING_CANDIDATE_LIMIT", 10),
     semanticSearchMinScore: readOptionalNumber("SEMANTIC_SEARCH_MIN_SCORE")
   };
 }

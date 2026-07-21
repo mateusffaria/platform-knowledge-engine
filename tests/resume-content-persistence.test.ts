@@ -61,7 +61,7 @@ function plan(): ResumeContentPlan {
   return {
     id: "00000000-0000-4000-8000-000000000001",
     planIdentity: "a".repeat(64),
-    schemaVersion: "resume-content-plan/v1",
+    schemaVersion: "resume-content-plan/v2",
     jobDescriptionId: "00000000-0000-4000-8000-000000000021",
     curatedEvidencePackId: "00000000-0000-4000-8000-000000000020",
     language: "en",
@@ -75,7 +75,7 @@ function plan(): ResumeContentPlan {
     warnings: [],
     provider: "ollama",
     model: "qwen",
-    promptVersion: "resume-planning/v1",
+    promptVersion: "resume-planning/v7",
     createdAt: new Date("2026-07-20T15:00:00Z")
   }
 }

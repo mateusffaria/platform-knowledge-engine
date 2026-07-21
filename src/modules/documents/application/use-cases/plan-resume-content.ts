@@ -57,7 +57,10 @@ function repairResolution(code: ResumePlanValidationError["issues"][number]["cod
     case "selected_and_omitted": return "This evidence is both used and omitted. If it remains cited, keep it in selectedEvidenceIds and remove it from omittedEvidence; otherwise remove every citation and keep it omitted."
     case "selected_set_mismatch": return "Recompute selectedEvidenceIds as the exact unique union of all supportingEvidenceIds."
     case "uncovered_requirement_mismatch": return "Set uncoveredRequirementIds to the exact uncoveredRequirementIds namespace supplied in the prompt."
+    case "uncovered_component_mismatch": return "Set uncoveredRequirementComponentIds to the exact uncovered component namespace supplied in the prompt."
     case "unsupported_requirement": return "Target only a targetable requirement supported by this bullet's supportingEvidenceIds; never target an uncovered requirement."
+    case "unsupported_component": return "Target only a covered atomic component supported by this bullet's evidence and include its parent requirement ID."
+    case "parent_scope_overstatement": return "Narrow the parent target to the covered targetRequirementComponentIds and do not imply coverage of missing siblings."
     case "skill_promoted_to_experience": return "Remove skill-only evidence from plannedExperiences. Use only experienceEvidenceIds there, and place supported skill-only content in professionalSummary or plannedSkillGroups."
     default: return "Regenerate the complete response and correct this validation issue."
   }
@@ -134,6 +137,7 @@ export function createPlanResumeContentUseCase(dependencies: PlanResumeContentDe
             const allowlistedIdentifiers = new Set([
               ...input.curatedEvidencePack.selectedEvidence.map((evidence) => evidence.evidenceClaimId),
               ...input.curatedEvidencePack.requirements.map((requirement) => requirement.requirementId),
+              ...input.curatedEvidencePack.requirements.flatMap((requirement) => requirement.components.map((component) => component.componentId)),
               ...input.curatedEvidencePack.selectedEvidence.map((evidence) => evidence.presentation.sourceOrganizationOrExperienceId)
             ])
             repair = {

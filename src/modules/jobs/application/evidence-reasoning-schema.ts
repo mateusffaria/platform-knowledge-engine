@@ -3,12 +3,15 @@ import { z } from "zod";
 import {
   CandidateEvidence,
   CandidateEvidencePack,
+  CandidateRequirementComponentEvidence,
   CoverageStatus,
   EvidenceRejection,
   EvidenceSelection,
+  RequirementComponentCoverage,
   RequirementCoverage
 } from "../domain/model.js";
-import { missingCoverage } from "./evidence-curation.js";
+import { candidateComponentsOf } from "../domain/atomic-job-requirement.js";
+import { aggregateRequirementCoverage } from "./evidence-curation.js";
 
 const coverageStatusSchema = z.enum(["strong", "partial", "weak", "missing"]);
 const selectionSchema = z.object({
@@ -27,6 +30,7 @@ const rejectionSchema = z.object({
 }).strict();
 const coverageSchema = z.object({
   requirementId: z.string().trim().min(1),
+  componentId: z.string().trim().min(1).optional(),
   coverageStatus: coverageStatusSchema,
   selections: z.array(selectionSchema),
   rejections: z.array(rejectionSchema),
@@ -61,9 +65,10 @@ export const evidenceReasoningOutputJsonSchema: Record<string, unknown> = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["requirementId", "coverageStatus", "selections", "rejections", "strengthFactors", "limitations", "explanation"],
+        required: ["requirementId", "componentId", "coverageStatus", "selections", "rejections", "strengthFactors", "limitations", "explanation"],
         properties: {
           requirementId: { type: "string", minLength: 1 },
+          componentId: { type: "string", minLength: 1 },
           coverageStatus: { type: "string", enum: ["strong", "partial", "weak", "missing"] },
           selections: {
             type: "array",
@@ -167,11 +172,12 @@ function deduplicateCoverage(
 ): EvidenceReasoningOutput["coverage"] {
   const seen = new Set<string>();
   return coverage.filter((entry) => {
-    if (seen.has(entry.requirementId)) {
+    const key = `${entry.requirementId}\u0000${entry.componentId ?? "legacy-singleton"}`;
+    if (seen.has(key)) {
       validationWarnings.push(`Evidence Reasoner repeated coverage for requirement ${entry.requirementId}; the first coverage decision was retained.`);
       return false;
     }
-    seen.add(entry.requirementId);
+    seen.add(key);
     return true;
   });
 }
@@ -198,30 +204,40 @@ function normalizeComplementaryEvidenceIds(
   });
 }
 
-function candidateById(requirement: CandidateEvidencePack["requirements"][number], id: string): CandidateEvidence {
-  if (!requirement.reasonerCandidateIds.includes(id)) {
+function candidateById(component: CandidateRequirementComponentEvidence, id: string): CandidateEvidence {
+  if (!component.reasonerCandidateIds.includes(id)) {
     throw new Error(`Evidence reasoner referenced an unknown or out-of-scope evidence claim: ${id}`);
   }
-  const candidate = requirement.candidates.find((value) => value.evidenceClaimId === id);
+  const candidate = component.candidates.find((value) => value.evidenceClaimId === id);
   if (!candidate) {
     throw new Error(`Evidence reasoner referenced an unknown or out-of-scope evidence claim: ${id}`);
   }
   return candidate;
 }
 
-function omittedCoverage(requirement: CandidateEvidencePack["requirements"][number]): RequirementCoverage {
+function missingComponentCoverage(
+  requirement: CandidateEvidencePack["requirements"][number],
+  component: CandidateRequirementComponentEvidence,
+  omitted: boolean
+): RequirementComponentCoverage {
   return {
     requirementId: requirement.requirementId,
-    requirementText: requirement.requirementText,
-    importance: requirement.importance,
+    componentId: component.componentId,
+    componentIndex: component.componentIndex,
+    componentText: component.componentText,
+    importance: component.importance,
     coverageStatus: "missing",
     selectedEvidenceIds: [],
     rejectedCandidateEvidenceIds: [],
     selections: [],
     rejections: [],
     strengthFactors: [],
-    limitations: ["The Evidence Reasoner omitted a coverage decision even though canonical candidate evidence was available."],
-    explanation: "The supplied canonical candidates were retained, but no bounded coverage decision was returned for this requirement."
+    limitations: [omitted
+      ? "The Evidence Reasoner omitted a coverage decision for this atomic component even though canonical candidate evidence was available."
+      : "No eligible canonical evidence was supplied for this atomic component."],
+    explanation: omitted
+      ? "The supplied canonical candidates were retained, but no bounded coverage decision was returned for this atomic component."
+      : "No eligible canonical evidence was supplied; component coverage cannot be established."
   };
 }
 
@@ -230,73 +246,102 @@ function validateCoverage(
   pack: CandidateEvidencePack,
   validationWarnings: string[]
 ): RequirementCoverage[] {
-  const requirementIds = new Set(pack.requirements.map((requirement) => requirement.requirementId));
-  const knownCoverage = output.coverage.filter((entry) => {
-    if (!requirementIds.has(entry.requirementId)) {
+  const requirementsById = new Map(pack.requirements.map((requirement) => [requirement.requirementId, requirement]));
+  const resolvedCoverage = output.coverage.flatMap((entry) => {
+    const requirement = requirementsById.get(entry.requirementId);
+    if (!requirement) {
       validationWarnings.push(`Evidence Reasoner returned unknown requirement ${entry.requirementId}; the out-of-scope coverage entry was ignored.`);
-      return false;
+      return [];
     }
-    return true;
+    const components = candidateComponentsOf(requirement);
+    if (entry.componentId) {
+      if (!components.some((component) => component.componentId === entry.componentId)) {
+        throw new Error(`Evidence reasoner referenced an unknown component ${entry.componentId} for requirement ${entry.requirementId}.`);
+      }
+      return [{ ...entry, componentId: entry.componentId }];
+    }
+    if (components.length !== 1) {
+      throw new Error(`Evidence reasoner omitted componentId for compound requirement ${entry.requirementId}.`);
+    }
+    return [{ ...entry, componentId: components[0].componentId }];
   });
-  const coverageByRequirement = new Map(
-    deduplicateCoverage(knownCoverage, validationWarnings).map((entry) => [entry.requirementId, entry])
+  const coverageByComponent = new Map(
+    deduplicateCoverage(resolvedCoverage, validationWarnings).map((entry) => [`${entry.requirementId}\u0000${entry.componentId}`, entry])
   );
   const result: RequirementCoverage[] = [];
 
   for (const requirement of pack.requirements) {
-    const draft = coverageByRequirement.get(requirement.requirementId);
-    if (!draft) {
-      if (requirement.reasonerCandidateIds.length === 0) {
-        result.push(missingCoverage(requirement));
+    const componentCoverage: RequirementComponentCoverage[] = [];
+    for (const component of candidateComponentsOf(requirement)) {
+      const draft = coverageByComponent.get(`${requirement.requirementId}\u0000${component.componentId}`);
+      if (!draft) {
+        const omitted = component.reasonerCandidateIds.length > 0;
+        componentCoverage.push(missingComponentCoverage(requirement, component, omitted));
+        if (omitted) {
+          validationWarnings.push(`Evidence Reasoner omitted coverage for requirement ${requirement.requirementId} component ${component.componentId}; it was recorded as missing without discarding its canonical candidates.`);
+        }
         continue;
       }
-      result.push(omittedCoverage(requirement));
-      validationWarnings.push(`Evidence Reasoner omitted coverage for requirement ${requirement.requirementId}; it was recorded as missing without discarding its canonical candidates.`);
-      continue;
+      const normalizedRejections = deduplicateRejections(draft.rejections, requirement.requirementId, validationWarnings);
+      const selectedIds = draft.selections.map((selection) => selection.evidenceClaimId);
+      const rejectedIds = normalizedRejections.map((rejection) => rejection.evidenceClaimId);
+      unique(selectedIds, `selected evidence for ${requirement.requirementId} component ${component.componentId}`);
+      if (selectedIds.some((id) => rejectedIds.includes(id))) {
+        throw new Error(`Evidence reasoner both selected and rejected the same evidence for ${requirement.requirementId} component ${component.componentId}.`);
+      }
+      if (draft.coverageStatus === "missing" && selectedIds.length > 0) {
+        throw new Error(`Evidence reasoner selected evidence for missing coverage: ${component.componentId}`);
+      }
+      const selections: EvidenceSelection[] = draft.selections.map((selection) => {
+        const complementaryEvidenceIds = normalizeComplementaryEvidenceIds(
+          selection.complementaryEvidenceIds ?? [],
+          selection.evidenceClaimId,
+          selectedIds,
+          requirement.requirementId,
+          validationWarnings
+        );
+        return {
+          ...selection,
+          complementaryEvidenceIds: complementaryEvidenceIds.length ? complementaryEvidenceIds : undefined,
+          evidence: candidateById(component, selection.evidenceClaimId),
+          addressedRequirementIds: [requirement.requirementId],
+          addressedComponentIds: [component.componentId]
+        };
+      });
+      const rejections: EvidenceRejection[] = normalizedRejections.map((rejection) => ({
+        evidenceClaimId: rejection.evidenceClaimId,
+        reason: rejection.reason === "missing" ? "unsupported_scope" : rejection.reason,
+        explanation: rejection.explanation,
+        evidence: candidateById(component, rejection.evidenceClaimId),
+        addressedRequirementIds: [requirement.requirementId],
+        addressedComponentIds: [component.componentId]
+      }));
+      const onlySkillSelection = selections.length === 1 && selections[0].evidence.claimType === "skill";
+      if (draft.coverageStatus === "strong" && onlySkillSelection) {
+        throw new Error(`Evidence reasoner marked isolated skill-only evidence as strong coverage for ${component.componentId}.`);
+      }
+      componentCoverage.push({
+        requirementId: requirement.requirementId,
+        componentId: component.componentId,
+        componentIndex: component.componentIndex,
+        componentText: component.componentText,
+        importance: component.importance,
+        coverageStatus: draft.coverageStatus as CoverageStatus,
+        selectedEvidenceIds: selectedIds,
+        rejectedCandidateEvidenceIds: rejectedIds,
+        selections,
+        rejections,
+        strengthFactors: draft.strengthFactors,
+        limitations: draft.limitations,
+        explanation: draft.explanation
+      });
     }
-    const normalizedRejections = deduplicateRejections(draft.rejections, requirement.requirementId, validationWarnings);
-    const selectedIds = draft.selections.map((selection) => selection.evidenceClaimId);
-    const rejectedIds = normalizedRejections.map((rejection) => rejection.evidenceClaimId);
-    unique(selectedIds, `selected evidence for ${requirement.requirementId}`);
-    if (selectedIds.some((id) => rejectedIds.includes(id))) {
-      throw new Error(`Evidence reasoner both selected and rejected the same evidence for ${requirement.requirementId}.`);
-    }
-    if (draft.coverageStatus === "missing" && selectedIds.length > 0) {
-      throw new Error(`Evidence reasoner selected evidence for missing coverage: ${requirement.requirementId}`);
-    }
-    const selections: EvidenceSelection[] = draft.selections.map((selection) => {
-      const complementaryEvidenceIds = normalizeComplementaryEvidenceIds(
-        selection.complementaryEvidenceIds ?? [],
-        selection.evidenceClaimId,
-        selectedIds,
-        requirement.requirementId,
-        validationWarnings
-      );
-      return { ...selection, complementaryEvidenceIds: complementaryEvidenceIds.length ? complementaryEvidenceIds : undefined, evidence: candidateById(requirement, selection.evidenceClaimId) };
-    });
-    const rejections: EvidenceRejection[] = normalizedRejections.map((rejection) => ({
-      evidenceClaimId: rejection.evidenceClaimId,
-      reason: rejection.reason === "missing" ? "unsupported_scope" : rejection.reason,
-      explanation: rejection.explanation,
-      evidence: candidateById(requirement, rejection.evidenceClaimId)
-    }));
-    const onlySkillSelection = selections.length === 1 && selections[0].evidence.claimType === "skill";
-    if (draft.coverageStatus === "strong" && onlySkillSelection) {
-      throw new Error(`Evidence reasoner marked isolated skill-only evidence as strong coverage for ${requirement.requirementId}.`);
-    }
-    result.push({
+    result.push(aggregateRequirementCoverage({
       requirementId: requirement.requirementId,
       requirementText: requirement.requirementText,
       importance: requirement.importance,
-      coverageStatus: draft.coverageStatus as CoverageStatus,
-      selectedEvidenceIds: selectedIds,
-      rejectedCandidateEvidenceIds: rejectedIds,
-      selections,
-      rejections,
-      strengthFactors: draft.strengthFactors,
-      limitations: draft.limitations,
-      explanation: draft.explanation
-    });
+      componentCoverage
+    }));
   }
   return result;
 }

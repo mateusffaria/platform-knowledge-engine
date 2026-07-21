@@ -17,6 +17,7 @@ The planner is closed-world and has no repository, retrieval, pgvector, external
 - documents-module hexagonal boundaries and planner/persistence/observability ports;
 - schema-bound LLM planning through the existing provider abstraction;
 - traceable summary, experiences, bullets, skill groups, omissions, uncovered requirements, and warnings;
+- atomic requirement targeting so a covered sibling can be used without overstating a missing sibling;
 - exact metrics, dates, organizations, roles, technologies, evidence strength, and missing-requirement validation;
 - `pt-BR` and `en`, with concise/standard/detailed bounds;
 - immutable identity and reuse across pack/provider/model/prompt/language/length;
@@ -30,6 +31,7 @@ The planner is closed-world and has no repository, retrieval, pgvector, external
 - English/Portuguese and distinct bounded length profiles are supported.
 - Identical requests reuse the immutable stored plan.
 - Existing ingestion, claims, retrieval, jobs, and evidence-evaluation workflows remain functional.
+- Compound job sentences retain parent provenance while component IDs trace through candidates, reasoning, and resume output.
 
 ## Out of Scope
 

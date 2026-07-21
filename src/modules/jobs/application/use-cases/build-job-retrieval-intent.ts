@@ -1,9 +1,11 @@
 import {
+  AtomicJobRequirement,
   JobPkqlFilter,
   JobPkqlFilterField,
   JobRequirement,
   JobRetrievalIntent
 } from "../../domain/model.js";
+import { atomicComponentsOf, normalizeWarnings } from "../../domain/atomic-job-requirement.js";
 import { JobAnalysisRepository } from "../ports/job-analysis-repository.js";
 import { JobDescriptionRepository } from "../ports/job-description-repository.js";
 
@@ -44,6 +46,22 @@ function explicitFilter(requirement: JobRequirement): { field: JobPkqlFilterFiel
   return undefined;
 }
 
+function componentFilter(component: AtomicJobRequirement): { field: JobPkqlFilterField; value: string } | undefined {
+  if (component.normalizedValue && component.requirementType === "skill") return { field: "skill", value: component.normalizedValue };
+  if (component.normalizedValue && component.requirementType === "technology") return { field: "technology", value: component.normalizedValue };
+  return explicitFilter({
+    id: component.id,
+    jobDescriptionId: "component",
+    requirementType: component.requirementType,
+    importance: component.importance,
+    normalizedValue: component.normalizedValue,
+    originalText: component.originalText,
+    sourceExcerpt: component.sourceExcerpt,
+    sourceLocation: component.sourceLocation,
+    inferred: false
+  });
+}
+
 export function createBuildJobRetrievalIntentUseCase(
   repository: JobDescriptionRepository,
   jobAnalysisRepository?: JobAnalysisRepository
@@ -66,23 +84,47 @@ export function createBuildJobRetrievalIntentUseCase(
       const filterMap = new Map<string, JobPkqlFilter>();
       const semanticText: string[] = [];
       const semanticSeen = new Set<string>();
+      const componentIntents = requirements.filter((requirement) => !requirement.inferred).flatMap((requirement) => (
+        atomicComponentsOf(requirement).map((component) => {
+          const filter = componentFilter(component);
+          const semanticText = component.originalText;
+          return {
+            requirementId: requirement.id,
+            componentId: component.id,
+            componentText: component.originalText,
+            requirementType: component.requirementType,
+            importance: component.importance,
+            filter,
+            query: `${filter ? `${filter.field}:${quotedPkqlValue(filter.value)} ` : ""}${semanticText}`.trim(),
+            semanticText
+          };
+        })
+      ));
 
       for (const requirement of requirements) {
-        const filter = explicitFilter(requirement);
-        if (filter) {
-          const key = `${filter.field}:${normalizeKey(filter.value)}`;
-          const current = filterMap.get(key);
-          if (current) {
-            current.sourceRequirementIds.push(requirement.id);
-          } else {
-            filterMap.set(key, { ...filter, sourceRequirementIds: [requirement.id] });
+        if (requirement.inferred) {
+          const semanticKey = normalizeKey(requirement.originalText);
+          if (!semanticSeen.has(semanticKey)) {
+            semanticSeen.add(semanticKey);
+            semanticText.push(requirement.originalText);
           }
         }
-
-        const semanticKey = normalizeKey(requirement.originalText);
+      }
+      for (const component of componentIntents) {
+        if (component.filter) {
+          const key = `${component.filter.field}:${normalizeKey(component.filter.value)}`;
+          const current = filterMap.get(key);
+          if (current) {
+            if (!current.sourceRequirementIds.includes(component.requirementId)) current.sourceRequirementIds.push(component.requirementId);
+            current.sourceComponentIds = [...new Set([...(current.sourceComponentIds ?? []), component.componentId])];
+          } else {
+            filterMap.set(key, { ...component.filter, sourceRequirementIds: [component.requirementId], sourceComponentIds: [component.componentId] });
+          }
+        }
+        const semanticKey = normalizeKey(component.semanticText);
         if (!semanticSeen.has(semanticKey)) {
           semanticSeen.add(semanticKey);
-          semanticText.push(requirement.originalText);
+          semanticText.push(component.semanticText);
         }
       }
 
@@ -124,7 +166,9 @@ export function createBuildJobRetrievalIntentUseCase(
         filters,
         query,
         semanticText: semanticText.join(" "),
-        warnings
+        warnings: [...new Set(warnings)].sort(),
+        componentIntents,
+        warningDiagnostics: normalizeWarnings(warnings, "job_retrieval_intent")
       };
     }
   };

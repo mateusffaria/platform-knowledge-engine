@@ -28,7 +28,7 @@ Options:
 
 ## Plan model and immutable identity
 
-A plan records its job and Curated Evidence Pack IDs, language, length, professional summary, experiences, bullets, skill groups, selected evidence, omitted evidence with reasons, uncovered requirements, warnings, provider, model, prompt version, and creation time. Every bullet records supporting evidence IDs, target requirement IDs, a source organization/experience ID, exaggeration risk, and warnings.
+A plan records its job and Curated Evidence Pack IDs, language, length, professional summary, experiences, bullets, skill groups, selected evidence, omitted evidence with reasons, uncovered parent requirements and atomic components, warnings, provider, model, prompt version, and creation time. Every bullet records supporting evidence IDs, compatible parent requirement IDs, authoritative target component IDs, a source organization/experience ID, exaggeration risk, and warnings.
 
 The plan identity is SHA-256 over:
 
@@ -48,6 +48,7 @@ Provider output is strict JSON and cannot contain unknown fields. Before persist
 - used and omitted evidence form a complete, disjoint partition;
 - unknown, rejected, discarded, superseded, or otherwise unselected evidence is rejected;
 - target requirements are covered by the cited selections and missing requirements remain uncovered;
+- target components are covered by the cited selections, missing siblings remain uncovered, and partial-parent wording cannot imply support for the whole compound sentence;
 - metrics, organization, role, date, and allowlisted technology values match cited canonical metadata;
 - weak/contributory evidence is not inflated and skill-only evidence does not become production experience;
 - natural-language fields match `pt-BR` or `en`, excluding canonical names and technology terms;
@@ -63,7 +64,7 @@ Planning emits stage spans and bounded metrics for duration, inference, tokens, 
 
 ## Storage and migration
 
-`drizzle/0011_add_resume_content_plans.sql` adds the insert-only `resume_content_plans` snapshot table with job/pack foreign keys, lookup indexes, language/length checks, and unique plan identity. Apply it with `npm run db:migrate`.
+`drizzle/0011_add_resume_content_plans.sql` adds the insert-only `resume_content_plans` snapshot table with job/pack foreign keys, lookup indexes, language/length checks, and unique plan identity. Atomic requirement storage is added separately by `drizzle/0012_add_job_requirement_components.sql`; existing resume snapshots are not rewritten. Apply migrations with `npm run db:migrate`.
 
 The table is additive. To roll back application behavior, unregister or stop using the documents command; the table can remain safely unused. Export desired plans before any later destructive schema rollback.
 
@@ -79,3 +80,5 @@ Common failures:
 - Cached output after a request — this is expected for the same immutable identity; pass `--force` to regenerate and persist a new plan without deleting the existing one.
 
 PDF, DOCX, HTML, visual templates, cover letters, LinkedIn content, interview answers, ATS scoring, and automated applications are explicitly out of scope.
+
+See [Atomic Job Requirements](atomic-job-requirements.md) for component aggregation, legacy compatibility, CLI traceability, and the closed evidence boundary.

@@ -4,6 +4,7 @@ import { CanonicalEvidenceReader } from "../src/modules/retrieval/application/po
 import { EvidencePack, HybridSearchCandidate } from "../src/modules/retrieval/application/types.js";
 import { createPrepareCandidateEvidenceUseCase } from "../src/modules/jobs/application/use-cases/prepare-candidate-evidence.js";
 import { JobDescriptionWithRequirements } from "../src/modules/jobs/domain/model.js";
+import { parseJobSource } from "../src/modules/jobs/infrastructure/parsers/deterministic-job-source-parser.js";
 
 const requirements = [
   ["go", "technology", "Go"],
@@ -70,6 +71,73 @@ function evidencePack(query: string, rawResults: HybridSearchCandidate[]): Evide
 }
 
 describe("candidate evidence pipeline", () => {
+  it("retrieves compound components independently and deduplicates repeated warnings", async () => {
+    const document = parseJobSource("compound.md", "## Requirements\n- Strong knowledge of Go and PostgreSQL");
+    const calls: Array<{ requirementId: string; componentId?: string; query: string }> = [];
+    const pack = await createPrepareCandidateEvidenceUseCase().prepare({
+      jobDescription: document,
+      retriever: {
+        async execute(command) {
+          calls.push(command);
+          const raw = command.query.includes("PostgreSQL") ? [rawCandidate("claim-postgresql", "asset-postgresql", { finalScore: 0.9 })] : [];
+          return { ...evidencePack(command.query, raw), warnings: ["Repeated retrieval warning."] };
+        }
+      },
+      canonicalEvidenceReader: {
+        async read(input) {
+          return {
+            kind: "hydrated",
+            candidates: [{
+              evidenceClaimId: input.evidenceClaimId!,
+              knowledgeAssetId: input.knowledgeAssetId,
+              subjectType: "experience",
+              claimType: "experience",
+              claimText: "Operated PostgreSQL in production.",
+              claimStatus: "confirmed",
+              confidenceScore: 90,
+              finalScore: input.finalScore,
+              sources: [],
+              retrievalStrategies: input.retrievalStrategies
+            }]
+          };
+        }
+      }
+    });
+
+    expect(calls).toHaveLength(2);
+    expect(new Set(calls.map((call) => call.componentId)).size).toBe(2);
+    expect(pack.requirements).toHaveLength(1);
+    expect(pack.requirements[0].components?.map((component) => [component.componentText, component.candidates.length])).toEqual([["Go", 0], ["PostgreSQL", 1]]);
+    expect(pack.diagnostics).toEqual(expect.objectContaining({ parentRequirementCount: 1, atomicComponentCount: 2 }));
+    expect(pack.diagnostics?.selectedEvidencePerComponent.map((entry) => entry.count)).toEqual([0, 1]);
+    expect(pack.warnings).toEqual(["Repeated retrieval warning."]);
+    expect(pack.warningDiagnostics).toEqual([{ code: "candidate_evidence_pack", message: "Repeated retrieval warning." }]);
+  });
+
+  it("retains equal warning messages when their stable condition codes differ", async () => {
+    const document = parseJobSource("compound.md", "## Requirements\n- Strong knowledge of Go and PostgreSQL");
+    const pack = await createPrepareCandidateEvidenceUseCase().prepare({
+      jobDescription: document,
+      retriever: {
+        async execute(command) {
+          return {
+            ...evidencePack(command.query, []),
+            warningDiagnostics: [{
+              code: command.query.includes("PostgreSQL") ? "database_warning" : "language_warning",
+              message: "Partial results."
+            }]
+          };
+        }
+      },
+      canonicalEvidenceReader: { read: async () => { throw new Error("No hydration expected."); } }
+    });
+
+    expect(pack.warningDiagnostics).toEqual([
+      { code: "database_warning", message: "Partial results." },
+      { code: "language_warning", message: "Partial results." }
+    ]);
+  });
+
   it("hydrates and associates canonical evidence per requirement while keeping Kubernetes explicitly empty", async () => {
     const byRequirement: Record<string, HybridSearchCandidate[]> = {
       Go: [rawCandidate("claim-go", "asset-go")],

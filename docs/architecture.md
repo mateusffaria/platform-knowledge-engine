@@ -95,18 +95,20 @@ Job Source (.md, .markdown, .txt)
         ↓
 Deterministic Job Parser
         ↓
-Canonical Job Description + Job Requirements
+Canonical Job Description + Parent Requirements + Ordered Atomic Components
         ↓
 Job Store
         ↓
 JobAnalyzerAgent (optional validated enrichment)
         ↓
-Job Analysis snapshots + Job Retrieval Intent (deterministic PKQL filters + enriched semantic text)
+Job Analysis snapshots + Component-scoped Job Retrieval Intents (deterministic PKQL filters + enriched semantic text)
         ↓
-Hybrid Retrieval
+Independent Hybrid Retrieval per Atomic Component
         ↓
-Evidence Pack
+Nested Candidate and Curated Evidence Packs
 ```
+
+Atomic components are the authoritative retrieval/reasoning/resume-targeting unit, while parent requirements retain source provenance and compatibility aggregates. See [Atomic Job Requirements](atomic-job-requirements.md) and [ADR 0006](adr/0006-atomic-job-requirements.md).
 
 ## Module Organization
 

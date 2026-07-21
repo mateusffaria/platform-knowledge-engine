@@ -10,7 +10,10 @@ export type ResumePlanValidationIssueCode =
   | "selected_and_omitted"
   | "selected_set_mismatch"
   | "uncovered_requirement_mismatch"
+  | "uncovered_component_mismatch"
   | "unsupported_requirement"
+  | "unsupported_component"
+  | "parent_scope_overstatement"
   | "unsupported_metric"
   | "canonical_presentation_mismatch"
   | "unsupported_technology"
@@ -42,7 +45,10 @@ const repairableEvidenceIssueCodes = new Set<ResumePlanValidationIssueCode>([
   "selected_and_omitted",
   "selected_set_mismatch",
   "uncovered_requirement_mismatch",
+  "uncovered_component_mismatch",
   "unsupported_requirement",
+  "unsupported_component",
+  "parent_scope_overstatement",
   "skill_promoted_to_experience"
 ])
 
@@ -164,11 +170,38 @@ function addRequirementIssues(draft: ResumePlanDraft, input: ResumePlanningInput
   const uncovered = input.curatedEvidencePack.requirements.filter((requirement) => requirement.coverageStatus === "missing" || requirement.selectedEvidenceIds.length === 0).map((requirement) => requirement.requirementId).sort()
   if (!sameSet(draft.uncoveredRequirementIds, uncovered)) issues.push({ code: "uncovered_requirement_mismatch", path: "uncoveredRequirementIds", message: "Uncovered requirements must exactly match missing Curated Evidence Pack requirements." })
   const requirements = new Map(input.curatedEvidencePack.requirements.map((requirement) => [requirement.requirementId, requirement]))
+  const components = new Map(input.curatedEvidencePack.requirements.flatMap((requirement) => requirement.components.map((component) => [component.componentId, { requirement, component }] as const)))
+  const uncoveredComponents = input.curatedEvidencePack.requirements.flatMap((requirement) => requirement.components)
+    .filter((component) => component.coverageStatus === "missing" || component.selectedEvidenceIds.length === 0)
+    .map((component) => component.componentId).sort()
+  const explicitUncoveredComponents = draft.uncoveredRequirementComponentIds ?? []
+  const legacySingletonInput = input.curatedEvidencePack.requirements.every((requirement) => requirement.components.length === 1)
+  if (!(legacySingletonInput && explicitUncoveredComponents.length === 0) && !sameSet(explicitUncoveredComponents, uncoveredComponents)) {
+    issues.push({ code: "uncovered_component_mismatch", path: "uncoveredRequirementComponentIds", message: "Uncovered atomic components must exactly match missing Curated Evidence Pack components." })
+  }
   draft.plannedExperiences.forEach((experience, experienceIndex) => experience.bullets.forEach((bullet, bulletIndex) => {
+    const explicitTargets = bullet.targetRequirementComponentIds ?? []
+    const effectiveTargetComponents = explicitTargets.length > 0
+      ? explicitTargets
+      : bullet.targetRequirementIds.flatMap((requirementId) => {
+        const requirement = requirements.get(requirementId)
+        return requirement?.components.length === 1 ? [requirement.components[0].componentId] : []
+      })
+    explicitTargets.forEach((componentId, componentIndex) => {
+      const target = components.get(componentId)
+      const supported = target
+        && target.component.coverageStatus !== "missing"
+        && bullet.supportingEvidenceIds.some((id) => target.component.selectedEvidenceIds.includes(id))
+        && bullet.targetRequirementIds.includes(target.requirement.requirementId)
+      if (!supported) issues.push({ code: "unsupported_component", path: `plannedExperiences[${experienceIndex}].bullets[${bulletIndex}].targetRequirementComponentIds[${componentIndex}]`, value: componentId, message: `Atomic component ${componentId} is not covered by the bullet's cited evidence and traceable parent.` })
+    })
     bullet.targetRequirementIds.forEach((requirementId, requirementIndex) => {
       const requirement = requirements.get(requirementId)
       const supported = requirement && requirement.coverageStatus !== "missing" && bullet.supportingEvidenceIds.some((id) => requirement.selectedEvidenceIds.includes(id))
       if (!supported) issues.push({ code: "unsupported_requirement", path: `plannedExperiences[${experienceIndex}].bullets[${bulletIndex}].targetRequirementIds[${requirementIndex}]`, value: requirementId, message: `Requirement ${requirementId} is not covered by the bullet's cited evidence.` })
+      if (requirement && requirement.components.length > 1 && !effectiveTargetComponents.some((componentId) => requirement.components.some((component) => component.componentId === componentId))) {
+        issues.push({ code: "parent_scope_overstatement", path: `plannedExperiences[${experienceIndex}].bullets[${bulletIndex}].targetRequirementIds[${requirementIndex}]`, value: requirementId, message: `Compound parent ${requirementId} must be narrowed to a supported atomic component.` })
+      }
     })
   }))
 }

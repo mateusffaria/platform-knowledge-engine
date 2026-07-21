@@ -46,6 +46,12 @@ function printCompactPlan(plan: ResumeContentPlan, verbose: boolean): void {
   console.log(`Selected evidence: ${plan.selectedEvidenceIds.join(", ") || "none"}`)
   for (const omitted of plan.omittedEvidence) console.log(`Omitted ${omitted.evidenceId} (${omitted.reason}): ${omitted.explanation}`)
   console.log(`Uncovered requirements: ${plan.uncoveredRequirementIds.join(", ") || "none"}`)
+  console.log(`Uncovered atomic components: ${plan.uncoveredRequirementComponentIds?.join(", ") || "none"}`)
+  for (const experience of plan.plannedExperiences) {
+    for (const bullet of experience.bullets) {
+      if ((bullet.targetRequirementComponentIds?.length ?? 0) > 0) console.log(`Target components: ${bullet.targetRequirementComponentIds!.join(", ")}`)
+    }
+  }
   for (const warning of plan.warnings) console.log(`Warning: ${warning}`)
   console.log(`Generation: ${plan.provider}/${plan.model}, ${plan.promptVersion}`)
 }

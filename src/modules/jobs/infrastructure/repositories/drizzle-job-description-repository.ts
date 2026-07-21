@@ -1,8 +1,9 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 import { JobDescriptionRepository } from "../../application/ports/job-description-repository.js";
-import { JobDescription, JobDescriptionWithRequirements, JobRequirement } from "../../domain/model.js";
-import { jobDescriptions, jobRequirements } from "../../../../shared/database/schema.js";
+import { AtomicJobRequirement, JobDescription, JobDescriptionWithRequirements, JobRequirement } from "../../domain/model.js";
+import { atomicComponentsOf, validateAtomicComponents } from "../../domain/atomic-job-requirement.js";
+import { jobDescriptions, jobRequirementComponents, jobRequirements } from "../../../../shared/database/schema.js";
 
 interface JobsDatabase {
   select: (...args: any[]) => any;
@@ -33,6 +34,22 @@ function toRequirement(row: typeof jobRequirements.$inferSelect): JobRequirement
     sourceLocation: { startLine: row.sourceStartLine, endLine: row.sourceEndLine },
     sectionLabel: row.sectionLabel ?? undefined,
     inferred: row.inferred
+  };
+}
+
+function toComponent(row: typeof jobRequirementComponents.$inferSelect): AtomicJobRequirement {
+  return {
+    id: row.id,
+    jobRequirementId: row.jobRequirementId,
+    componentIndex: row.componentIndex,
+    originalText: row.originalText,
+    requirementType: row.requirementType,
+    importance: row.importance,
+    normalizedValue: row.normalizedValue ?? undefined,
+    sourceExcerpt: row.sourceExcerpt,
+    sourceLocation: { startLine: row.sourceStartLine, endLine: row.sourceEndLine },
+    sourceTextStart: row.sourceTextStart,
+    sourceTextEnd: row.sourceTextEnd
   };
 }
 
@@ -72,6 +89,23 @@ export class DrizzleJobDescriptionRepository implements JobDescriptionRepository
         sectionLabel: requirement.sectionLabel,
         inferred: requirement.inferred
       })));
+      const components = jobDescription.requirements.flatMap((requirement) => validateAtomicComponents(requirement));
+      if (components.length > 0) {
+        await tx.insert(jobRequirementComponents).values(components.map((component) => ({
+          id: component.id,
+          jobRequirementId: component.jobRequirementId,
+          componentIndex: component.componentIndex,
+          originalText: component.originalText,
+          requirementType: component.requirementType,
+          importance: component.importance,
+          normalizedValue: component.normalizedValue,
+          sourceExcerpt: component.sourceExcerpt,
+          sourceStartLine: component.sourceLocation.startLine,
+          sourceEndLine: component.sourceLocation.endLine,
+          sourceTextStart: component.sourceTextStart,
+          sourceTextEnd: component.sourceTextEnd
+        })));
+      }
     });
   }
 
@@ -81,10 +115,30 @@ export class DrizzleJobDescriptionRepository implements JobDescriptionRepository
     if (!job) {
       return undefined;
     }
-    const requirements = await this.db.select().from(jobRequirements)
+    const requirements: Array<typeof jobRequirements.$inferSelect> = await this.db.select().from(jobRequirements)
       .where(eq(jobRequirements.jobDescriptionId, jobDescriptionId))
       .orderBy(asc(jobRequirements.sourceStartLine), asc(jobRequirements.id));
-    return { job: toJobDescription(job), requirements: requirements.map(toRequirement) };
+    const componentRows: Array<typeof jobRequirementComponents.$inferSelect> = requirements.length === 0
+      ? []
+      : await this.db.select().from(jobRequirementComponents)
+        .where(inArray(jobRequirementComponents.jobRequirementId, requirements.map((requirement) => requirement.id)))
+        .orderBy(asc(jobRequirementComponents.componentIndex), asc(jobRequirementComponents.id));
+    const componentsByRequirement = new Map<string, AtomicJobRequirement[]>();
+    for (const row of componentRows) {
+      const component = toComponent(row);
+      const current = componentsByRequirement.get(component.jobRequirementId) ?? [];
+      current.push(component);
+      componentsByRequirement.set(component.jobRequirementId, current);
+    }
+    const mappedRequirements = requirements.map((row: typeof jobRequirements.$inferSelect) => {
+      const requirement = toRequirement(row);
+      const stored = componentsByRequirement.get(requirement.id);
+      requirement.components = stored && stored.length > 0
+        ? stored.sort((left, right) => left.componentIndex - right.componentIndex || left.id.localeCompare(right.id))
+        : atomicComponentsOf(requirement);
+      return requirement;
+    });
+    return { job: toJobDescription(job), requirements: mappedRequirements };
   }
 
   async list(): Promise<JobDescription[]> {

@@ -3,11 +3,14 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  AtomicJobRequirement,
+  JobRequirement,
   JobDescriptionWithRequirements,
   JobRequirementImportance,
   JobRequirementType,
   JobSourceType
 } from "../../domain/model.js";
+import { atomicRequirementComponentId, singletonAtomicRequirement, validateAtomicComponents } from "../../domain/atomic-job-requirement.js";
 import { JobSourceParser } from "../../application/ports/job-source-parser.js";
 
 interface SourceLine {
@@ -30,6 +33,7 @@ interface SectionClassification {
 
 const supportedExtensions = new Set([".md", ".markdown", ".txt"]);
 const technologyNames = new Map<string, string>([
+  ["go", "Go"],
   ["typescript", "TypeScript"],
   ["javascript", "JavaScript"],
   ["node.js", "Node.js"],
@@ -179,7 +183,7 @@ function extractRequirements(section: JobSection, jobDescriptionId: string): Job
     const inferred = itemClassification.inferred
       || (classification.type === undefined && itemClassification.type === undefined)
       || (classification.importance === undefined && itemClassification.importance === undefined);
-    return [{
+    const requirement: JobRequirement = {
       id: randomUUID(),
       jobDescriptionId,
       requirementType: type,
@@ -190,8 +194,71 @@ function extractRequirements(section: JobSection, jobDescriptionId: string): Job
       sourceLocation: { startLine: item.startLine, endLine: item.endLine },
       sectionLabel: section.label,
       inferred
-    }];
+    };
+    requirement.components = decomposeRequirement(requirement);
+    return [requirement];
   });
+}
+
+interface AtomicMatch {
+  start: number;
+  end: number;
+  sourceText: string;
+  requirementType: "technology" | "skill";
+  normalizedValue: string;
+}
+
+function atomicMatches(text: string): AtomicMatch[] {
+  const matches: AtomicMatch[] = [];
+  for (const [requirementType, names] of [["technology", technologyNames], ["skill", skillNames]] as const) {
+    for (const [candidate, normalizedValue] of names) {
+      const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const expression = new RegExp(`(?:^|[^a-z0-9])(${escaped})(?=$|[^a-z0-9])`, "ig");
+      for (const match of text.matchAll(expression)) {
+        const sourceText = match[1];
+        const start = (match.index ?? 0) + match[0].lastIndexOf(sourceText);
+        matches.push({ start, end: start + sourceText.length, sourceText, requirementType, normalizedValue });
+      }
+    }
+  }
+  return matches
+    .sort((left, right) => left.start - right.start || right.end - right.start - (left.end - left.start))
+    .filter((match, index, sorted) => index === 0 || match.start >= sorted[index - 1].end);
+}
+
+function hasOnlyCoordinationBetween(text: string, matches: AtomicMatch[]): boolean {
+  return matches.slice(1).every((match, index) => {
+    const separator = text.slice(matches[index].end, match.start);
+    return /^\s*(?:(?:and|or|&)\s*|,\s*(?:(?:and|or|&)\s*)?)$/i.test(separator);
+  });
+}
+
+export function decomposeRequirement(requirement: JobRequirement): AtomicJobRequirement[] {
+  const matches = atomicMatches(requirement.originalText);
+  if (matches.length < 2 || !hasOnlyCoordinationBetween(requirement.originalText, matches)) {
+    return [singletonAtomicRequirement(requirement)];
+  }
+
+  const components = matches.map((match, componentIndex): AtomicJobRequirement => ({
+    id: atomicRequirementComponentId({
+      requirementId: requirement.id,
+      index: componentIndex,
+      originalText: match.sourceText,
+      sourceTextStart: match.start,
+      sourceTextEnd: match.end
+    }),
+    jobRequirementId: requirement.id,
+    componentIndex,
+    originalText: match.sourceText,
+    requirementType: match.requirementType,
+    importance: requirement.importance,
+    normalizedValue: match.normalizedValue,
+    sourceExcerpt: requirement.sourceExcerpt,
+    sourceLocation: { ...requirement.sourceLocation },
+    sourceTextStart: match.start,
+    sourceTextEnd: match.end
+  }));
+  return validateAtomicComponents({ ...requirement, components });
 }
 
 function collectItems(section: JobSection): Array<{ text: string; startLine: number; endLine: number }> {

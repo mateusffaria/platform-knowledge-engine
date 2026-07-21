@@ -5,7 +5,7 @@ import {
 } from "../domain/model.js";
 
 export const defaultCandidateSelectionConfig: CandidateSelectionConfig = {
-  limitPerRequirement: 3
+  limitPerRequirement: 10
 };
 
 export function compareCandidateEvidence(left: CandidateEvidence, right: CandidateEvidence): number {

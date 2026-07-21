@@ -1,4 +1,5 @@
 import { JobDescriptionRepository } from "../ports/job-description-repository.js";
+import { atomicComponentsOf } from "../../domain/atomic-job-requirement.js";
 
 export function createShowJobDescriptionUseCase(repository: JobDescriptionRepository) {
   return {
@@ -8,7 +9,13 @@ export function createShowJobDescriptionUseCase(repository: JobDescriptionReposi
         throw new Error(`Job description not found: ${command.jobDescriptionId}`);
       }
 
-      return jobDescription;
+      return {
+        job: jobDescription.job,
+        requirements: jobDescription.requirements.map((requirement) => ({
+          ...requirement,
+          components: atomicComponentsOf(requirement)
+        }))
+      };
     }
   };
 }

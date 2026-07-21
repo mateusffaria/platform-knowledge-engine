@@ -17,6 +17,7 @@ export interface PlannedBullet {
   text: string
   supportingEvidenceIds: string[]
   targetRequirementIds: string[]
+  targetRequirementComponentIds?: string[]
   sourceOrganizationOrExperienceId: string
   exaggerationRisk: ResumeExaggerationRisk
   warnings: string[]
@@ -58,6 +59,7 @@ export interface ResumeContentPlan {
   selectedEvidenceIds: string[]
   omittedEvidence: OmittedEvidence[]
   uncoveredRequirementIds: string[]
+  uncoveredRequirementComponentIds?: string[]
   warnings: string[]
   provider: string
   model: string
@@ -65,4 +67,4 @@ export interface ResumeContentPlan {
   createdAt: Date
 }
 
-export const resumeContentPlanSchemaVersion = "resume-content-plan/v1"
+export const resumeContentPlanSchemaVersion = "resume-content-plan/v2"

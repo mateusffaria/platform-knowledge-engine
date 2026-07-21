@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { EvidencePack } from "../../../retrieval/application/types.js";
 import { CandidateEvidencePack, isDegradedEvidenceReasoningResult } from "../../domain/model.js";
+import { candidateComponentsOf } from "../../domain/atomic-job-requirement.js";
 import { CandidateEvidencePackBuilder } from "../ports/candidate-evidence-pack-builder.js";
 import { CuratedEvidencePackRepository } from "../ports/curated-evidence-pack-repository.js";
 import { EvidenceReasoner } from "../ports/evidence-reasoner.js";
@@ -57,16 +58,19 @@ export function createReasonJobEvidenceUseCase(dependencies: {
               evidencePack: command.evidencePack
             });
           })();
-          const candidateCount = candidatePack.requirements.reduce((total, requirement) => total + requirement.candidates.length, 0);
-          const reasonerCandidateCount = candidatePack.requirements.reduce((total, requirement) => total + requirement.reasonerCandidateIds.length, 0);
+          const components = candidatePack.requirements.flatMap((requirement) => candidateComponentsOf(requirement));
+          const candidateCount = components.reduce((total, component) => total + component.candidates.length, 0);
+          const reasonerCandidateCount = components.reduce((total, component) => total + component.reasonerCandidateIds.length, 0);
           event.candidate_pack_hash = candidatePack.hash;
           event.candidate_pack_version = candidatePack.version;
           event.requirement_count = candidatePack.requirements.length;
+          event.parent_requirement_count = candidatePack.requirements.length;
+          event.atomic_component_count = components.length;
           event.candidate_count = candidateCount;
           event.reasoner_candidate_count = reasonerCandidateCount;
           telemetry.record("candidateEvidence", candidateCount);
           telemetry.record("candidatePackBytes", Buffer.byteLength(JSON.stringify(candidatePack)));
-          for (const requirement of candidatePack.requirements) telemetry.record("evidencePerRequirement", requirement.reasonerCandidateIds.length);
+          for (const component of components) telemetry.record("evidencePerRequirement", component.reasonerCandidateIds.length, { requirement_id: component.requirementId, component_id: component.componentId });
           const reasoningCommand = {
             candidatePack,
             model: command.model,
@@ -122,7 +126,8 @@ export function createReasonJobEvidenceUseCase(dependencies: {
           event.display_score = curated.displayScore;
           event.selected_evidence_count = curated.recommendedEvidence.length;
           event.discarded_evidence_count = curated.discardedEvidence.length;
-          event.missing_requirement_count = curated.missingEvidence.length;
+          event.missing_requirement_count = curated.requirementCoverage.filter((coverage) => coverage.coverageStatus === "missing").length;
+          event.missing_component_count = curated.missingEvidence.filter((missing) => missing.componentId !== undefined).length;
           telemetry.record("commandDuration", performance.now() - startedAt, { provider: run.provider, model: run.model, prompt_version: run.promptVersion, outcome: "success" });
           return curated;
         } catch (error) {

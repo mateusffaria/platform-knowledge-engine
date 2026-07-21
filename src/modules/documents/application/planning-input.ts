@@ -25,6 +25,7 @@ export interface ResumePlanningEvidence {
   contribution: string
   exaggerationRisk: ResumeExaggerationRisk
   requirementIds: readonly string[]
+  componentIds: readonly string[]
   presentation: CanonicalPresentationMetadata
   provenance: readonly {
     sourceDocumentId: string
@@ -37,6 +38,15 @@ export interface ResumePlanningRequirement {
   requirementId: string
   requirementText: string
   importance: "required" | "preferred"
+  coverageStatus: "strong" | "partial" | "weak" | "missing"
+  selectedEvidenceIds: readonly string[]
+  components: readonly ResumePlanningRequirementComponent[]
+}
+
+export interface ResumePlanningRequirementComponent {
+  componentId: string
+  componentIndex: number
+  componentText: string
   coverageStatus: "strong" | "partial" | "weak" | "missing"
   selectedEvidenceIds: readonly string[]
 }
@@ -52,6 +62,7 @@ export interface CompatibleCuratedEvidencePack {
   selectedEvidence: readonly ResumePlanningEvidence[]
   discardedEvidenceIds: readonly string[]
   missingRequirementIds: readonly string[]
+  missingComponentIds: readonly string[]
   warnings: readonly string[]
   limitations: readonly string[]
 }
@@ -70,13 +81,32 @@ function freezeArray<T>(values: readonly T[]): readonly T[] {
 
 export function freezeResumePlanningInput(input: ResumePlanningInput): ResumePlanningInput {
   const pack = input.curatedEvidencePack
+  const normalizedRequirements = pack.requirements.map((requirement) => {
+    const components = requirement.components ?? [{
+      componentId: `legacy-component:${requirement.requirementId}`,
+      componentIndex: 0,
+      componentText: requirement.requirementText,
+      coverageStatus: requirement.coverageStatus,
+      selectedEvidenceIds: requirement.selectedEvidenceIds
+    }]
+    return { ...requirement, components }
+  })
+  const componentIdsByRequirement = new Map(normalizedRequirements.map((requirement) => [requirement.requirementId, requirement.components.map((component) => component.componentId)]))
+  const missingComponentIds = pack.missingComponentIds ?? normalizedRequirements.flatMap((requirement) => requirement.components
+    .filter((component) => component.coverageStatus === "missing" || component.selectedEvidenceIds.length === 0)
+    .map((component) => component.componentId))
   return Object.freeze({
     curatedEvidencePack: Object.freeze({
       ...pack,
-      requirements: freezeArray(pack.requirements.map((requirement) => Object.freeze({ ...requirement, selectedEvidenceIds: freezeArray(requirement.selectedEvidenceIds) }))),
+      requirements: freezeArray(normalizedRequirements.map((requirement) => Object.freeze({
+        ...requirement,
+        selectedEvidenceIds: freezeArray(requirement.selectedEvidenceIds),
+        components: freezeArray(requirement.components.map((component) => Object.freeze({ ...component, selectedEvidenceIds: freezeArray(component.selectedEvidenceIds) })))
+      }))),
       selectedEvidence: freezeArray(pack.selectedEvidence.map((evidence) => Object.freeze({
         ...evidence,
         requirementIds: freezeArray(evidence.requirementIds),
+        componentIds: freezeArray(evidence.componentIds ?? evidence.requirementIds.flatMap((requirementId) => componentIdsByRequirement.get(requirementId) ?? [])),
         provenance: freezeArray(evidence.provenance.map((source) => Object.freeze({ ...source }))),
         presentation: Object.freeze({
           ...evidence.presentation,
@@ -86,6 +116,7 @@ export function freezeResumePlanningInput(input: ResumePlanningInput): ResumePla
       }))),
       discardedEvidenceIds: freezeArray(pack.discardedEvidenceIds),
       missingRequirementIds: freezeArray(pack.missingRequirementIds),
+      missingComponentIds: freezeArray(missingComponentIds),
       warnings: freezeArray(pack.warnings),
       limitations: freezeArray(pack.limitations)
     })

@@ -37,6 +37,28 @@ export interface JobRequirement {
   sourceLocation: JobSourceLocation;
   sectionLabel?: string;
   inferred: boolean;
+  /** Absent only for legacy callers/rows; use atomicComponentsOf for a uniform view. */
+  components?: AtomicJobRequirement[];
+}
+
+export interface AtomicJobRequirement {
+  id: string;
+  jobRequirementId: string;
+  componentIndex: number;
+  originalText: string;
+  requirementType: JobRequirementType;
+  importance: JobRequirementImportance;
+  normalizedValue?: string;
+  sourceExcerpt: string;
+  sourceLocation: JobSourceLocation;
+  /** Character offsets in the parent JobRequirement.originalText. */
+  sourceTextStart: number;
+  sourceTextEnd: number;
+}
+
+export interface DiagnosticWarning {
+  code: string;
+  message: string;
 }
 
 export interface JobDescriptionWithRequirements {
@@ -112,6 +134,18 @@ export interface JobPkqlFilter {
   field: JobPkqlFilterField;
   value: string;
   sourceRequirementIds: string[];
+  sourceComponentIds?: string[];
+}
+
+export interface JobComponentRetrievalIntent {
+  requirementId: string;
+  componentId: string;
+  componentText: string;
+  requirementType: JobRequirementType;
+  importance: JobRequirementImportance;
+  filter?: { field: JobPkqlFilterField; value: string };
+  query: string;
+  semanticText: string;
 }
 
 export interface JobRetrievalIntent {
@@ -124,6 +158,8 @@ export interface JobRetrievalIntent {
   query: string;
   semanticText: string;
   warnings: string[];
+  componentIntents?: JobComponentRetrievalIntent[];
+  warningDiagnostics?: DiagnosticWarning[];
 }
 
 export type CoverageStatus = "strong" | "partial" | "weak" | "missing";
@@ -180,6 +216,21 @@ export interface CandidateRequirementEvidence {
   /** Ordered references into candidates that are supplied to the reasoner. */
   reasonerCandidateIds: string[];
   diagnostics: RequirementCandidatePipelineDiagnostics;
+  components?: CandidateRequirementComponentEvidence[];
+}
+
+export interface CandidateRequirementComponentEvidence {
+  requirementId: string;
+  componentId: string;
+  componentIndex: number;
+  componentText: string;
+  requirementType: JobRequirementType;
+  importance: JobRequirementImportance;
+  candidates: CandidateEvidence[];
+  reasonerCandidateIds: string[];
+  diagnostics: RequirementCandidatePipelineDiagnostics;
+  warnings?: string[];
+  warningDiagnostics?: DiagnosticWarning[];
 }
 
 export interface CandidateSelectionConfig {
@@ -244,6 +295,12 @@ export interface CandidateEvidencePack {
   generatedAt: Date;
   requirements: CandidateRequirementEvidence[];
   warnings: string[];
+  warningDiagnostics?: DiagnosticWarning[];
+  diagnostics?: {
+    parentRequirementCount: number;
+    atomicComponentCount: number;
+    selectedEvidencePerComponent: Array<{ requirementId: string; componentId: string; count: number }>;
+  };
 }
 
 export interface EvidenceSelection {
@@ -253,6 +310,8 @@ export interface EvidenceSelection {
   complementaryEvidenceIds?: string[];
   exaggerationRisk: ExaggerationRisk;
   evidence: CandidateEvidence;
+  addressedRequirementIds?: string[];
+  addressedComponentIds?: string[];
 }
 
 export interface EvidenceRejection {
@@ -260,6 +319,8 @@ export interface EvidenceRejection {
   reason: EvidenceRejectionReason;
   explanation: string;
   evidence: CandidateEvidence;
+  addressedRequirementIds?: string[];
+  addressedComponentIds?: string[];
 }
 
 export interface RequirementCoverage {
@@ -274,11 +335,30 @@ export interface RequirementCoverage {
   strengthFactors: string[];
   limitations: string[];
   explanation: string;
+  componentCoverage?: RequirementComponentCoverage[];
+}
+
+export interface RequirementComponentCoverage {
+  requirementId: string;
+  componentId: string;
+  componentIndex?: number;
+  componentText: string;
+  importance: JobRequirementImportance;
+  coverageStatus: CoverageStatus;
+  selectedEvidenceIds: string[];
+  rejectedCandidateEvidenceIds: string[];
+  selections: EvidenceSelection[];
+  rejections: EvidenceRejection[];
+  strengthFactors: string[];
+  limitations: string[];
+  explanation: string;
 }
 
 export interface MissingEvidence {
   requirementId: string;
   requirementText: string;
+  componentId?: string;
+  componentText?: string;
   reason: string;
 }
 
@@ -299,6 +379,7 @@ export interface CuratedEvidencePack {
   discardedEvidence: EvidenceRejection[];
   missingEvidence: MissingEvidence[];
   warnings: string[];
+  warningDiagnostics?: DiagnosticWarning[];
   limitations: string[];
   displayScore?: number;
 }

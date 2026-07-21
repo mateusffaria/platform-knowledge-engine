@@ -90,7 +90,7 @@ describe("Resume Content Plan contracts", () => {
     expect(resumeLengthProfiles).toEqual({ concise: { maxWords: 350, maxBullets: 4 }, standard: { maxWords: 650, maxBullets: 8 }, detailed: { maxWords: 1_000, maxBullets: 12 } })
     expect(resumePlanDraftSchema.parse(validDraft())).toEqual(validDraft())
     expect(resumePlanOutputJsonSchema).toMatchObject({ type: "object", additionalProperties: false })
-    expect(resumePlanningPromptVersion).toBe("resume-planning/v6")
+    expect(resumePlanningPromptVersion).toBe("resume-planning/v7")
     expect(resumePlanOutputJsonSchema.properties).toMatchObject({
       selectedEvidenceIds: { description: expect.stringContaining("used evidence IDs") },
       omittedEvidence: { description: expect.stringContaining("eligibleEvidence") }
@@ -143,10 +143,12 @@ describe("Resume Content Plan contracts", () => {
     expect(schema.properties.selectedEvidenceIds.items.enum).toEqual(["ev-1", "ev-2"])
     expect(schema.properties.omittedEvidence.items.$ref).toBe("#/$defs/omitted")
     expect(schema.properties.uncoveredRequirementIds.items.enum).toEqual(["req-missing"])
+    expect(schema.properties.uncoveredRequirementComponentIds.items.enum).toEqual(["legacy-component:req-missing"])
     expect(schema.$defs.summary.properties.supportingEvidenceIds.items.enum).toEqual(["ev-1", "ev-2"])
     expect(schema.$defs.experienceSummary.properties.supportingEvidenceIds.items.enum).toEqual(["ev-1"])
     expect(schema.$defs.bullet.properties.supportingEvidenceIds.items.enum).toEqual(["ev-1"])
     expect(schema.$defs.bullet.properties.targetRequirementIds.items.enum).toEqual(["req-1"])
+    expect(schema.$defs.bullet.properties.targetRequirementComponentIds.items.enum).toEqual(["legacy-component:req-1"])
     expect(schema.$defs.omitted.properties.evidenceId.enum).toEqual(["ev-1", "ev-2"])
     expect(schema.$defs.experience.properties.sourceExperienceId.enum).toEqual(["exp-1"])
     expect(schema.$defs.bullet.properties.sourceOrganizationOrExperienceId.enum).toEqual(["exp-1"])
@@ -161,6 +163,81 @@ describe("Resume Content Plan contracts", () => {
 })
 
 describe("Resume Content Plan deterministic validation", () => {
+  function compoundScenario(missing: string, covered: string): { input: ResumePlanningInput; draft: ResumePlanDraft } {
+    const input = freezeResumePlanningInput({
+      curatedEvidencePack: {
+        id: "compound-pack",
+        jobDescriptionId: "compound-job",
+        createdAt: new Date(0),
+        provider: "fixture",
+        model: "fixture",
+        promptVersion: "reasoning/components-v1",
+        requirements: [{
+          requirementId: "compound-parent",
+          requirementText: `${missing} and ${covered}`,
+          importance: "required",
+          coverageStatus: "partial",
+          selectedEvidenceIds: ["ev-covered"],
+          components: [
+            { componentId: "component-missing", componentText: missing, coverageStatus: "missing", selectedEvidenceIds: [] },
+            { componentId: "component-covered", componentText: covered, coverageStatus: "strong", selectedEvidenceIds: ["ev-covered"] }
+          ]
+        }],
+        selectedEvidence: [{
+          evidenceClaimId: "ev-covered",
+          knowledgeAssetId: "asset-covered",
+          subjectAssetId: "experience-covered",
+          subjectType: "professional_experience",
+          claimType: "experience",
+          claimText: `Used ${covered} in production.`,
+          claimStatus: "confirmed",
+          contribution: `Production ${covered} evidence.`,
+          exaggerationRisk: "low",
+          requirementIds: ["compound-parent"],
+          componentIds: ["component-covered"],
+          presentation: { sourceOrganizationOrExperienceId: "experience-covered", organization: "Acme", role: "Engineer", technologies: [covered], metrics: [] },
+          provenance: [{ sourceDocumentId: "doc-covered" }]
+        }],
+        discardedEvidenceIds: [],
+        missingRequirementIds: [],
+        missingComponentIds: ["component-missing"],
+        warnings: [],
+        limitations: []
+      }
+    })
+    const draft: ResumePlanDraft = {
+      professionalSummary: { text: `Used ${covered} in production.`, supportingEvidenceIds: ["ev-covered"] },
+      plannedExperiences: [{
+        sourceExperienceId: "experience-covered",
+        organization: "Acme",
+        role: "Engineer",
+        bullets: [{ text: `Used ${covered} in production.`, supportingEvidenceIds: ["ev-covered"], targetRequirementIds: ["compound-parent"], targetRequirementComponentIds: ["component-covered"], sourceOrganizationOrExperienceId: "experience-covered", exaggerationRisk: "low", warnings: [] }]
+      }],
+      plannedSkillGroups: [],
+      selectedEvidenceIds: ["ev-covered"],
+      omittedEvidence: [],
+      uncoveredRequirementIds: [],
+      uncoveredRequirementComponentIds: ["component-missing"],
+      warnings: []
+    }
+    return { input, draft }
+  }
+
+  it.each([
+    ["Go", "PostgreSQL"],
+    ["Terraform", "AWS"],
+    ["Kubernetes", "Docker"]
+  ])("uses covered %s/%s components without overstating the parent", (missing, covered) => {
+    const { input, draft } = compoundScenario(missing, covered)
+    expect(validateResumePlanDraft(draft, input, "en", "standard")).toEqual([])
+    const missingTarget = clone(draft)
+    missingTarget.plannedExperiences[0].bullets[0].targetRequirementComponentIds = ["component-missing"]
+    expect(validateResumePlanDraft(missingTarget, input, "en", "standard").map((issue) => issue.code)).toContain("unsupported_component")
+    const broadTarget = clone(draft)
+    broadTarget.plannedExperiences[0].bullets[0].targetRequirementComponentIds = []
+    expect(validateResumePlanDraft(broadTarget, input, "en", "standard").map((issue) => issue.code)).toContain("parent_scope_overstatement")
+  })
+
   it("accepts a fully grounded valid plan", () => {
     expect(validateResumePlanDraft(validDraft(), planningInput(), "en", "standard")).toEqual([])
   })
@@ -314,7 +391,7 @@ describe("Plan Resume Content use case", () => {
     const { useCase, saved, provider } = harness()
     const result = await useCase.execute({ jobDescriptionId: "job-1", language: "en", length: "standard", model: "custom" })
     expect(saved).toHaveLength(1)
-    expect(result).toMatchObject({ jobDescriptionId: "job-1", curatedEvidencePackId: "pack-1", provider: "ollama", model: "custom", promptVersion: resumePlanningPromptVersion, schemaVersion: "resume-content-plan/v1" })
+    expect(result).toMatchObject({ jobDescriptionId: "job-1", curatedEvidencePackId: "pack-1", provider: "ollama", model: "custom", promptVersion: resumePlanningPromptVersion, schemaVersion: "resume-content-plan/v2" })
     expect(provider.requests).toHaveLength(1)
   })
 

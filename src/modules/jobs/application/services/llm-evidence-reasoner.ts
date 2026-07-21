@@ -8,6 +8,7 @@ import { EvidenceReasoner, EvidenceReasoningRunIdentity } from "../ports/evidenc
 import { EvidenceReasoningObservability } from "../ports/evidence-reasoning-observability.js";
 import { LlmGenerationResponse, LlmProvider } from "../ports/llm-provider.js";
 import { NoopReasoningWorkflowTelemetry, ReasoningWorkflowTelemetry } from "../ports/reasoning-workflow-telemetry.js";
+import { candidateComponentsOf, normalizeWarnings } from "../../domain/atomic-job-requirement.js";
 
 const maxGenerationAttempts = 2;
 const recoveryMaxPredict = 8192;
@@ -37,18 +38,11 @@ function describeReasoningFailure(error: unknown): ReasoningFailureDiagnostic {
 }
 
 function fallbackCoverage(requirement: CandidateEvidencePack["requirements"][number]): RequirementCoverage {
+  const coverage = missingCoverage(requirement);
   return {
-    requirementId: requirement.requirementId,
-    requirementText: requirement.requirementText,
-    importance: requirement.importance,
-    coverageStatus: "missing",
-    selectedEvidenceIds: [],
-    rejectedCandidateEvidenceIds: [],
-    selections: [],
-    rejections: [],
-    strengthFactors: [],
-    limitations: ["The model did not return a valid structured coverage decision, so no candidate evidence was selected."],
-    explanation: "Coverage is recorded as missing because the bounded reasoner response could not be validated."
+    ...coverage,
+    limitations: ["The model did not return a valid structured component-coverage decision, so no candidate evidence was selected."],
+    explanation: "Parent coverage is missing because the bounded component-reasoning response could not be validated."
   };
 }
 
@@ -58,6 +52,10 @@ function fallbackCuratedEvidencePack(
   diagnostic: ReasoningFailureDiagnostic,
   attempts: number
 ): DegradedEvidenceReasoningResult {
+  const warningDiagnostics = normalizeWarnings([
+    ...(command.candidatePack.warningDiagnostics ?? normalizeWarnings(command.candidatePack.warnings, "candidate_evidence_pack")),
+    { code: "evidence_reasoning_failure", message: `The evidence reasoner ended after ${attempts} schema-bound attempt(s) (${diagnostic.errorCode}). This degraded result was not persisted; retry once the LLM is ready or choose a model that supports Ollama structured output.` }
+  ]);
   return {
     curatedEvidencePack: finalizeCuratedEvidencePack({
       id: randomUUID(),
@@ -75,10 +73,8 @@ function fallbackCuratedEvidencePack(
       recommendedEvidence: [],
       discardedEvidence: [],
       missingEvidence: [],
-      warnings: [
-        ...command.candidatePack.warnings,
-        `The evidence reasoner ended after ${attempts} schema-bound attempt(s) (${diagnostic.errorCode}). This degraded result was not persisted; retry once the LLM is ready or choose a model that supports Ollama structured output.`
-      ],
+      warnings: warningDiagnostics.map((warning) => warning.message),
+      warningDiagnostics,
       limitations: ["No LLM-derived curation was accepted because every response failed local validation."]
     }),
     fallbackDiagnostic: {
@@ -124,10 +120,14 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
       promptVersion: run.promptVersion,
       requestedModel: command.model,
       runIdentity: run.runIdentity,
-      traceId: this.telemetry.traceId()
+      traceId: this.telemetry.traceId(),
+      parentRequirementCount: command.candidatePack.requirements.length,
+      atomicComponentCount: command.candidatePack.requirements.reduce((total, requirement) => total + candidateComponentsOf(requirement).length, 0),
+      selectedEvidencePerComponent: command.candidatePack.requirements.flatMap((requirement) => candidateComponentsOf(requirement).map((component) => ({ componentId: component.componentId, count: component.reasonerCandidateIds.length })))
     });
     try {
       if (!command.candidatePack.requirements.some((requirement) => requirement.reasonerCandidateIds.length > 0)) {
+        const warningDiagnostics = normalizeWarnings(command.candidatePack.warningDiagnostics ?? command.candidatePack.warnings, "candidate_evidence_pack");
         const finalized = finalizeCuratedEvidencePack({
           id: randomUUID(),
           runIdentity: run.runIdentity,
@@ -144,7 +144,8 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
           recommendedEvidence: [],
           discardedEvidence: [],
           missingEvidence: [],
-          warnings: [...command.candidatePack.warnings],
+          warnings: warningDiagnostics.map((warning) => warning.message),
+          warningDiagnostics,
           limitations: ["The candidate pack contains no evidence that addresses the job requirements."]
         });
         await trace.event("no_eligible_evidence");
@@ -184,6 +185,10 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
 
           const finalized = await this.telemetry.run("schema_validation", attemptAttributes, async () => {
             const content = parseEvidenceReasoningOutput(generated!.content, command.candidatePack);
+            const warningDiagnostics = normalizeWarnings([
+              ...(command.candidatePack.warningDiagnostics ?? normalizeWarnings(command.candidatePack.warnings, "candidate_evidence_pack")),
+              ...normalizeWarnings(content.warnings, "evidence_reasoning")
+            ]);
             return finalizeCuratedEvidencePack({
               id: randomUUID(),
               runIdentity: run.runIdentity,
@@ -200,7 +205,8 @@ export class LlmEvidenceReasoner implements EvidenceReasoner {
               recommendedEvidence: [],
               discardedEvidence: [],
               missingEvidence: [],
-              warnings: [...command.candidatePack.warnings, ...content.warnings],
+              warnings: warningDiagnostics.map((warning) => warning.message),
+              warningDiagnostics,
               limitations: content.limitations
             });
           });

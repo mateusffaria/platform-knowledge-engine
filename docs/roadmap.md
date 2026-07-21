@@ -159,6 +159,7 @@ Capabilities:
 - Portuguese/English and concise/standard/detailed profiles;
 - `pke documents resume plan <job-id>` with JSON and terminal views;
 - immutable identity reuse, OpenTelemetry/Langfuse instrumentation, and golden evaluation.
+- parent-preserving atomic job requirements with component-scoped retrieval, reasoning, and resume safety validation (AEM010A-2).
 
 Out of scope: PDF/DOCX/HTML rendering, visual templates, cover letters, LinkedIn/interview content, ATS scoring, automated applications, and provider benchmarking.
 

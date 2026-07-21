@@ -9,6 +9,7 @@ const bulletSchema = z.object({
   text: z.string().min(1),
   supportingEvidenceIds: nonEmptyIds.min(1),
   targetRequirementIds: nonEmptyIds,
+  targetRequirementComponentIds: nonEmptyIds.optional(),
   sourceOrganizationOrExperienceId: z.string().min(1),
   exaggerationRisk: z.enum(["low", "medium", "high"]),
   warnings: z.array(z.string())
@@ -40,6 +41,7 @@ export const resumePlanDraftSchema = z.object({
   selectedEvidenceIds: nonEmptyIds,
   omittedEvidence: z.array(omittedSchema),
   uncoveredRequirementIds: nonEmptyIds,
+  uncoveredRequirementComponentIds: nonEmptyIds.optional(),
   warnings: z.array(z.string())
 }).strict()
 
@@ -62,7 +64,7 @@ export const persistedResumeContentPlanSchema = resumePlanDraftSchema.extend({
 export const resumePlanOutputJsonSchema: Record<string, unknown> = {
   type: "object",
   additionalProperties: false,
-  required: ["professionalSummary", "plannedExperiences", "plannedSkillGroups", "selectedEvidenceIds", "omittedEvidence", "uncoveredRequirementIds", "warnings"],
+  required: ["professionalSummary", "plannedExperiences", "plannedSkillGroups", "selectedEvidenceIds", "omittedEvidence", "uncoveredRequirementIds", "uncoveredRequirementComponentIds", "warnings"],
   properties: {
     professionalSummary: { $ref: "#/$defs/summary" },
     plannedExperiences: { type: "array", items: { $ref: "#/$defs/experience" } },
@@ -70,12 +72,13 @@ export const resumePlanOutputJsonSchema: Record<string, unknown> = {
     selectedEvidenceIds: { type: "array", description: "Exact unique union of eligibleEvidence IDs cited by generated content; these are used evidence IDs.", items: { type: "string" } },
     omittedEvidence: { type: "array", description: "Every eligibleEvidence item not cited by generated content, and no ineligible IDs.", items: { $ref: "#/$defs/omitted" } },
     uncoveredRequirementIds: { type: "array", description: "Exact set of requirement IDs in the uncoveredRequirementIds namespace supplied by the prompt.", items: { type: "string" } },
+    uncoveredRequirementComponentIds: { type: "array", description: "Exact set of atomic component IDs in the uncoveredRequirementComponentIds namespace supplied by the prompt.", items: { type: "string" } },
     warnings: { type: "array", items: { type: "string" } }
   },
   $defs: {
     summary: { type: "object", additionalProperties: false, required: ["text", "supportingEvidenceIds"], properties: { text: { type: "string" }, supportingEvidenceIds: { type: "array", minItems: 1, items: { type: "string" } } } },
     experienceSummary: { type: "object", additionalProperties: false, required: ["text", "supportingEvidenceIds"], properties: { text: { type: "string" }, supportingEvidenceIds: { type: "array", minItems: 1, description: "Experience-capable evidence IDs supporting this experience summary; never skill-only IDs.", items: { type: "string" } } } },
-    bullet: { type: "object", additionalProperties: false, required: ["text", "supportingEvidenceIds", "targetRequirementIds", "sourceOrganizationOrExperienceId", "exaggerationRisk", "warnings"], properties: { text: { type: "string" }, supportingEvidenceIds: { type: "array", minItems: 1, description: "Experience-capable evidence IDs supporting this bullet; never skill-only or requirement IDs.", items: { type: "string" } }, targetRequirementIds: { type: "array", description: "Targetable requirement IDs supported by this bullet's supportingEvidenceIds; never evidence IDs.", items: { type: "string" } }, sourceOrganizationOrExperienceId: { type: "string" }, exaggerationRisk: { type: "string", enum: ["low", "medium", "high"] }, warnings: { type: "array", items: { type: "string" } } } },
+    bullet: { type: "object", additionalProperties: false, required: ["text", "supportingEvidenceIds", "targetRequirementIds", "targetRequirementComponentIds", "sourceOrganizationOrExperienceId", "exaggerationRisk", "warnings"], properties: { text: { type: "string" }, supportingEvidenceIds: { type: "array", minItems: 1, description: "Experience-capable evidence IDs supporting this bullet; never skill-only or requirement IDs.", items: { type: "string" } }, targetRequirementIds: { type: "array", description: "Parent requirement IDs traceable from targetRequirementComponentIds.", items: { type: "string" } }, targetRequirementComponentIds: { type: "array", description: "Covered atomic component IDs supported by this bullet's supportingEvidenceIds.", items: { type: "string" } }, sourceOrganizationOrExperienceId: { type: "string" }, exaggerationRisk: { type: "string", enum: ["low", "medium", "high"] }, warnings: { type: "array", items: { type: "string" } } } },
     experience: { type: "object", additionalProperties: false, required: ["sourceExperienceId", "bullets"], properties: { sourceExperienceId: { type: "string" }, organization: { type: "string" }, role: { type: "string" }, startDate: { type: "string" }, endDate: { type: "string" }, summary: { $ref: "#/$defs/experienceSummary" }, bullets: { type: "array", items: { $ref: "#/$defs/bullet" } } } },
     skillGroup: { type: "object", additionalProperties: false, required: ["name", "skills", "supportingEvidenceIds"], properties: { name: { type: "string" }, skills: { type: "array", minItems: 1, items: { type: "string" } }, supportingEvidenceIds: { type: "array", minItems: 1, items: { type: "string" } } } },
     omitted: { type: "object", additionalProperties: false, required: ["evidenceId", "reason", "explanation"], properties: { evidenceId: { type: "string", description: "ID of one unused item from eligibleEvidence; never an unknown or ineligible ID." }, reason: { type: "string", enum: ["relevance", "length", "redundancy", "other"] }, explanation: { type: "string" } } }
@@ -120,14 +123,24 @@ export function buildResumePlanOutputJsonSchema(input: ResumePlanningInput, repa
     .filter((requirement) => requirement.coverageStatus === "missing" || requirement.selectedEvidenceIds.length === 0)
     .map((requirement) => requirement.requirementId)
     .sort()
+  const targetableComponentIds = input.curatedEvidencePack.requirements.flatMap((requirement) => requirement.components)
+    .filter((component) => component.coverageStatus !== "missing" && component.selectedEvidenceIds.some((evidenceId) => experienceEvidenceIdSet.has(evidenceId)))
+    .map((component) => component.componentId)
+    .sort()
+  const uncoveredComponentIds = input.curatedEvidencePack.requirements.flatMap((requirement) => requirement.components)
+    .filter((component) => component.coverageStatus === "missing" || component.selectedEvidenceIds.length === 0)
+    .map((component) => component.componentId)
+    .sort()
   const experienceSourceIds = [...new Set(experienceCapableEvidence.map((evidence) => evidence.presentation.sourceOrganizationOrExperienceId))].sort()
 
   constrainArrayItems(properties.selectedEvidenceIds, eligibleEvidenceIds)
   constrainArrayItems(properties.uncoveredRequirementIds, uncoveredRequirementIds)
+  constrainArrayItems(properties.uncoveredRequirementComponentIds, uncoveredComponentIds)
   constrainArrayItems(definitions.summary.properties.supportingEvidenceIds, eligibleEvidenceIds)
   constrainArrayItems(definitions.experienceSummary.properties.supportingEvidenceIds, experienceEvidenceIds)
   constrainArrayItems(definitions.bullet.properties.supportingEvidenceIds, experienceEvidenceIds)
   constrainArrayItems(definitions.bullet.properties.targetRequirementIds, targetableRequirementIds)
+  constrainArrayItems(definitions.bullet.properties.targetRequirementComponentIds, targetableComponentIds)
   constrainArrayItems(definitions.skillGroup.properties.supportingEvidenceIds, eligibleEvidenceIds)
   if (omittableEvidenceIds.length > 0) {
     definitions.omitted.properties.evidenceId.enum = omittableEvidenceIds

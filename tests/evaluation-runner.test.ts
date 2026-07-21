@@ -23,7 +23,7 @@ describe("evaluation runner", () => {
     expect(new Set(run.results.map((result) => result.scenarioId)).size).toBe(21)
     expect(run.results.every((result) => result.status === "passed")).toBe(true)
     expect(run.versions).toMatchObject({ datasetVersion: "1.1.0", gitSha: "git-sha", provider: "fixture", model: "golden-reasoner-v1", promptVersion: "evidence-reasoner-v1" })
-    expect(run.versions.candidatePackVersions).toEqual(["candidate-evidence-pack-v4"])
+    expect(run.versions.candidatePackVersions).toEqual(["candidate-evidence-pack-v5"])
     expect(await repository.findById("run-1")).toEqual(run)
   })
 

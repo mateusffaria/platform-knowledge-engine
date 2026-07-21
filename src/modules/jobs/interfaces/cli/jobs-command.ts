@@ -7,6 +7,7 @@ import { CanonicalEvidenceReader } from "../../../retrieval/application/ports/ca
 import { EvidenceClaimStatus, EvidencePack, HybridSubjectType } from "../../../retrieval/application/types.js";
 import { loadConfig } from "../../../../shared/config/env.js";
 import { createTerminalProgress } from "../../../../shared/cli/terminal-progress.js";
+import { atomicComponentsOf } from "../../domain/atomic-job-requirement.js";
 
 export interface JobsServices {
   ingestJobDescription: {
@@ -114,6 +115,13 @@ function printJobDescription(jobDescription: JobDescriptionWithRequirements, jso
     console.log(`${index + 1}. ${requirement.importance} ${requirement.requirementType}${normalized}${inferred}`);
     console.log(`   ${requirement.originalText}`);
     console.log(`   ${requirement.sectionLabel ?? "Unsectioned"} line:${requirement.sourceLocation.startLine}-${requirement.sourceLocation.endLine}`);
+    const components = atomicComponentsOf(requirement);
+    if (components.length > 1) {
+      for (const component of components) {
+        const componentNormalized = component.normalizedValue ? ` normalized=${component.normalizedValue}` : "";
+        console.log(`   component ${component.componentIndex + 1} ${component.id} ${component.requirementType}${componentNormalized}: ${component.originalText}`);
+      }
+    }
   }
 }
 
@@ -229,6 +237,9 @@ function printCuratedEvidencePack(pack: CuratedEvidencePack, options: { json?: b
   }
   for (const coverage of pack.requirementCoverage) {
     console.log(`${coverage.coverageStatus}: ${coverage.requirementText}`);
+    for (const component of coverage.componentCoverage ?? []) {
+      console.log(`   component ${component.coverageStatus} ${component.componentId}: ${component.componentText} selected=${component.selectedEvidenceIds.length}`);
+    }
     for (const selection of coverage.selections) {
       console.log(`   selected ${selection.evidenceClaimId}: ${selection.contribution}`);
       if (options.verbose) {
@@ -254,6 +265,9 @@ function printCuratedEvidencePack(pack: CuratedEvidencePack, options: { json?: b
   for (const warning of [...pack.warnings, ...pack.limitations]) {
     console.log(`Warning: ${warning}`);
   }
+  if (options.verbose) {
+    for (const warning of pack.warningDiagnostics ?? []) console.log(`Warning code=${warning.code}: ${warning.message}`);
+  }
 }
 
 function printCandidateEvidencePack(pack: ReturnType<typeof buildCandidateEvidencePack>, options: { json?: boolean; verbose?: boolean }): void {
@@ -263,6 +277,9 @@ function printCandidateEvidencePack(pack: ReturnType<typeof buildCandidateEviden
   }
   console.log(`Candidate Evidence Pack for ${pack.jobDescriptionId}`);
   console.log(`reasoner selection: non-exact limit=${pack.selection.limitPerRequirement}${pack.selection.minCandidateScore === undefined ? "" : ` min-final-score=${pack.selection.minCandidateScore}`}`);
+  if (pack.diagnostics) {
+    console.log(`parents=${pack.diagnostics.parentRequirementCount} atomic-components=${pack.diagnostics.atomicComponentCount}`);
+  }
   for (const requirement of pack.requirements) {
     const diagnostics = requirement.diagnostics;
     console.log(`${requirement.requirementText}: raw=${diagnostics.rawRetrievalResultCount} eligible=${diagnostics.eligibleResultCount} hydrated=${diagnostics.canonicalHydrationCount} associated=${diagnostics.requirementAssociationCount} selected-for-reasoner=${diagnostics.selectedForReasonerCount}`);
@@ -280,6 +297,15 @@ function printCandidateEvidencePack(pack: ReturnType<typeof buildCandidateEviden
       for (const discarded of diagnostics.discardedResults) {
         console.log(`   discarded ${discarded.reasonCode} stage=${discarded.stage} claim=${discarded.evidenceClaimId ?? "none"} asset=${discarded.knowledgeAssetId ?? "none"}: ${discarded.reason}`);
       }
+      for (const component of requirement.components ?? []) {
+        console.log(`   component ${component.componentId} ${component.componentText}: selected-for-reasoner=${component.reasonerCandidateIds.length}`);
+        console.log(`      intent=${component.diagnostics.retrievalIntent}`);
+      }
+    }
+  }
+  if (options.verbose) {
+    for (const warning of pack.warningDiagnostics ?? []) {
+      console.log(`Warning [${warning.code}]: ${warning.message}`);
     }
   }
 }
@@ -303,7 +329,8 @@ export function registerJobsCommands(
         if (options.json) {
           console.log(JSON.stringify(result, null, 2));
         } else if (result.created) {
-          console.log(`Ingested job description ${result.jobDescription.job.id}. Extracted ${result.jobDescription.requirements.length} requirement(s).`);
+          const componentCount = result.jobDescription.requirements.reduce((total, requirement) => total + atomicComponentsOf(requirement).length, 0);
+          console.log(`Ingested job description ${result.jobDescription.job.id}. Extracted ${result.jobDescription.requirements.length} parent requirement(s) and ${componentCount} atomic component(s).`);
         } else {
           console.log(`Job description already ingested: ${result.jobDescription.job.id}.`);
         }
@@ -406,7 +433,8 @@ export function registerJobsCommands(
             jobDescription,
             jobAnalysisId: intent.analysisId,
             warnings: intent.warnings,
-            retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
+            warningDiagnostics: intent.warningDiagnostics,
+            retriever: { execute: ({ requirementId, componentId, query }) => retrievalServices!.hybridSearch.execute({ requirementId: componentId ?? requirementId, query }) },
             canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
           });
           progress.succeed("Evidence retrieval complete");
@@ -456,12 +484,14 @@ export function registerJobsCommands(
           jobDescription,
           jobAnalysisId: intent.analysisId,
           warnings: intent.warnings,
+          warningDiagnostics: intent.warningDiagnostics,
           selection,
-          retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
+          retriever: { execute: ({ requirementId, componentId, query }) => retrievalServices!.hybridSearch.execute({ requirementId: componentId ?? requirementId, query }) },
           canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
         });
-        const reasonerCandidateCount = candidatePack.requirements.reduce((total, requirement) => total + requirement.reasonerCandidateIds.length, 0);
-        progress.update(`Prepared ${reasonerCandidateCount} candidate${reasonerCandidateCount === 1 ? "" : "s"} for ${candidatePack.requirements.length} requirement${candidatePack.requirements.length === 1 ? "" : "s"}; curating evidence`);
+        const reasonerCandidateCount = candidatePack.requirements.reduce((total, requirement) => total + (requirement.components ?? []).reduce((componentTotal, component) => componentTotal + component.reasonerCandidateIds.length, 0), 0);
+        const componentCount = candidatePack.diagnostics?.atomicComponentCount ?? candidatePack.requirements.length;
+        progress.update(`Prepared ${reasonerCandidateCount} component candidate${reasonerCandidateCount === 1 ? "" : "s"} for ${componentCount} atomic component${componentCount === 1 ? "" : "s"}; curating evidence`);
         const curated = await jobsServices.reasonJobEvidence.execute({
           jobDescriptionId,
           candidatePack,
@@ -509,11 +539,12 @@ export function registerJobsCommands(
           jobDescription,
           jobAnalysisId: intent.analysisId,
           warnings: intent.warnings,
+          warningDiagnostics: intent.warningDiagnostics,
           selection,
-          retriever: { execute: ({ requirementId, query }) => retrievalServices!.hybridSearch.execute({ requirementId, query }) },
+          retriever: { execute: ({ requirementId, componentId, query }) => retrievalServices!.hybridSearch.execute({ requirementId: componentId ?? requirementId, query }) },
           canonicalEvidenceReader: retrievalServices.canonicalEvidenceReader
         });
-        const reasonerCandidateCount = candidatePack.requirements.reduce((total, requirement) => total + requirement.reasonerCandidateIds.length, 0);
+        const reasonerCandidateCount = candidatePack.requirements.reduce((total, requirement) => total + (requirement.components ?? []).reduce((componentTotal, component) => componentTotal + component.reasonerCandidateIds.length, 0), 0);
         progress.succeed(`Prepared ${reasonerCandidateCount} candidate${reasonerCandidateCount === 1 ? "" : "s"}`);
         printCandidateEvidencePack(candidatePack, options);
       } catch (error) {

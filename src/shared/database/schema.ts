@@ -258,6 +258,27 @@ export const jobRequirements = pgTable("job_requirements", {
   index("job_requirements_importance_idx").on(table.importance)
 ]);
 
+export const jobRequirementComponents = pgTable("job_requirement_components", {
+  id: uuid("id").primaryKey(),
+  jobRequirementId: uuid("job_requirement_id")
+    .notNull()
+    .references(() => jobRequirements.id, { onDelete: "cascade" }),
+  componentIndex: integer("component_index").notNull(),
+  originalText: text("original_text").notNull(),
+  requirementType: jobRequirementType("requirement_type").notNull(),
+  importance: jobRequirementImportance("importance").notNull(),
+  normalizedValue: text("normalized_value"),
+  sourceExcerpt: text("source_excerpt").notNull(),
+  sourceStartLine: integer("source_start_line").notNull(),
+  sourceEndLine: integer("source_end_line").notNull(),
+  sourceTextStart: integer("source_text_start").notNull(),
+  sourceTextEnd: integer("source_text_end").notNull()
+}, (table) => [
+  index("job_requirement_components_requirement_id_idx").on(table.jobRequirementId),
+  uniqueIndex("job_requirement_components_requirement_order_unique").on(table.jobRequirementId, table.componentIndex),
+  index("job_requirement_components_type_normalized_value_idx").on(table.requirementType, table.normalizedValue)
+]);
+
 export const jobAnalyses = pgTable("job_analyses", {
   id: uuid("id").primaryKey(),
   jobDescriptionId: uuid("job_description_id")

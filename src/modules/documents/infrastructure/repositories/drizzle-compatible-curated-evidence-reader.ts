@@ -29,11 +29,19 @@ export function mapCompatibleCuratedEvidencePack(pack: CuratedEvidencePack, rows
   const projectByAsset = new Map(rows.projects.map((row) => [row.knowledgeAssetId, row]))
   const skillByAsset = new Map(rows.skills.map((row) => [row.knowledgeAssetId, row]))
   const requirementIdsByEvidence = new Map<string, Set<string>>()
+  const componentIdsByEvidence = new Map<string, Set<string>>()
   for (const requirement of pack.requirementCoverage) {
     for (const evidenceId of requirement.selectedEvidenceIds) {
       const ids = requirementIdsByEvidence.get(evidenceId) ?? new Set<string>()
       ids.add(requirement.requirementId)
       requirementIdsByEvidence.set(evidenceId, ids)
+    }
+    for (const component of requirement.componentCoverage ?? []) {
+      for (const evidenceId of component.selectedEvidenceIds) {
+        const ids = componentIdsByEvidence.get(evidenceId) ?? new Set<string>()
+        ids.add(component.componentId)
+        componentIdsByEvidence.set(evidenceId, ids)
+      }
     }
   }
 
@@ -59,6 +67,7 @@ export function mapCompatibleCuratedEvidencePack(pack: CuratedEvidencePack, rows
       contribution: selection.contribution,
       exaggerationRisk: selection.exaggerationRisk,
       requirementIds: [...(requirementIdsByEvidence.get(selection.evidenceClaimId) ?? [])].sort(),
+      componentIds: [...(componentIdsByEvidence.get(selection.evidenceClaimId) ?? selection.addressedComponentIds ?? [])].sort(),
       presentation: {
         sourceOrganizationOrExperienceId: evidence.subjectAssetId ?? experience?.knowledgeAssetId ?? project?.knowledgeAssetId ?? skill?.knowledgeAssetId ?? evidence.knowledgeAssetId,
         organization: experience?.organization ?? undefined,
@@ -85,7 +94,14 @@ export function mapCompatibleCuratedEvidencePack(pack: CuratedEvidencePack, rows
       requirementText: requirement.requirementText,
       importance: requirement.importance,
       coverageStatus: requirement.coverageStatus,
-      selectedEvidenceIds: [...requirement.selectedEvidenceIds].sort()
+      selectedEvidenceIds: [...requirement.selectedEvidenceIds].sort(),
+      components: (requirement.componentCoverage ?? []).map((component) => ({
+        componentId: component.componentId,
+        componentIndex: component.componentIndex ?? 0,
+        componentText: component.componentText,
+        coverageStatus: component.coverageStatus,
+        selectedEvidenceIds: [...component.selectedEvidenceIds].sort()
+      })).sort((left, right) => left.componentIndex - right.componentIndex || left.componentId.localeCompare(right.componentId))
     })).sort((left, right) => left.requirementId.localeCompare(right.requirementId)),
     selectedEvidence,
     discardedEvidenceIds: [...new Set(pack.discardedEvidence.map((evidence) => evidence.evidenceClaimId).filter((evidenceId) => !globallySelectedIds.has(evidenceId)))].sort(),
@@ -93,6 +109,9 @@ export function mapCompatibleCuratedEvidencePack(pack: CuratedEvidencePack, rows
       ...pack.missingEvidence.map((missing) => missing.requirementId),
       ...pack.requirementCoverage.filter((requirement) => requirement.coverageStatus === "missing").map((requirement) => requirement.requirementId)
     ])].sort(),
+    missingComponentIds: [...new Set(pack.requirementCoverage.flatMap((requirement) => (requirement.componentCoverage ?? [])
+      .filter((component) => component.coverageStatus === "missing" || component.selectedEvidenceIds.length === 0)
+      .map((component) => component.componentId)))].sort(),
     warnings: [...pack.warnings],
     limitations: [...pack.limitations]
   }

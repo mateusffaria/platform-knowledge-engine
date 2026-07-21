@@ -4,16 +4,19 @@ import { EvidenceItem, EvidencePack, HybridSearchCandidate, RetrievalStrategy } 
 import { buildCandidateEvidencePack, toCandidateEvidence } from "../candidate-evidence-pack.js";
 import { RequirementCandidatePreparation, RequirementEvidenceRetriever } from "../ports/requirement-candidate-preparation.js";
 import {
+  AtomicJobRequirement,
   CandidateEvidence,
+  CandidateRequirementComponentEvidence,
   CandidateRequirementEvidence,
   JobDescriptionWithRequirements
 } from "../../domain/model.js";
+import { atomicComponentsOf, normalizeWarnings } from "../../domain/atomic-job-requirement.js";
 
-function requirementQuery(requirement: JobDescriptionWithRequirements["requirements"][number]): string {
-  const filter = requirement.normalizedValue && (requirement.requirementType === "skill" || requirement.requirementType === "technology")
-    ? `${requirement.requirementType === "skill" ? "skill" : "technology"}:"${requirement.normalizedValue.replace(/"/g, "\\\"")}" `
+function componentQuery(component: AtomicJobRequirement): string {
+  const filter = component.normalizedValue && (component.requirementType === "skill" || component.requirementType === "technology")
+    ? `${component.requirementType === "skill" ? "skill" : "technology"}:"${component.normalizedValue.replace(/"/g, "\\\"")}" `
     : "";
-  return `${filter}${requirement.originalText}`.trim();
+  return `${filter}${component.originalText}`.trim();
 }
 
 function evidenceItemFromCanonical(
@@ -84,18 +87,20 @@ function mergeDiscard(
   };
 }
 
-async function prepareRequirement(input: {
+async function prepareComponent(input: {
   requirement: JobDescriptionWithRequirements["requirements"][number];
+  component: AtomicJobRequirement;
   retriever: RequirementEvidenceRetriever;
   canonicalEvidenceReader: CanonicalEvidenceReader;
-}): Promise<CandidateRequirementEvidence> {
-  const retrievalIntent = requirementQuery(input.requirement);
+}): Promise<CandidateRequirementComponentEvidence> {
+  const retrievalIntent = componentQuery(input.component);
   const retrieved = await input.retriever.execute({
     requirementId: input.requirement.id,
+    componentId: input.component.id,
     query: retrievalIntent
   });
-  if (retrieved.requirementId !== undefined && retrieved.requirementId !== input.requirement.id) {
-    throw new Error(`Retrieval result requirement identity ${retrieved.requirementId} does not match ${input.requirement.id}.`);
+  if (retrieved.requirementId !== undefined && retrieved.requirementId !== input.requirement.id && retrieved.requirementId !== input.component.id) {
+    throw new Error(`Retrieval result requirement identity ${retrieved.requirementId} does not match parent ${input.requirement.id} or component ${input.component.id}.`);
   }
   const rawResults = retrieved.diagnostics.rawResults;
   const associatedCandidates = new Map<string, CandidateEvidence>();
@@ -213,11 +218,15 @@ async function prepareRequirement(input: {
 
   return {
     requirementId: input.requirement.id,
-    requirementText: input.requirement.originalText,
-    requirementType: input.requirement.requirementType,
+    componentId: input.component.id,
+    componentIndex: input.component.componentIndex,
+    componentText: input.component.originalText,
+    requirementType: input.component.requirementType,
     importance: input.requirement.importance,
     candidates,
     reasonerCandidateIds: [],
+    warnings: [...retrieved.warnings],
+    warningDiagnostics: retrieved.warningDiagnostics?.map((warning) => ({ ...warning })),
     diagnostics: {
       retrievalIntent,
       rawRetrievalResultCount: rawResults.length,
@@ -231,17 +240,54 @@ async function prepareRequirement(input: {
   };
 }
 
+function aggregatePreparedRequirement(
+  requirement: JobDescriptionWithRequirements["requirements"][number],
+  components: CandidateRequirementComponentEvidence[]
+): CandidateRequirementEvidence {
+  const candidates = new Map<string, CandidateEvidence>();
+  for (const component of components) {
+    for (const candidate of component.candidates) {
+      const existing = candidates.get(candidate.evidenceClaimId);
+      candidates.set(candidate.evidenceClaimId, existing ? mergeCandidateEvidence(existing, candidate) : candidate);
+    }
+  }
+  const associated = [...candidates.values()];
+  return {
+    requirementId: requirement.id,
+    requirementText: requirement.originalText,
+    requirementType: requirement.requirementType,
+    importance: requirement.importance,
+    candidates: associated,
+    reasonerCandidateIds: [],
+    components,
+    diagnostics: {
+      retrievalIntent: components.map((component) => component.diagnostics.retrievalIntent).join(" | "),
+      rawRetrievalResultCount: components.reduce((total, component) => total + component.diagnostics.rawRetrievalResultCount, 0),
+      eligibleResultCount: components.reduce((total, component) => total + component.diagnostics.eligibleResultCount, 0),
+      canonicalHydrationCount: components.reduce((total, component) => total + component.diagnostics.canonicalHydrationCount, 0),
+      requirementAssociationCount: associated.length,
+      selectedForReasonerCount: 0,
+      selectionExclusions: [],
+      discardedResults: components.flatMap((component) => component.diagnostics.discardedResults)
+    }
+  };
+}
+
 export function createPrepareCandidateEvidenceUseCase(): RequirementCandidatePreparation {
   return {
     async prepare(input) {
       const requirements = input.jobDescription.requirements
         .filter((requirement) => !requirement.inferred)
         .sort((left, right) => left.id.localeCompare(right.id));
-      const preparedRequirements = await Promise.all(requirements.map((requirement) => prepareRequirement({
+      const preparedRequirements = await Promise.all(requirements.map(async (requirement) => aggregatePreparedRequirement(
         requirement,
-        retriever: input.retriever,
-        canonicalEvidenceReader: input.canonicalEvidenceReader
-      })));
+        await Promise.all(atomicComponentsOf(requirement).map((component) => prepareComponent({
+          requirement,
+          component,
+          retriever: input.retriever,
+          canonicalEvidenceReader: input.canonicalEvidenceReader
+        })))
+      )));
       const representativeEvidencePack: EvidencePack = {
         query: "requirement-scoped candidate preparation",
         strategies: [],
@@ -254,14 +300,24 @@ export function createPrepareCandidateEvidenceUseCase(): RequirementCandidatePre
           discardedResults: []
         },
         generatedAt: new Date(),
-        warnings: [...(input.warnings ?? [])]
+        warnings: [
+          ...(input.warnings ?? []),
+          ...preparedRequirements.flatMap((requirement) => (requirement.components ?? []).flatMap((component) => component.warnings ?? []))
+        ],
+        warningDiagnostics: normalizeWarnings([
+          ...(input.warningDiagnostics ?? normalizeWarnings(input.warnings ?? [], "job_retrieval_intent")),
+          ...preparedRequirements.flatMap((requirement) => (requirement.components ?? []).flatMap((component) => (
+            component.warningDiagnostics ?? normalizeWarnings(component.warnings ?? [], "candidate_evidence_pack")
+          )))
+        ])
       };
       return buildCandidateEvidencePack({
         jobDescription: input.jobDescription,
         jobAnalysisId: input.jobAnalysisId,
         evidencePack: representativeEvidencePack,
         preparedRequirements,
-        selection: input.selection
+        selection: input.selection,
+        warningDiagnostics: representativeEvidencePack.warningDiagnostics
       });
     }
   };

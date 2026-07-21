@@ -13,6 +13,9 @@ import { createReasonJobEvidenceUseCase } from "../src/modules/jobs/application/
 import { CandidateEvidencePack, CuratedEvidencePack, isDegradedEvidenceReasoningResult, JobDescriptionWithRequirements } from "../src/modules/jobs/domain/model.js";
 import { DrizzleCuratedEvidencePackRepository } from "../src/modules/jobs/infrastructure/repositories/drizzle-curated-evidence-pack-repository.js";
 import { EvidencePack } from "../src/modules/retrieval/application/types.js";
+import { aggregateParentCoverageStatus } from "../src/modules/jobs/domain/atomic-job-requirement.js";
+import { parseJobSource } from "../src/modules/jobs/infrastructure/parsers/deterministic-job-source-parser.js";
+import { normalizeStoredCuratedEvidencePack } from "../src/modules/jobs/application/curated-evidence-pack-schema.js";
 
 function jobDescription(): JobDescriptionWithRequirements {
   return {
@@ -104,11 +107,15 @@ describe("Candidate Evidence Pack", () => {
     const changedRetrievalMetadata = structuredClone(first);
     changedRetrievalMetadata.requirements[0].candidates[0].sources.reverse();
     changedRetrievalMetadata.requirements[0].candidates[0].objectiveSignals.semanticScore = 0.123456;
-    changedRetrievalMetadata.requirements[0].diagnostics.rawRetrievalResultCount += 10;
     const { hash: _hash, generatedAt: _generatedAt, ...hashInput } = changedRetrievalMetadata;
 
     expect(hashCandidateEvidencePack(hashInput)).toBe(first.hash);
 
+    changedRetrievalMetadata.requirements[0].diagnostics.rawRetrievalResultCount += 10;
+    const { hash: _diagnosticHash, generatedAt: _diagnosticAt, ...diagnosticHashInput } = changedRetrievalMetadata;
+    expect(hashCandidateEvidencePack(diagnosticHashInput)).not.toBe(first.hash);
+
+    changedRetrievalMetadata.requirements[0].diagnostics.rawRetrievalResultCount -= 10;
     changedRetrievalMetadata.requirements[0].candidates[0].claimText = "Changed reasoner-visible claim";
     const { hash: _changedHash, generatedAt: _changedAt, ...changedHashInput } = changedRetrievalMetadata;
     expect(hashCandidateEvidencePack(changedHashInput)).not.toBe(first.hash);
@@ -139,6 +146,23 @@ describe("Candidate Evidence Pack", () => {
     expect(prompt.requirements[0].candidates.map((candidate: { evidenceClaimId: string }) => candidate.evidenceClaimId)).toEqual(["semantic-high", "exact-low"]);
   });
 
+  it("keeps every exact structured match when exact matches exceed the ordinary component limit", () => {
+    const pack = buildCandidateEvidencePack({
+      jobDescription: { ...jobDescription(), requirements: [jobDescription().requirements[1]] },
+      evidencePack: {
+        ...evidencePack(),
+        items: [
+          { evidenceClaimId: "exact-a", knowledgeAssetId: "asset-a", subjectType: "skill", claimType: "skill", claimText: "TypeScript", claimStatus: "confirmed", confidenceScore: 90, finalScore: 0.8, structuredScore: 1, sources: [], retrievalStrategies: ["structured"] },
+          { evidenceClaimId: "exact-b", knowledgeAssetId: "asset-b", subjectType: "skill", claimType: "skill", claimText: "TypeScript expertise", claimStatus: "confirmed", confidenceScore: 80, finalScore: 0.7, structuredScore: 1, sources: [], retrievalStrategies: ["structured"] }
+        ]
+      },
+      selection: { limitPerRequirement: 1 }
+    });
+    const component = pack.requirements[0].components![0];
+    expect(component.reasonerCandidateIds).toEqual(["exact-a", "exact-b"]);
+    expect(component.diagnostics.selectedForReasonerCount).toBe(2);
+  });
+
   it("makes missing coverage and display scores deterministic", () => {
     const missing = missingCoverage(candidatePack().requirements[0]);
     expect(missing.coverageStatus).toBe("missing");
@@ -147,6 +171,46 @@ describe("Candidate Evidence Pack", () => {
 });
 
 describe("LlmEvidenceReasoner", () => {
+  it("evaluates compound components independently and derives mixed parent coverage", async () => {
+    const document = parseJobSource("compound.md", "## Requirements\n- Strong knowledge of Go and PostgreSQL");
+    const pack = buildCandidateEvidencePack({ jobDescription: document, evidencePack: evidencePack() });
+    const components = pack.requirements[0].components!;
+    const output = {
+      overallCoverageSummary: "PostgreSQL is supported while Go is missing.",
+      warnings: [],
+      limitations: [],
+      coverage: [
+        { requirementId: pack.requirements[0].requirementId, componentId: components[0].componentId, coverageStatus: "missing", selections: [], rejections: [], strengthFactors: [], limitations: ["No Go evidence."], explanation: "Go is missing." },
+        { requirementId: pack.requirements[0].requirementId, componentId: components[1].componentId, coverageStatus: "strong", selections: [{ evidenceClaimId: "claim-b", reason: "Direct database evidence", contribution: "Shows PostgreSQL delivery", exaggerationRisk: "low" }], rejections: [], strengthFactors: ["Contextual delivery"], limitations: [], explanation: "PostgreSQL is supported." }
+      ]
+    };
+
+    const result = parseEvidenceReasoningOutput(JSON.stringify(output), pack).coverage[0];
+    expect(result.coverageStatus).toBe("partial");
+    expect(result.componentCoverage?.map((component) => [component.componentText, component.coverageStatus])).toEqual([["Go", "missing"], ["PostgreSQL", "strong"]]);
+    expect(result.selectedEvidenceIds).toEqual(["claim-b"]);
+    expect(result.selections[0].addressedComponentIds).toEqual([components[1].componentId]);
+    const finalized = await new LlmEvidenceReasoner(provider(JSON.stringify(output)), new RecordingObservability()).reason({ candidatePack: pack });
+    expect(finalized.missingEvidence).toEqual([expect.objectContaining({ componentId: components[0].componentId, componentText: "Go" })]);
+  });
+
+  it("rejects component identities not supplied by the parser", () => {
+    const pack = candidatePack();
+    const output = JSON.parse(validOutput());
+    output.coverage[0].componentId = "invented-component";
+    expect(() => parseEvidenceReasoningOutput(JSON.stringify(output), pack)).toThrow("unknown component invented-component");
+  });
+
+  it("aggregates every qualitative component-status combination deterministically", () => {
+    const statuses = (...coverageStatus: Array<"strong" | "partial" | "weak" | "missing">) => aggregateParentCoverageStatus(coverageStatus.map((status) => ({ coverageStatus: status })));
+    expect(statuses("strong", "strong")).toBe("strong");
+    expect(statuses("partial", "partial")).toBe("partial");
+    expect(statuses("weak", "weak")).toBe("weak");
+    expect(statuses("missing", "missing")).toBe("missing");
+    expect(statuses("strong", "missing")).toBe("partial");
+    expect(statuses("strong", "weak")).toBe("partial");
+  });
+
   it("validates referential output, preserves canonical evidence, and flushes traces", async () => {
     const llm = provider(validOutput());
     const observability = new RecordingObservability();
@@ -273,6 +337,19 @@ describe("LlmEvidenceReasoner", () => {
     expect(llm.generate).toHaveBeenCalledOnce();
   });
 
+  it("deduplicates the same structured warning across candidate and reasoning stages", async () => {
+    const pack = candidatePack();
+    pack.warnings = ["Repeated bounded warning."];
+    pack.warningDiagnostics = [{ code: "evidence_reasoning", message: "Repeated bounded warning." }];
+    const output = JSON.parse(validOutput());
+    output.warnings = ["Repeated bounded warning."];
+
+    const result = await new LlmEvidenceReasoner(provider(JSON.stringify(output)), new RecordingObservability()).reason({ candidatePack: pack });
+    expect(result.warningDiagnostics?.filter((warning) => warning.message === "Repeated bounded warning.")).toEqual([
+      { code: "evidence_reasoning", message: "Repeated bounded warning." }
+    ]);
+  });
+
   it("keeps the model prompt compact and accepts a fenced JSON object", async () => {
     const pack = candidatePack();
     const prompt = JSON.parse(buildEvidenceReasoningUserPrompt(pack));
@@ -338,6 +415,61 @@ describe("LlmEvidenceReasoner", () => {
     expect(result[0].selections).toHaveLength(1);
     expect(result[1].selections).toHaveLength(0);
     expect(result[1].rejections[0].reason).toBe("redundant");
+  });
+
+  it("deduplicates one canonical claim across atomic components before parent aggregation", async () => {
+    const document = parseJobSource("compound.md", "## Requirements\n- Strong knowledge of Go and PostgreSQL");
+    const pack = buildCandidateEvidencePack({ jobDescription: document, evidencePack: evidencePack() });
+    const requirement = pack.requirements[0];
+    const components = requirement.components!;
+    const output = {
+      overallCoverageSummary: "Both components selected the same canonical claim.",
+      warnings: [],
+      limitations: [],
+      coverage: components.map((component) => ({
+        requirementId: requirement.requirementId,
+        componentId: component.componentId,
+        coverageStatus: "strong",
+        selections: [{ evidenceClaimId: "claim-b", reason: "direct", contribution: "same support", exaggerationRisk: "low" }],
+        rejections: [],
+        strengthFactors: ["Canonical support"],
+        limitations: [],
+        explanation: "Selected support."
+      }))
+    };
+
+    const result = await new LlmEvidenceReasoner(provider(JSON.stringify(output)), new RecordingObservability()).reason({ candidatePack: pack });
+    const coverage = result.requirementCoverage[0];
+    expect(coverage.componentCoverage?.flatMap((component) => component.selections)).toHaveLength(1);
+    expect(coverage.componentCoverage?.map((component) => component.coverageStatus).sort()).toEqual(["missing", "strong"]);
+    expect(coverage.coverageStatus).toBe("partial");
+    expect(coverage.rejections.some((rejection) => rejection.reason === "redundant")).toBe(true);
+  });
+
+  it("retains one canonical claim when it documents distinct component contributions", async () => {
+    const document = parseJobSource("compound.md", "## Requirements\n- Strong knowledge of Go and PostgreSQL");
+    const pack = buildCandidateEvidencePack({ jobDescription: document, evidencePack: evidencePack() });
+    const requirement = pack.requirements[0];
+    const components = requirement.components!;
+    const output = {
+      overallCoverageSummary: "One canonical claim documents two distinct contributions.",
+      warnings: [],
+      limitations: [],
+      coverage: components.map((component, index) => ({
+        requirementId: requirement.requirementId,
+        componentId: component.componentId,
+        coverageStatus: "partial",
+        selections: [{ evidenceClaimId: "claim-b", reason: "direct", contribution: index === 0 ? "Documents Go service delivery" : "Documents PostgreSQL operations", exaggerationRisk: "low" }],
+        rejections: [],
+        strengthFactors: ["Documented contribution"],
+        limitations: [],
+        explanation: "Distinct direct support."
+      }))
+    };
+
+    const result = await new LlmEvidenceReasoner(provider(JSON.stringify(output)), new RecordingObservability()).reason({ candidatePack: pack });
+    expect(result.requirementCoverage[0].componentCoverage?.flatMap((component) => component.selections)).toHaveLength(2);
+    expect(result.requirementCoverage[0].componentCoverage?.flatMap((component) => component.rejections)).toHaveLength(0);
   });
 });
 
@@ -415,6 +547,24 @@ describe("ReasonJobEvidence", () => {
     await repository.save(curated);
     await expect(repository.findByRunIdentity(curated.jobDescriptionId, curated.runIdentity)).resolves.toEqual(curated);
     expect(values).toHaveBeenCalledWith(expect.objectContaining({ candidatePackHash: curated.candidatePackHash, curatedEvidence }));
+  });
+
+  it("normalizes legacy parent-only coverage and duplicate string warnings without rewriting its metadata identity", () => {
+    const curated = {
+      overallCoverageSummary: "Legacy partial coverage.",
+      requirementCoverage: [{ requirementId: "legacy-requirement", requirementText: "PostgreSQL", importance: "required", coverageStatus: "partial", selectedEvidenceIds: [], rejectedCandidateEvidenceIds: [], selections: [], rejections: [], strengthFactors: [], limitations: [], explanation: "Legacy." }],
+      recommendedEvidence: [],
+      discardedEvidence: [],
+      missingEvidence: [],
+      warnings: ["Legacy warning.", "Legacy warning."],
+      limitations: []
+    };
+    const metadata = { id: "legacy-pack", runIdentity: "legacy-run", jobDescriptionId: "job-1", candidatePackVersion: "candidate-v4", candidatePackHash: "hash", provider: "ollama", model: "legacy", promptVersion: "legacy-prompt", createdAt: new Date(0) };
+    const normalized = normalizeStoredCuratedEvidencePack(metadata, curated);
+    expect(normalized.runIdentity).toBe("legacy-run");
+    expect(normalized.requirementCoverage[0].componentCoverage).toHaveLength(1);
+    expect(normalized.warnings).toEqual(["Legacy warning."]);
+    expect(normalized.warningDiagnostics).toEqual([{ code: "legacy_warning", message: "Legacy warning." }]);
   });
 
   it("keeps a conservative fallback separate from the curated evidence domain", async () => {

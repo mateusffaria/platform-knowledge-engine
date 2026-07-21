@@ -188,6 +188,8 @@ export interface EvidencePack {
   diagnostics: RetrievalDiagnostics;
   generatedAt: Date;
   warnings: string[];
+  /** Structured form used by component-aware consumers; legacy producers may emit only strings. */
+  warningDiagnostics?: Array<{ code: string; message: string }>;
 }
 
 export type RetrievalDiscardReason =

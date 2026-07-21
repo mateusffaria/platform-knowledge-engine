@@ -6,13 +6,13 @@ import { registerDocumentsCommands } from "../src/modules/documents/interfaces/c
 
 function samplePlan(): ResumeContentPlan {
   return {
-    id: "00000000-0000-4000-8000-000000000001", planIdentity: "a".repeat(64), schemaVersion: "resume-content-plan/v1",
+    id: "00000000-0000-4000-8000-000000000001", planIdentity: "a".repeat(64), schemaVersion: "resume-content-plan/v2",
     jobDescriptionId: "job-1", curatedEvidencePackId: "pack-1", language: "en", length: "standard",
     professionalSummary: { text: "Built reliable TypeScript services.", supportingEvidenceIds: ["ev-1"] },
     plannedExperiences: [{ sourceExperienceId: "exp-1", organization: "Acme", role: "Engineer", bullets: [{ text: "Improved API latency by 35%.", supportingEvidenceIds: ["ev-1"], targetRequirementIds: ["req-1"], sourceOrganizationOrExperienceId: "exp-1", exaggerationRisk: "low", warnings: [] }] }],
     plannedSkillGroups: [{ name: "Languages", skills: ["TypeScript"], supportingEvidenceIds: ["ev-1"] }], selectedEvidenceIds: ["ev-1"],
     omittedEvidence: [{ evidenceId: "ev-2", reason: "length", explanation: "Concise bound" }], uncoveredRequirementIds: ["req-2"], warnings: ["Missing Kubernetes"],
-    provider: "ollama", model: "qwen", promptVersion: "resume-planning/v1", createdAt: new Date("2026-07-20T15:00:00Z")
+    provider: "ollama", model: "qwen", promptVersion: "resume-planning/v7", createdAt: new Date("2026-07-20T15:00:00Z")
   }
 }
 
